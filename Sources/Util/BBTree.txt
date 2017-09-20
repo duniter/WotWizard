@@ -1,0 +1,353 @@
+(*
+Util: Utility tools.
+
+Copyright (C) 2001…2006 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE UtilBBTree;
+
+	
+
+	(* Implementation of BArbre for BlackBox. For use in BlackBox, this module should be imported in place of UtilBTree. *)
+
+	IMPORT
+
+		B := UtilBTree, SYSTEM, Files, HostFiles, Strings, WinApi;
+
+	CONST
+
+		bNil* = B.bNil;
+		lt* = B.lt;
+		eq* = B.eq;
+		gt* = B.gt;
+		
+		BOS* = B.BOS;
+		SCS* = B.SCS;
+		CHS* = B.CHS;
+		BYS* = B.BYS;
+		SIS* = B.SIS;
+		INS* = B.INS;
+		LIS* = B.LIS;
+		SRS* = B.SRS;
+		RES* = B.RES;
+		SES* = B.SES;
+
+	TYPE
+
+		Factory = POINTER TO RECORD (B.Factory)
+		END;
+
+		RealArray = ARRAY RES OF BYTE;
+
+		SRealArray = ARRAY SRS OF BYTE;
+
+		File = POINTER TO RECORD (B.File)
+			h: WinApi.HANDLE;
+			rPos, wPos: INTEGER;
+		END;
+
+		KeyManager* = B.KeyManager;
+
+		String* = B.String;
+
+		StringFac* = B.StringFac;
+
+		StringKeyManager* = B.StringKeyManager;
+
+		Database* = B.Database;
+
+		IndexPos* = B.IndexPos;
+
+		Index* = B.Index;
+
+		Data* = B.Data;
+
+		DataFac* = B.DataFac;
+
+		DataMan* = B.DataMan;
+
+		Reader* = B.Reader;
+
+		Writer* = B.Writer;
+
+	VAR
+
+		fac-: B.Factory;
+
+	PROCEDURE SplitName (full: ARRAY OF CHAR; OUT path, name: ARRAY OF CHAR): BOOLEAN;
+
+		VAR
+
+			res, drive, p: INTEGER;
+			ok: BOOLEAN;
+			loc: Files.Locator;
+
+		BEGIN (*SplitName*)
+			Strings.Find(full, ':', 0, res);
+			ok := (res = - 1) OR (res = 1);
+			IF ok THEN
+				drive := res;
+				Strings.Find(full, '/', res + 1, p);
+				WHILE p >= 0 DO
+					res := p;
+					Strings.Find(full, '/', res + 1, p);
+				END;
+				IF res < 0 THEN
+					path := "";
+					name := full$;
+				ELSE
+					IF res <= drive + 1 THEN
+						Strings.Extract(full, 0, res + 1, path);
+					ELSE
+						Strings.Extract(full, 0, res, path);
+					END;
+					Strings.Extract(full, res + 1, LEN(full), name);
+				END;
+				ok := LEN(name$) > 0;
+				IF ok THEN
+					loc := Files.dir.This(path);
+					ok := (loc.res = 0) & (loc IS HostFiles.Locator);
+					IF ok THEN
+						path := loc(HostFiles.Locator).path$;
+					END;
+				END;
+			END;
+			RETURN ok;
+		END SplitName;
+
+	PROCEDURE (fac: Factory) Create (IN nF: ARRAY OF CHAR): BOOLEAN;
+
+		VAR
+
+			path, name: Files.Name;
+			s: ARRAY LEN(path) OF CHAR;
+			pS: WinApi.PtrWSTR;
+			ok: BOOLEAN;
+			b: WinApi.BOOL;
+			h: WinApi.HANDLE;
+
+		BEGIN (*Create*)
+			ok := SplitName(nF, path, name);
+			IF ~ok THEN
+				RETURN FALSE;
+			END;
+			s := path$;
+			pS := SYSTEM.VAL(WinApi.PtrWSTR, SYSTEM.ADR(s));
+			b := WinApi.SetCurrentDirectoryW(pS);
+			IF b = 0 THEN
+				RETURN FALSE;
+			END;
+			s := name$;
+			pS := SYSTEM.VAL(WinApi.PtrWSTR, SYSTEM.ADR(s));
+			h := WinApi.CreateFileW(pS, WinApi.GENERIC_READ + WinApi.GENERIC_WRITE, {}, NIL, WinApi.CREATE_ALWAYS, WinApi.FILE_ATTRIBUTE_NORMAL + WinApi.FILE_FLAG_RANDOM_ACCESS, WinApi.NULL);
+			IF h = - 1 THEN
+				RETURN FALSE;
+			END;
+			b := WinApi.CloseHandle(h);
+			RETURN b # 0;
+		END Create;
+
+	PROCEDURE (fac: Factory) Open (IN nF: ARRAY OF CHAR): File;
+
+		VAR
+
+			path, name: Files.Name;
+			s: ARRAY LEN(path) OF CHAR;
+			pS: WinApi.PtrWSTR;
+			ok: BOOLEAN;
+			f: File;
+			b: WinApi.BOOL;
+
+		BEGIN (*Open*)
+			ok := SplitName(nF, path, name);
+			IF ~ok THEN
+				RETURN NIL;
+			END;
+			s := path$;
+			pS := SYSTEM.VAL(WinApi.PtrWSTR, SYSTEM.ADR(s));
+			b := WinApi.SetCurrentDirectoryW(pS);
+			IF b = 0 THEN
+				RETURN NIL;
+			END;
+			s := name$;
+			pS := SYSTEM.VAL(WinApi.PtrWSTR, SYSTEM.ADR(s));
+			NEW(f);
+			f.h := WinApi.CreateFileW(pS, WinApi.GENERIC_READ + WinApi.GENERIC_WRITE, {}, NIL, WinApi.OPEN_EXISTING, WinApi.FILE_ATTRIBUTE_NORMAL + WinApi.FILE_FLAG_RANDOM_ACCESS, WinApi.NULL);
+			IF f.h = - 1 THEN
+				RETURN NIL;
+			END;
+			f.rPos := 0; f.wPos := 0;
+			RETURN f;
+		END Open;
+
+	PROCEDURE (ref: File) Close;
+
+		VAR
+
+			b: WinApi.BOOL;
+
+		BEGIN (*Close*)
+			b := WinApi.CloseHandle(ref.h);
+			ASSERT(b # 0, 20);
+		END Close;
+
+	PROCEDURE (ref: File) Flush;
+
+		VAR
+
+			b: WinApi.BOOL;
+
+		BEGIN (*Flush*)
+			b := WinApi.FlushFileBuffers(ref.h);
+			ASSERT(b # 0, 20);
+		END Flush;
+
+	PROCEDURE (ref: File) PosReader (pos: INTEGER);
+
+		BEGIN (*PosReader*)
+			ref.rPos := pos;
+		END PosReader;
+
+	PROCEDURE (ref: File) Read (OUT a: ARRAY OF BYTE);
+
+		VAR
+
+			b: WinApi.BOOL;
+			n: INTEGER;
+
+		BEGIN (*Read*)
+			n := WinApi.SetFilePointer(ref.h, ref.rPos, NIL, WinApi.FILE_BEGIN);
+			ASSERT(n # - 1, 20);
+			b := WinApi.ReadFile(ref.h, SYSTEM.ADR(a), LEN(a), n, NIL);
+			ASSERT((b # 0) & (n = LEN(a)), 21);
+			INC(ref.rPos, n);
+		END Read;
+
+	PROCEDURE (ref: File) PosWriter (pos: INTEGER);
+
+		BEGIN (*PosWriter*)
+			ref.wPos := pos;
+		END PosWriter;
+
+	PROCEDURE (ref: File) Write (IN a: ARRAY OF BYTE);
+
+		VAR
+
+			b: WinApi.BOOL;
+			n: INTEGER;
+
+		BEGIN (*Write*)
+			n := WinApi.SetFilePointer(ref.h, ref.wPos, NIL, WinApi.FILE_BEGIN);
+			ASSERT(n # - 1, 20);
+			b := WinApi.WriteFile(ref.h, SYSTEM.ADR(a), LEN(a), n, NIL);
+			ASSERT((b # 0) & (n = LEN(a)), 21);
+			INC(ref.wPos, n);
+		END Write;
+
+	PROCEDURE (ref: File) End (OUT fin: INTEGER);
+
+		BEGIN (*End*)
+			fin := WinApi.GetFileSize(ref.h, NIL);
+			ASSERT(fin # - 1, 20);
+		END End;
+
+	PROCEDURE (ref: File) Truncate (fin: INTEGER);
+
+		VAR
+
+			b: WinApi.BOOL;
+			n: INTEGER;
+
+		BEGIN (*Truncate*)
+			n := WinApi.SetFilePointer(ref.h, fin, NIL, WinApi.FILE_BEGIN);
+			ASSERT(n # - 1, 20);
+			b := WinApi.SetEndOfFile(ref.h);
+			ASSERT(b # 0, 21);
+		END Truncate;
+
+	PROCEDURE (ref: File) BytesToReal (IN a: ARRAY OF BYTE; VAR pos: INTEGER): REAL;
+
+		VAR
+
+			i: INTEGER;
+			r: RealArray;
+
+		BEGIN (*BytesToReal*)
+			ASSERT(pos + RES <= LEN(a), 20);
+			FOR i := 0 TO RES - 1 DO
+				r[i] := a[pos];
+				INC(pos);
+			END;
+			RETURN SYSTEM.VAL(REAL, r);
+		END BytesToReal;
+
+	PROCEDURE (ref: File) BytesToSReal (IN a: ARRAY OF BYTE; VAR pos: INTEGER): SHORTREAL;
+
+		VAR
+
+			i: INTEGER;
+			r: SRealArray;
+
+		BEGIN (*BytesToSReal*)
+			ASSERT(pos + SRS <= LEN(a), 20);
+			FOR i := 0 TO SRS - 1 DO
+				r[i] := a[pos];
+				INC(pos);
+			END;
+			RETURN SYSTEM.VAL(SHORTREAL, r);
+		END BytesToSReal;
+
+	PROCEDURE (ref: File) RealToBytes (r: REAL): POINTER TO ARRAY OF BYTE;
+
+		VAR
+
+			i: INTEGER;
+			a: POINTER TO ARRAY OF BYTE;
+			ra: RealArray;
+
+		BEGIN (*RealToBytes*)
+			ra := SYSTEM.VAL(RealArray, r);
+			NEW(a, RES);
+			FOR i := 0 TO RES - 1 DO
+				a[i] := ra[i];
+			END;
+			RETURN a;
+		END RealToBytes;
+
+	PROCEDURE (ref: File) SRealToBytes (r: SHORTREAL): POINTER TO ARRAY OF BYTE;
+
+		VAR
+
+			i: INTEGER;
+			a: POINTER TO ARRAY OF BYTE;
+			ra: SRealArray;
+
+		BEGIN (*SRealToBytes*)
+			ra := SYSTEM.VAL(SRealArray, r);
+			NEW(a, SRS);
+			FOR i := 0 TO SRS - 1 DO
+				a[i] := ra[i];
+			END;
+			RETURN a;
+		END SRealToBytes;
+
+	PROCEDURE Init;
+
+		VAR
+
+			f: Factory;
+
+		BEGIN (*Init*)
+			NEW(f);
+			fac := f;
+		END Init;
+
+	BEGIN (*UtilBBTree*)
+		Init;
+	END UtilBBTree.

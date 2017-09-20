@@ -1,0 +1,1251 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE DuniterWotWizard;
+	
+	(* For versions 1.4+ of Duniter *)
+	(* This version suppose equiprobable all external certifications (toward a non-member identity) which are concurrent at the same date, and process concurrent internal certifications (toward an already-member identity) afterwards *)
+	
+	
+
+	IMPORT
+		
+		(*
+		StdLog,
+		*)
+		
+		A := UtilAvlTree, B := DuniterBlockchain, Dialog, S := DuniterSandbox, Math, Services, TextMappers, TextModels, TextViews, Views;
+	
+	CONST
+		
+		maxTimeDef = 5 * 60 * Services.resolution;
+	
+	TYPE
+		
+		(* Internal certification, or dossier of external certifications toward the same identity *)
+		CertOrDoss = POINTER TO ABSTRACT RECORD
+			date, (* Entry date *)
+			limit: LONGINT; (* Expiration date *)
+		END;
+		
+		File = POINTER TO ARRAY OF CertOrDoss;
+		
+		(* Internal certification *)
+		Certif = POINTER TO RECORD (CertOrDoss)
+			from, to: B.String;
+		END;
+		
+		(* Dossier of external certifications *)
+		Dossier = POINTER TO RECORD (CertOrDoss)
+			id: B.String; (* Certified identity *)
+			princCertif: INTEGER; (* Rank of the certification whose entry date gives the entry date of the dossier (1 <= princCertif <= B.pars.sigQty) *)
+			certifs: File; (* Array of certifications *)
+		END;
+		
+		(* AVL trees of Propagation and InvProp are used in the main CalcPermutations procedure and are the outputs of CalcEntries; trees of Propagation are sorted by date(s) and trees of InvProp are sorted by id(s)*)
+		
+		Propagation* = POINTER TO RECORD (A.Elem)
+			id*: B.String; (* uid of a candidate *)
+			date*: LONGINT; (* A possible date of her entry *)
+			proba*: REAL; (* Probability of this entry *)
+		END;
+		
+		InvProp* = POINTER TO RECORD (A.Elem)
+			id-: B.String;
+			date-: LONGINT;
+			proba-: REAL;
+		END;
+		
+		(* Element of sets of trees of Propagation, each tree corresponding to a possible permutation of the order of the entries *)
+		Set = POINTER TO RECORD (A.Elem)
+			proba: REAL; (* Probability of the permutation *)
+			t: A.Tree; (* AVL tree *)
+		END;
+		
+		(* Chained list of Pubkey(s) *)
+		PubList = POINTER TO RECORD
+			next: PubList;
+			pub: B.Pubkey;
+		END;
+	
+	VAR
+		
+		maxTime-: LONGINT; (* Maximum allowed time for the execution of CalcPermutations *)
+		(*
+		log: TextMappers.Formatter;
+		*)
+	
+	(* Comparison procedures for Propagation, InvProp and Set *)
+	
+	PROCEDURE CompareProp (p1, p2: A.Elem): BYTE;
+		
+		BEGIN (*CompareProp*)
+			IF p1 = NIL THEN
+				IF p2 = NIL THEN
+					RETURN A.eq;
+				END;
+				RETURN A.lt;
+			END;
+			IF p2 = NIL THEN
+				RETURN A.gt;
+			END;
+			WITH p1: Propagation DO
+				WITH p2: Propagation DO
+					IF p1.date < p2.date THEN
+						RETURN A.lt;
+					END;
+					IF p1.date > p2.date THEN
+						RETURN A.gt;
+					END;
+					IF p1.id$ < p2.id$ THEN
+						RETURN A.lt;
+					END;
+					IF p1.id$ > p2.id$ THEN
+						RETURN A.gt;
+					END;
+					RETURN A.eq;
+				END;
+			END;
+		END CompareProp;
+	
+	PROCEDURE (p1: Propagation) Compare- (p2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			RETURN CompareProp(p1, p2);
+		END Compare;
+	
+	PROCEDURE (p1: InvProp) Compare- (p2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH p2: InvProp DO
+				IF p1.id$ < p2.id$ THEN
+					RETURN A.lt;
+				END;
+				IF p1.id$ > p2.id$ THEN
+					RETURN A.gt;
+				END;
+				IF p1.date < p2.date THEN
+					RETURN A.lt;
+				END;
+				IF p1.date > p2.date THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	PROCEDURE (s1: Set) Compare (s2: A.Elem): BYTE;
+		
+		VAR
+			
+			e1, e2: A.Elem;
+			b: BYTE;
+		
+		BEGIN (*Compare*)
+			WITH s2: Set DO
+				e1 := s1.t.Next(NIL); e2 := s2.t.Next(NIL);
+				b := CompareProp(e1, e2);
+				WHILE (b = A.eq) & (e1 # NIL) DO
+					e1 := s1.t.Next(e1); e2 := s2.t.Next(e2);
+					b := CompareProp(e1, e2);
+				END;
+				RETURN b;
+			END;
+		END Compare;
+	
+	(* Copy procedures for Propagation and InvProp *)
+	
+	PROCEDURE (p: Propagation) Copy- (): A.Elem;
+		
+		VAR
+			
+			pp: Propagation;
+		
+		BEGIN (*Copy*)
+			NEW(pp);
+			pp.id := p.id;
+			pp.date := p.date;
+			pp.proba := p.proba;
+			RETURN pp;
+		END Copy;
+	
+	PROCEDURE (p: InvProp) Copy- (): A.Elem;
+		
+		VAR
+			
+			pp: InvProp;
+		
+		BEGIN (*Copy*)
+			NEW(pp);
+			pp.id := p.id;
+			pp.date := p.date;
+			pp.proba := p.proba;
+			RETURN pp;
+		END Copy;
+	
+	PROCEDURE CopyFile (f: File): File;
+		
+		VAR
+			
+			g, h: File;
+			cd: CertOrDoss;
+			c: Certif;
+			d: Dossier;
+			i, j, len: INTEGER;
+		
+		BEGIN (*CopyFile*)
+			IF f = NIL THEN
+				RETURN NIL;
+			END;
+			len := LEN(f);
+			NEW(g, len);
+			FOR i := 0 TO len - 1 DO
+				cd := f[i];
+				WITH
+					|cd: Certif DO
+						NEW(c);
+						c^ := cd^;
+						g[i] := c;
+					|cd: Dossier DO
+						NEW(d);
+						d^ := cd^;
+						g[i] := d;
+						IF cd.certifs = NIL THEN
+							d.certifs := NIL;
+						ELSE
+							NEW(h, LEN(cd.certifs));
+							FOR j := 0 TO LEN(cd.certifs) - 1 DO
+								NEW(c);
+								c^ := cd.certifs[j](Certif)^;
+								h[j] := c;
+							END;
+							d.certifs := h;
+						END;
+				END;
+			END;
+			RETURN g;
+		END CopyFile;
+	
+	(* Print c with fo *)
+	PROCEDURE PrintCertif (IN fo: TextMappers.Formatter; c: Certif; now: LONGINT);
+		
+		VAR
+			
+			s: B.DateTime;
+		
+		BEGIN (*PrintCertif*)
+			IF c.to # NIL THEN
+				fo.WriteString(c.to); fo.WriteString(" <-"); fo.WriteTab;
+			END;
+			fo.WriteString(c.from);
+			fo.WriteString(" ");
+			B.TimestampToString(c.date, s);
+			fo.WriteString(s);
+			fo.WriteString(" (-> ");
+			B.TimestampToString(c.limit, s);
+			fo.WriteString(s);
+			fo.WriteString(")");
+			IF (c.date < now) & (now <= c.limit) THEN
+				fo.WriteString(" (OK)");
+			ELSE
+				fo.WriteString(" (KO)");
+			END;
+		END PrintCertif;
+	
+	(* Print d with fo *)
+	PROCEDURE PrintDossier (IN fo: TextMappers.Formatter; d: Dossier; now: LONGINT);
+		
+		VAR
+			
+			s: B.DateTime;
+			certifiers: POINTER TO ARRAY OF B.Pubkey;
+			j: INTEGER;
+			b: BOOLEAN;
+			bnb: INTEGER;
+		
+		BEGIN (*PrintDossier*)
+			fo.WriteInt(d.princCertif); fo.WriteString(" ");
+			fo.WriteString(d.id);
+			B.TimestampToString(d.date, s);
+			fo.WriteString(" ("); fo.WriteString(s);
+			fo.WriteString(") (-> ");
+			B.TimestampToString(d.limit, s);
+			fo.WriteString(s);
+			fo.WriteString(") (");
+			IF d.certifs # NIL THEN
+				NEW(certifiers, LEN(d.certifs));
+				FOR j := 0 TO LEN(d.certifs) - 1 DO
+					b := B.IdUid(d.certifs[j](Certif).from, certifiers[j], bnb); ASSERT(b);
+				END;
+				fo.WriteRealForm(B.PercentOfSentries(certifiers) * 100, 16, 1, - 2, " ");
+				fo.WriteString("%) (");
+				IF (d.princCertif = B.pars.sigQty) & (now <= d.limit) & B.DistanceRuleOk(certifiers) THEN
+					fo.WriteString("OK");
+				ELSE
+					fo.WriteString("KO");
+				END;
+			ELSE
+				fo.WriteString("0%) (KO");
+			END;
+			fo.WriteString(") |");
+			IF d.certifs # NIL THEN
+				FOR j := 0 TO LEN(d.certifs) - 1 DO
+					fo.WriteLn; fo.WriteTab;
+					PrintCertif(fo, d.certifs[j](Certif), now);
+				END;
+			END;
+		END PrintDossier;
+	
+	(* Print f with fo, starting at the element of rank i0; if withNow, the output begins with the printing of the current date *)
+	PROCEDURE PrintFile (IN fo: TextMappers.Formatter; f: File; i0: INTEGER; withNow: BOOLEAN);
+		
+		VAR
+			
+			s: B.DateTime;
+			now: LONGINT;
+			i: INTEGER;
+			cd: CertOrDoss;
+		
+		BEGIN (*PrintFile*)
+			now := B.Now();
+			IF withNow THEN
+				B.TimestampToString(now, s);
+				fo.WriteString(s);
+				fo.WriteString(" (UTC+0)");
+				fo.WriteLn; fo.WriteLn;
+			END;
+			IF f # NIL THEN
+				FOR i := i0 TO LEN(f) - 1 DO
+					cd := f[i];
+					WITH
+						|cd: Certif DO
+							PrintCertif(fo, cd, now);
+						|cd: Dossier DO
+							PrintDossier(fo, cd, now);
+					END;
+					fo.WriteLn; fo.WriteLn;
+				END;
+				fo.WriteLn;
+			END;
+		END PrintFile;
+	
+	(* Fix the next possible date d of a certification from p *)
+	PROCEDURE FixCertNextDate (IN p: B.Pubkey; OUT d: LONGINT);
+		
+		VAR
+			
+			pos: B.CertPos;
+			ok, b: BOOLEAN;
+			from, to: B.Pubkey;
+			block_number: INTEGER;
+			tm, t, exp: LONGINT;
+		
+		BEGIN (*FixCertNextDate*)
+			d := 0;
+			IF B.CertFrom(p, pos) THEN
+				ok := pos.CertNextPos(from, to);
+				WHILE ok DO
+					b := B.Cert(from, to, block_number, exp); ASSERT(b);
+					b := B.TimeOf(block_number, tm, t);
+					d := MAX(d, tm);
+					ok := pos.CertNextPos(from, to);
+				END;
+				INC(d, B.pars.sigPeriod);
+			END;
+		END FixCertNextDate;
+	
+	(* Fix the entry dates of the elements of f; if afterNow, the entry dates are fixed after the current date *)
+	PROCEDURE FileDates (f: File; afterNow: BOOLEAN);
+		
+		VAR
+			
+			cd: CertOrDoss;
+			i: INTEGER;
+			now: LONGINT;
+		
+		BEGIN (*FileDates*)
+			IF f # NIL THEN
+				IF afterNow THEN
+					now := B.Now();
+				END;
+				FOR i := 0 TO LEN(f) - 1 DO
+					cd := f[i];
+					WITH cd: Dossier DO
+						IF cd.certifs = NIL THEN
+							IF afterNow THEN
+								cd.date := now;
+							ELSE
+								cd.date := 0;
+							END;
+						ELSE
+							IF afterNow THEN
+								cd.date := MAX(cd.certifs[cd.princCertif - 1].date, now);
+							ELSE
+								cd.date := cd.certifs[cd.princCertif - 1].date;
+							END;
+						END;
+					ELSE
+					END;
+				END;
+			END;
+		END FileDates;
+	
+	(* Sort, by insertion, the end of f, starting at position i0; all the dates must have been fixed before *)
+	PROCEDURE SortAll (f: File; i0: INTEGER);
+		
+		VAR
+			
+			cdx, cdS: CertOrDoss;
+			i, j: INTEGER;
+		
+		(* Dossiers with at least B.pars.sigQty certifications and internal certifications first; other dossiers last; dossiers are sorted by number of certifications first, then by dates; internal certifications are sorted by dates; if a dossier with at least B.pars.sigQty certifications and an internal certification have the same date, the dossier comes first *)
+		PROCEDURE Less (cd1, cd2: CertOrDoss): BOOLEAN;
+			
+			BEGIN (*Less*)
+				WITH
+					|cd1: Dossier DO
+						WITH
+							|cd2: Dossier DO
+								RETURN (cd1.princCertif > cd2.princCertif) OR (cd1.princCertif = cd2.princCertif) & (cd1.date < cd2.date);
+							|cd2: Certif DO
+								RETURN (cd1.princCertif = B.pars.sigQty) & (cd1.date <= cd2.date);
+						END;
+					|cd1: Certif DO
+						WITH
+							|cd2: Dossier DO
+								RETURN (cd2.princCertif < B.pars.sigQty) OR (cd1.date < cd2.date);
+							|cd2: Certif DO
+								RETURN cd1.date < cd2.date;
+						END;
+				END;
+			END Less;
+		
+		BEGIN (*SortAll*)
+			IF f # NIL THEN
+				FOR i := i0 + 1 TO LEN(f) - 1 DO
+					j := i; cdx := f[j];
+					WHILE (j > i0) & Less(cdx, f[j - 1]) DO (* No sentinel; inefficient *)
+						f[j] := f[j - 1];
+						DEC(j);
+					END;
+					f[j] := cdx;
+				END;
+			END;
+		END SortAll;
+	
+	(* Sort the end of f, starting at position i0; the dates of all Certification(s) must have been fixed before, but not those of Dossier(s); if afterNow, the Dossier dates are put after the current date *)
+	PROCEDURE SortFile (f: File; i0: INTEGER; afterNow: BOOLEAN);
+		
+		VAR
+			
+			i: INTEGER;
+			cd: CertOrDoss;
+		
+		BEGIN (*SortFile*)
+			IF f # NIL THEN
+				FOR i := i0 TO LEN(f) - 1 DO
+					cd := f[i];
+					WITH cd: Dossier DO
+						SortAll(cd.certifs, 0);
+					ELSE
+					END;
+				END;
+				FileDates(f, afterNow);
+				SortAll(f, i0);
+			END;
+		END SortFile;
+	
+	(* Update the list of sentries and the distance rule test at each step? Too long execution time! *)
+	(* Simulate the entry of f[step] in the blockchain and update all f[i] with i > step *)
+	PROCEDURE Propagate (VAR f: File; step: INTEGER; IN debug: TextMappers.Formatter);
+		
+		VAR
+			
+			cd: CertOrDoss;
+			j, k, m, nc, nd, n1, n2: INTEGER;
+			newDate: LONGINT;
+			g: File;
+		
+		PROCEDURE IncDates (uid: B.String; newDate: LONGINT; i0: INTEGER);
+			
+			VAR
+				
+				i, j: INTEGER;
+				cd, c: CertOrDoss;
+			
+			BEGIN (*IncDates*)
+				FOR i := i0 TO LEN(f) - 1 DO
+					cd := f[i];
+					WITH
+						|cd: Certif DO
+							IF cd.from$ = uid$ THEN
+								cd.date := MAX(newDate, B.Now());
+							END;
+						|cd: Dossier DO
+							IF cd.certifs # NIL THEN
+								j := LEN(cd.certifs);
+								WHILE j > 0 DO
+									DEC(j);
+									c := cd.certifs[j];
+									WITH c: Certif DO
+										IF c.from$ = uid$ THEN
+											c.date := newDate;
+											IF (j < cd.princCertif) & (newDate > cd.limit) THEN
+												SortAll(cd.certifs, 0);
+												cd.date := MAX(cd.certifs[cd.princCertif - 1].date, B.Now());
+											END;
+											j := 0;
+										END;
+									END;
+								END;
+							END;
+					END;
+				END;
+			END IncDates;
+		
+		BEGIN (*Propagate*)
+			cd := f[step];
+			newDate := cd.date + B.pars.sigPeriod;
+			WITH
+				|cd: Certif DO
+					IncDates(cd.from, newDate, step + 1);
+					nd := 0;
+					FOR j := step + 1 TO LEN(f) - 1 DO
+						IF f[j].date > f[j].limit THEN
+							INC(nd);
+						END;
+					END;
+					IF nd > 0 THEN
+						n1 := LEN(f); n2 := n1 - nd;
+						NEW(g, n2);
+						FOR j := 0 TO step DO
+							g[j] := f[j];
+						END;
+						k := step + 1;
+						FOR j := step + 1 TO n1 - 1 DO
+							IF f[j].date <= f[j].limit THEN
+								g[k] := f[j];
+								INC(k);
+							END;
+						END;
+						f := g;
+					END;
+				|cd: Dossier DO
+					IF cd.princCertif = B.pars.sigQty THEN
+						FOR j := 0 TO cd.princCertif - 1 DO
+							IncDates(cd.certifs[j](Certif).from, newDate, step + 1);
+						END;
+						nd := 0;
+						FOR j := step + 1 TO LEN(f) - 1 DO
+							IF f[j].date > f[j].limit THEN
+								INC(nd);
+							END;
+						END;
+						IF (nd > 0) OR (cd.certifs # NIL) & (LEN(cd.certifs) > cd.princCertif) THEN
+							nc := LEN(cd.certifs) - cd.princCertif;
+							n1 := LEN(f); n2 := n1 + nc - nd;
+							NEW(g, n2);
+							FOR m := 0 TO step DO
+								g[m] := f[m];
+							END;
+							k := step + 1;
+							FOR m := step + 1 TO n1 - 1 DO
+								IF f[m].date <= f[m].limit THEN
+									g[k] := f[m];
+									INC(k);
+								END;
+							END;
+							j := cd.princCertif;
+							FOR m := k TO n2 - 1 DO
+								g[m] := cd.certifs[j];
+								INC(j);
+							END;
+							f := g;
+							NEW(g, cd.princCertif);
+							FOR m := 0 TO cd.princCertif - 1 DO
+								g[m] := cd.certifs[m];
+							END;
+							cd.certifs := g;
+						END;
+					END;
+			END;
+			SortFile(f, step + 1, TRUE);
+			IF debug.rider # NIL THEN
+				PrintFile(debug, f, step, FALSE);
+				debug.WriteLn;
+			END;
+		END Propagate;
+	
+	(* Say whether the list of certifiers' Pubkey(s) c verifies the Duniter's distance rule *)
+	PROCEDURE NotTooFar (c: PubList; n: INTEGER): BOOLEAN;
+		
+		VAR
+			
+			certifiers: POINTER TO ARRAY OF B.Pubkey;
+			j: INTEGER;
+		
+		BEGIN (*NotTooFar*)
+			NEW(certifiers, n);
+			FOR j := 0 TO n - 1 DO
+				certifiers[j] := c.pub;
+				c := c.next;
+			END;
+			RETURN B.DistanceRuleOk(certifiers);
+		END NotTooFar;
+	
+	(* WotWizard main procedure; return in sets all the elements of type Set, i.e. all the possible permutations in the order of entries of the Dossier(s) in f, along with their probabilities *)
+	PROCEDURE CalcPermutations (f: File; IN debug: TextMappers.Formatter; OUT sets: A.Tree): BOOLEAN;
+		
+		VAR
+			
+			n: INTEGER;
+			x, y: REAL;
+			time: LONGINT;
+			p: Propagation;
+			e, ee: A.Elem;
+			b, ok: BOOLEAN;
+		
+		(* Merge the set of possible permutations (of type Set) setsUp into setsDown, combining probabilities *)
+		PROCEDURE AddProba (setsDown, setsUp: A.Tree; permNb: LONGINT);
+			
+			BEGIN (*AddProba*)
+				x := 1. / permNb;
+				e := setsUp.Next(NIL);
+				WHILE e # NIL DO
+					ee := setsUp.Next(e);
+					WITH e: Set DO
+						y := e.proba * x;
+						e.proba := 0.;
+					END;
+					b := setsDown.SearchIns(e, n);
+					WITH e: Set DO
+						e.proba := e.proba + y;
+					END;
+					e := ee;
+				END;
+			END AddProba;
+		
+		(* Recursive procedure; treat f in the order of its elements by calling Propagate as long as successive Dossier(s) have the same date, and call itself for every first possible entry in a set of Dossier(s) with the same date and with a number of Dossier(s) greater than one, merge all the sets of possible permutations returned (setsUp) and return the result (setsDown) *)
+		PROCEDURE CalcRec (f: File; i: INTEGER; OUT setsDown: A.Tree);
+			
+			VAR
+				
+				j: INTEGER;
+				cd: CertOrDoss;
+				len: INTEGER;
+				newFile: File;
+				setsUp: A.Tree;
+				set: Set;
+			
+			BEGIN (*CalcRec*)
+				WHILE (i < LEN(f)) & ((i >= LEN(f) - 1) OR (f[i] IS Certif) OR (f[i + 1] IS Certif) OR (f[i].date # f[i + 1].date)) DO
+					Propagate(f, i, debug);
+					INC(i);
+				END; 
+				A.New(setsDown);
+				IF i < LEN(f) THEN
+					(* (i < LEN(f) - 1) & (f[i] IS Dossier) & (f[i + 1] IS Dossier) & (f[i].date = f[i + 1].date) *)
+					j := i + 2;
+					WHILE (j < LEN(f)) & (f[j] IS Dossier) & (f[j].date = f[i].date) DO
+						INC(j);
+					END;
+					len := j - i;
+					j := i;
+					LOOP
+						newFile := CopyFile(f);
+						Propagate(newFile, i, debug);
+						CalcRec(newFile, i + 1, setsUp);
+						IF ~ok THEN
+							RETURN;
+						END;
+						AddProba(setsDown, setsUp, len);
+						cd := f[j]; f[j] := f[i];
+						IF j = i + len - 1 THEN
+							f[i] := cd;
+							RETURN;
+						END;
+						INC(j);
+						f[i] := f[j]; f[j] := cd;
+					END; 
+				ELSE
+					NEW(set); A.New(set.t);
+					FOR i := 0 TO LEN(f) - 1 DO
+						cd := f[i];
+						WITH cd: Dossier DO
+							NEW(p);
+							p.id := cd.id;
+							p.date := cd.date;
+							e := p;
+							b := set.t.SearchIns(e, n); ASSERT(~b);
+						ELSE
+						END;
+					END;
+					set.proba := 1.;
+					e := set;
+					b := setsDown.SearchIns(e, n); ASSERT(~ b);
+					ok := Services.Ticks() <= time;
+				END;
+			END CalcRec;
+		
+		BEGIN (*CalcPermutations*)
+			ok := FALSE;
+			IF f # NIL THEN
+				ok := TRUE;
+				time := Services.Ticks() + maxTime;
+				CalcRec(f, 0, sets);
+			END;
+			RETURN ok;
+		END CalcPermutations;
+	
+	(* Merge the Set(s) returned by CalcPermutations and combine their probabilities; return the set of entries sorted by date(s) (occur with elements of type Propagation) or by id(s) (invOccur with elements of type InvProp)  *)
+	PROCEDURE CalcEntries (f: File; OUT occur, invOccur: A.Tree): BOOLEAN;
+		
+		CONST
+			
+			eps = 0.005;
+		
+		VAR
+			
+			n: INTEGER;
+			sets: A.Tree;
+			e, ee, eee: A.Elem;
+			b, bb: BOOLEAN;
+			iP: InvProp;
+			restP: REAL;
+			id: B.String;
+			debug: TextMappers.Formatter;
+		
+		BEGIN (*CalcEntries*)
+			debug.ConnectTo(NIL);
+			IF CalcPermutations(f, debug, sets) THEN
+				A.New(occur);
+				e := sets.Next(NIL);
+				WHILE e # NIL DO
+					WITH e: Set DO
+						ee := e.t.Next(NIL);
+						WHILE ee # NIL DO
+							eee := e.t.Next(ee);
+							WITH ee: Propagation DO
+								ee.proba := 0.;
+							END;
+							b := occur.SearchIns(ee, n);
+							WITH ee: Propagation DO
+								ee.proba := ee.proba + e.proba;
+							END;
+							ee := eee;
+						END;
+					END;
+					e := sets.Next(e);
+				END;
+				A.New(invOccur);
+				e := occur.Next(NIL);
+				WHILE e # NIL DO
+					WITH e: Propagation DO
+						NEW(iP);
+						iP.id := e.id;
+						iP.date := e.date;
+						iP.proba := e.proba;
+						ee := iP;
+						b := invOccur.SearchIns(ee, n); ASSERT(~b);
+					END;
+					e := occur.Next(e);
+				END;
+				NEW(id, 1); id^ := 0X; bb := FALSE;
+				e := invOccur.Next(NIL);
+				WHILE e # NIL DO
+					WITH e: InvProp DO
+						IF e.id$ # id$ THEN
+							IF bb & (restP > eps) THEN
+								NEW(iP);
+								iP.id := id;
+								iP.date := MAX(LONGINT);
+								iP.proba := restP;
+								ee := iP;
+								b := invOccur.SearchIns(ee, n); ASSERT(~b);
+							END;
+							bb := TRUE;
+							id := e.id;
+							restP := 1.;
+						END;
+						restP := restP - e.proba;
+					END;
+					e := invOccur.Next(e);
+				END;
+				IF bb & (restP > eps) THEN (* Probabilities don't sum up to 100% *)
+					NEW(iP);
+					iP.id := id;
+					iP.date := MAX(LONGINT); (* Never *)
+					iP.proba := restP;
+					ee := iP;
+					b := invOccur.SearchIns(ee, n); ASSERT(~b);
+				END;
+				RETURN TRUE;
+			END;
+			RETURN FALSE;
+		END CalcEntries;
+	
+	(* Print permutations returned by CalcPermutations *)
+	PROCEDURE PrintPermutations (IN fo: TextMappers.Formatter; f: File);
+		
+		VAR
+			
+			n, i, l: INTEGER;
+			s, nowS: B.DateTime;
+			sets: A.Tree;
+			e, ee: A.Elem;
+			debug: TextMappers.Formatter;
+		
+		BEGIN (*PrintPermutations*)
+			debug.ConnectTo(NIL);
+			IF CalcPermutations(f, debug, sets) THEN
+				fo.WriteString("    ");
+				B.TimestampToString(B.Now(), nowS);
+				fo.WriteString(nowS);
+				fo.WriteString(" (UTC+0)");
+				fo.WriteLn; fo.WriteLn;
+				e := sets.Next(NIL);
+				l := 0;
+				WITH e: Set DO
+					ee := e.t.Next(NIL);
+					WHILE ee # NIL DO
+						l := MAX(l, LEN(ee(Propagation).id$));
+						ee := e.t.Next(ee);
+					END;
+				END;
+				WHILE e # NIL DO
+					WITH e: Set DO
+						fo.WriteString("    ");
+						fo.WriteMsg("#Duniter:Proba"); fo.WriteString(" = ");
+						n := SHORT(ENTIER(Math.Round(e.proba * 10000)));
+						fo.WriteInt(n DIV 100); fo.WriteString("."); fo.WriteIntForm(n MOD 100, 10, 2, '0', FALSE);
+						fo.WriteString("%");
+						fo.WriteLn;
+						ee := e.t.Next(NIL);
+						WHILE ee # NIL DO
+							WITH ee: Propagation DO
+								fo.WriteString("    ");
+								fo.WriteString(ee.id);
+								FOR i := 1 TO l - LEN(ee.id$) DO
+									fo.WriteString(" ");
+								END;
+								B.TimestampToString(ee.date, s);
+								fo.WriteString(" ("); fo.WriteString(s); fo.WriteString(")");
+								fo.WriteLn;
+							END;
+							ee := e.t.Next(ee);
+						END;
+					END;
+					fo.WriteLn;
+					e := sets.Next(e);
+				END;
+			END;
+		END PrintPermutations;
+	
+	(* Print the entries sorted by dates *)
+	PROCEDURE ByDates* (fo: TextMappers.Formatter; occur: A.Tree);
+		
+		VAR
+			
+			l, i: INTEGER;
+			e: A.Elem;
+			date: LONGINT;
+			s: B.DateTime;
+		
+		BEGIN (*ByDates*)
+			l := 0;
+			e := occur.Next(NIL);
+			WHILE e # NIL DO
+				l := MAX(l, LEN(e(Propagation).id$));
+				e := occur.Next(e);
+			END;
+			date := - 1;
+			e := occur.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: Propagation DO
+					IF e.date # date THEN
+						date := e.date;
+						B.TimestampToString(e.date, s);
+						fo.WriteString("    "); fo.WriteLn;
+						fo.WriteString("    ");
+						fo.WriteString(s);
+						fo.WriteLn;
+					END;
+					fo.WriteString("        ");
+					fo.WriteString(e.id);
+					FOR i := 1 TO l - LEN(e.id$) DO
+						fo.WriteString(" ");
+					END;
+					fo.WriteString(": "); fo.WriteMsg("#Duniter:Proba"); fo.WriteString(" = ");
+					fo.WriteIntForm(ENTIER(Math.Round(e.proba * 100)), 10, 3, " ", FALSE);
+					fo.WriteString("%");
+					fo.WriteLn;
+				END;
+				e := occur.Next(e);
+			END;
+		END ByDates;
+	
+	(* Print the entries sorted by names *)
+	PROCEDURE ByNames* (fo: TextMappers.Formatter; invOccur: A.Tree);
+		
+		VAR
+			
+			id: B.String;
+			e: A.Elem;
+			ss: Dialog.String;
+			i: INTEGER;
+			s: B.DateTime;
+		
+		BEGIN (*ByNames*)
+			NEW(id, 1); id^ := 0X;
+			e := invOccur.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: InvProp DO
+					IF e.id$ # id$ THEN
+						id := e.id;
+						fo.WriteString("    "); fo.WriteLn;
+						fo.WriteString("    ");
+						fo.WriteString(e.id);
+						fo.WriteLn;
+					END;
+					fo.WriteString("        ");
+					IF e.date = MAX(LONGINT) THEN
+						Dialog.MapString("#Duniter:Never", ss);
+						fo.WriteString(ss);
+						B.TimestampToString(0, s);
+						FOR i := 1 TO LEN(s$) - LEN(ss$) DO
+							fo.WriteString(" ");
+						END;
+					ELSE
+						B.TimestampToString(e.date, s);
+						fo.WriteString(s);
+					END;
+					fo.WriteString(": "); fo.WriteMsg("#Duniter:Proba"); fo.WriteString(" = ");
+					fo.WriteIntForm(ENTIER(Math.Round(e.proba * 100)), 10, 3, " ", FALSE);
+					fo.WriteString("%");
+					fo.WriteLn;
+				END;
+				e := invOccur.Next(e);
+			END;
+		END ByNames;
+	
+	(* Print the entries sorted by names first and then by dates *)
+	PROCEDURE PrintEntries (IN fo: TextMappers.Formatter; occur, invOccur: A.Tree);
+		
+		VAR
+			
+			nowS: B.DateTime;
+		
+		BEGIN (*PrintEntries*)
+			B.TimestampToString(B.Now(), nowS);
+			fo.WriteString("    ");
+			fo.WriteString(nowS);
+			fo.WriteString(" (UTC+0)");
+			fo.WriteLn;
+			ByNames(fo, invOccur);
+			fo.WriteString("    "); fo.WriteLn;
+			ByDates(fo, occur);
+		END PrintEntries;
+	
+	(* Extract f from the blockchain (DuniterBlockchain) and the sandbox (DuniterSandbox) and sort it; minCertifs is the minimum number of certifications by Dossier required (at least 1 if minCertifs < 1); keep only valid elements *)
+	PROCEDURE FillFile (minCertifs: INTEGER; OUT f: File);
+		
+		VAR
+			
+			ok, okP, b: BOOLEAN;
+			pos, posI: S.CertPos;
+			from, to: B.Pubkey;
+			toHash: S.Hash;
+			i, j, bnb, nbCertifs: INTEGER;
+			exp, date: LONGINT;
+			d: Dossier;
+			c: Certif;
+			cd: CertOrDoss;
+			g: File;
+			uid: B.String;
+			certs, cert: PubList;
+		
+		PROCEDURE DossierNb (): INTEGER;
+			
+			VAR
+				
+				ok, okP: BOOLEAN;
+				n, nbCertifs: INTEGER;
+				exp, date: LONGINT;
+				from, to: B.Pubkey;
+				toHash: S.Hash;
+				pos: S.CertPos;
+				certs, c: PubList;
+			
+			BEGIN (*DossierNb*)
+				n := 0;
+				ok := S.IdNextHash(TRUE, toHash);
+				WHILE ok DO
+					nbCertifs := 0; certs := NIL;
+					IF S.CertTo(toHash, pos) THEN
+						REPEAT
+							okP := pos.CertNextPos(from, to, toHash, exp);
+							IF okP THEN
+								FixCertNextDate(from, date);
+								IF date <= exp THEN (* Not-expired certification *)
+									INC(nbCertifs);
+									NEW(c); c.pub := from;
+									c.next := certs; certs := c;
+								END;
+							END;
+						UNTIL ~okP;
+					END;
+					(* Keep only dossiers with enough certifications and, if f is for computing entries, which validate the Duniter's distance rule *)
+					IF (nbCertifs >= minCertifs) & ((minCertifs < B.pars.sigQty) OR (nbCertifs < B.pars.sigQty) OR NotTooFar(certs, nbCertifs)) THEN
+						INC(n);
+					END;
+					ok := S.IdNextHash(FALSE, toHash);
+				END;
+				RETURN n;
+			END DossierNb;
+		
+		(* Number of internal certifications *)
+		PROCEDURE CertifNb (): INTEGER;
+			
+			VAR
+				
+				ok: BOOLEAN;
+				from, to: B.Pubkey;
+				toHash: S.Hash;
+				pos: S.CertPos;
+				bnb, n: INTEGER;
+				exp, date: LONGINT;
+				uid: B.String;
+			
+			BEGIN (*CertifNb*)
+				n := 0;
+				ok := S.CertNextTo(TRUE, pos);
+				WHILE ok DO
+					IF pos.CertNextPos(from, to, toHash, exp) & B.IdPub(to, uid, bnb) THEN
+						REPEAT
+							FixCertNextDate(from, date);
+							IF date <= exp THEN (* Not-expired certification *)
+								INC(n);
+							END;
+						UNTIL ~pos.CertNextPos(from, to, toHash, exp);
+					END;
+					ok := S.CertNextTo(FALSE, pos);
+				END;
+				RETURN n;
+			END CertifNb;
+		
+		BEGIN (*FillFile*)
+			i := DossierNb() + CertifNb();
+			IF i = 0 THEN
+				f := NIL;
+				RETURN;
+			END;
+			NEW(f, i);
+			i := 0;
+			ok := S.IdNextHash(TRUE, toHash);
+			WHILE ok DO
+				nbCertifs := 0; certs := NIL;
+				IF S.CertTo(toHash, pos) THEN
+					posI := pos;
+					REPEAT
+						okP := pos.CertNextPos(from, to, toHash, exp);
+						IF okP THEN
+							FixCertNextDate(from, date);
+							IF date <= exp THEN
+								INC(nbCertifs);
+								NEW(cert); cert.pub := from;
+								cert.next := certs; certs := cert;
+							END;
+						END;
+					UNTIL ~okP;
+				END;
+				IF (nbCertifs >= minCertifs) & ((minCertifs < B.pars.sigQty) OR (nbCertifs < B.pars.sigQty) OR NotTooFar(certs, nbCertifs)) THEN
+					NEW(d);
+					f[i] := d;
+					INC(i);
+					d.princCertif := MIN(nbCertifs, B.pars.sigQty);
+					b := S.IdHash(toHash, to, d.id, d.limit); ASSERT(b);
+					NEW(d.certifs, nbCertifs);
+					j := 0;
+					pos := posI;
+					okP := pos.CertNextPos(from, to, toHash, exp); ASSERT(okP);
+					REPEAT
+						NEW(c);
+						b := B.IdPub(from, c.from, bnb); ASSERT(b);
+						FixCertNextDate(from, c.date);
+						c.limit := exp;
+						IF c.date <= c.limit THEN
+							d.certifs[j] := c;
+							INC(j);
+						END;
+						okP := pos.CertNextPos(from, to, toHash, exp);
+					UNTIL ~okP;
+				END;
+				ok := S.IdNextHash(FALSE, toHash);
+			END;
+			ok := S.CertNextTo(TRUE, pos);
+			WHILE ok DO
+				IF pos.CertNextPos(from, to, toHash, exp) & B.IdPub(to, uid, bnb) THEN
+					REPEAT
+						NEW(c);
+						b := B.IdPub(from, c.from, bnb); ASSERT(b);
+						c.to := uid;
+						FixCertNextDate(from, c.date);
+						c.limit := exp;
+						IF c.date <= c.limit THEN
+							f[i] := c;
+							INC(i);
+						END;
+					UNTIL ~pos.CertNextPos(from, to, toHash, exp);
+				END;
+				ok := S.CertNextTo(FALSE, pos);
+			END;
+			SortFile(f, 0, minCertifs >= B.pars.sigQty);
+			IF minCertifs >= B.pars.sigQty THEN
+				j := 0;
+				FOR i := 0 TO LEN(f) - 1 DO
+					cd := f[i];
+					WITH
+						|cd: Certif DO
+							INC(j);
+						|cd: Dossier DO
+							IF cd.date <= cd.limit THEN
+								INC(j);
+							END;
+					END;
+				END;
+				IF j < LEN(f) THEN
+					NEW(g, j);
+					j := 0;
+					FOR i := 0 TO LEN(f) - 1 DO
+						cd := f[i];
+						WITH
+							|cd: Certif DO
+								g[j] := f[i];
+								INC(j);
+							|cd: Dossier DO
+								IF cd.date <= cd.limit THEN
+									g[j] := f[i];
+									INC(j);
+								END;
+						END;
+					END;
+					f := g;
+				END;
+			END;
+		END FillFile;
+	
+	(* Print the current File *)
+	PROCEDURE ShowFile*;
+		
+		VAR
+			
+			t: TextModels.Model;
+			fo: TextMappers.Formatter;
+			f: File;
+		
+		BEGIN (*ShowFile*)
+			t := TextModels.dir.New();
+			fo.ConnectTo(t);
+			Views.OpenView(TextViews.dir.New(t));
+			FillFile(1, f);
+			PrintFile(fo, f, 0, TRUE);
+		END ShowFile;
+	
+	(* Print the set of current possible permutations of entries *)
+	PROCEDURE Permutations*;
+		
+		VAR
+			
+			t: TextModels.Model;
+			fo: TextMappers.Formatter;
+			f: File;
+		
+		BEGIN (*Permutations*)
+			t := TextModels.dir.New();
+			fo.ConnectTo(t);
+			Views.OpenView(TextViews.dir.New(t));
+			FillFile(B.pars.sigQty, f);
+			PrintPermutations(fo, f);
+		END Permutations;
+	
+	(* Calculate the current set of entries, sorted by dates (occur) and by names (invOccur) *)
+	PROCEDURE BuildEntries* (OUT occur, invOccur: A.Tree): BOOLEAN;
+		
+		VAR
+			
+			f: File;
+			b: BOOLEAN;
+		
+		BEGIN (*BuildEntries*)
+			FillFile(B.pars.sigQty, f);
+			b := CalcEntries(f, occur, invOccur);
+			RETURN b;
+		END BuildEntries;
+	
+	(* Print the current set of entries, sorted by names first, then by dates *)
+	PROCEDURE Entries*;
+		
+		VAR
+			
+			t: TextModels.Model;
+			fo: TextMappers.Formatter;
+			f: File;
+			occur, invOccur: A.Tree;
+		
+		BEGIN (*Entries*)
+			t := TextModels.dir.New();
+			fo.ConnectTo(t);
+			Views.OpenView(TextViews.dir.New(t));
+			FillFile(B.pars.sigQty, f);
+			IF CalcEntries(f, occur, invOccur) THEN
+				PrintEntries(fo, occur, invOccur);
+			END;
+		END Entries;
+	
+	PROCEDURE Debug* ;
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: File;
+			debug: TextMappers.Formatter;
+			b: BOOLEAN;
+			sets: A.Tree;
+		
+		BEGIN (*Debug*)
+			t := TextModels.dir.New();
+			debug.ConnectTo(t);
+			Views.OpenView(TextViews.dir.New(t));
+			FillFile(B.pars.sigQty, f);
+			b := CalcPermutations(f, debug, sets);
+		END Debug;
+	
+	PROCEDURE ChangeMaxTime* (newMaxTime: LONGINT);
+		
+		BEGIN (*ChangeMaxTime*)
+			maxTime := newMaxTime;
+		END ChangeMaxTime;
+	
+	BEGIN (*DuniterWotWizard*)
+		maxTime := maxTimeDef;
+		(*
+		log.ConnectTo(StdLog.text);
+		*)
+	END DuniterWotWizard.
+
+DuniterWotWizard.ShowFile;
+
+DuniterWotWizard.Permutations;
+
+DuniterWotWizard.Entries;
+
+DuniterWotWizard.Debug;

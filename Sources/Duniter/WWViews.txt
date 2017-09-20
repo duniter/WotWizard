@@ -1,0 +1,823 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE DuniterWWViews;
+	
+	
+	
+	(* This module creates views displaying WotWizard forecasts *)
+		
+	IMPORT
+		
+		(*
+		StdLog,
+		*)
+		
+		A := UtilAvlTree, B := DuniterBlockchain, Containers, Controllers, Controls, Converters, Dialog, Documents, Files, Fonts, Math, Models, Ports, Properties, Sequencers, Stores, TextMappers, TextModels, TextRulers, TextViews, Views, W := DuniterWotWizard, Windows;
+	
+	CONST
+		
+		oldEntriesName = "WW_Old_Entries.odc";
+		
+		maxTimeDir = "Duniter/Rsrc";
+		maxTimeName = "WW_Max_Time.odc";
+		
+		title = "WotWizard";
+		
+		width = 80 * Ports.mm;
+		height = 150 * Ports.mm;
+		
+		byDate = 0; byName = 1;
+		
+		minVersion = 0; maxVersion = 0;
+		
+		titleSize = 20 * Fonts.point;
+		headSize = 14 * Fonts.point;
+		corpusSize = 10 * Fonts.point;
+		
+		retrait = 5 * Ports.mm;
+		
+		firstCtrlPos = width DIV 4;
+		secondCtrlPos = width * 3 DIV 4;
+	
+	TYPE
+		
+		(* Type of the view which displays the WotWizard lists *)
+		View = POINTER TO LIMITED RECORD (Views.View)
+			occur, invOccur: A.Tree; (* Sets of permutations, sorted by dates and by names *)
+			modified, (* The sets of permutations have been modified *)
+			changed: BOOLEAN; (* The view has changed and should be saved *)
+			text: TextViews.View; (* The displayed text *)
+		END;
+		
+		FindMsg = RECORD (Views.Message)
+			v: View;
+		END;
+	
+	VAR
+		
+		dateOrName*: INTEGER;
+		
+		showOldEntries-: BOOLEAN;
+		
+		maxTime*,
+		oldMaxTime: LONGINT;
+	
+	PROCEDURE FindFirst (): View;
+		
+		VAR
+			
+			w: Windows.Window;
+			msg: FindMsg;
+		
+		BEGIN (*FindFirst*)
+			w := Windows.dir.First();
+			WHILE w # NIL DO
+				IF (w.frame # NIL) & (w.frame.view # NIL) & (w.frame.view IS Documents.Document) & (w.frame.view(Documents.Document).ThisView() IS View) THEN
+					RETURN w.frame.view(Documents.Document).ThisView()(View);
+				END;
+				w := Windows.dir.Next(w);
+			END;
+			msg.v := NIL;
+			Views.Omnicast(msg);
+			RETURN msg.v;
+		END FindFirst;
+	
+	PROCEDURE (v: View) SetNotDirty, NEW;
+		
+		VAR
+			
+			d: Stores.Domain;
+			any: ANYPTR;
+			seq: Sequencers.Sequencer;
+		
+		BEGIN (*SetNotDirty*)
+			ASSERT(v # NIL);
+			d := v.Domain();
+			IF d # NIL THEN
+				any := d.GetSequencer();
+				IF (any # NIL) & (any IS Sequencers.Sequencer) THEN
+					seq := any(Sequencers.Sequencer);
+					seq.SetDirty(FALSE);
+				END;
+			END;
+		END SetNotDirty;
+	
+	(* Test the equality of the two permutations sorted by dates o1 and o2 *)
+	PROCEDURE OccursEqual (o1, o2: A.Tree): BOOLEAN;
+		
+		VAR
+			
+			e1, e2: A.Elem;
+		
+		PROCEDURE Equal (e1, e2: A.Elem): BOOLEAN;
+			
+			BEGIN (*Equal*)
+				WITH e1: W.Propagation DO
+					WITH e2: W.Propagation DO
+						RETURN (e1.id$ = e2.id$) & (e1.date = e2.date) & (e1.proba = e2.proba);
+					END;
+				END;
+			END Equal;
+		
+		BEGIN (*OccursEqual*)
+			e1 := o1.Next(NIL); e2 := o2.Next(NIL);
+			WHILE (e1 # NIL) & (e2 # NIL) & Equal(e1, e2) DO
+				e1 := o1.Next(e1); e2 := o2.Next(e2);
+			END;
+			RETURN (e1 = NIL) & (e2 = NIL);
+		END OccursEqual;
+	
+	(* Print the permutation occur sorted by dates *)
+	PROCEDURE ByDates (IN f: TextMappers.Formatter; occur: A.Tree);
+		
+		VAR
+			
+			r: TextRulers.Ruler;
+			s: B.DateTime;
+			e: A.Elem;
+			l: INTEGER;
+			date: LONGINT;
+		
+		BEGIN (*ByDates*)
+			f.rider.SetAttr(TextModels.NewSize(f.rider.attr, corpusSize));
+			l := 0;
+			e := occur.Next(NIL);
+			WHILE e # NIL DO
+				l := MAX(l, f.rider.attr.font.StringWidth(e(W.Propagation).id$ + ' '));
+				e := occur.Next(e);
+			END;
+			r := TextRulers.dir.New(NIL);
+			TextRulers.SetJustified(r);
+			TextRulers.SetFirst(r, 0);
+			TextRulers.SetLeft(r, retrait);
+			TextRulers.SetFixedRight(r, width);
+			TextRulers.AddTab(r, retrait + l);
+			f.WriteView(r);
+			date := - 1;
+			e := occur.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: W.Propagation DO
+					IF e.date # date THEN
+						date := e.date;
+						B.TimestampToString(e.date, s);
+						f.rider.SetAttr(TextModels.NewSize(f.rider.attr, headSize));
+						f.WriteLn; f.WritePara;
+						f.WriteString(s);
+						f.WriteLn;
+					END;
+					f.rider.SetAttr(TextModels.NewSize(f.rider.attr, corpusSize));
+					f.WriteString(e.id);
+					f.WriteTab;
+					f.WriteString(": "); f.WriteMsg("#Duniter:Proba"); f.WriteString(" = ");
+					f.WriteIntForm(ENTIER(Math.Round(e.proba * 100)), 10, 3, " ", FALSE);
+					f.WriteString("%");
+					f.WriteLn;
+				END;
+				e := occur.Next(e);
+			END;
+		END ByDates;
+	
+	(* Print the permutation invOccur sorted by names *)
+	PROCEDURE ByNames (IN f: TextMappers.Formatter; invOccur: A.Tree);
+		
+		VAR
+			
+			r: TextRulers.Ruler;
+			s: B.DateTime;
+			e: A.Elem;
+			id: B.String;
+		
+		BEGIN (*ByNames*)
+			r := TextRulers.dir.New(NIL);
+			TextRulers.SetJustified(r);
+			TextRulers.SetFirst(r, 0);
+			TextRulers.SetLeft(r, retrait);
+			TextRulers.SetFixedRight(r, width);
+			f.rider.SetAttr(TextModels.NewSize(f.rider.attr, corpusSize));
+			B.TimestampToString(0, s);
+			TextRulers.AddTab(r, retrait + f.rider.attr.font.StringWidth(s + ' '));
+			f.WriteView(r);
+			NEW(id, 1); id^ := 0X;
+			e := invOccur.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: W.InvProp DO
+					IF e.id$ # id$ THEN
+						id := e.id;
+						f.rider.SetAttr(TextModels.NewSize(f.rider.attr, headSize));
+						f.WriteLn; f.WritePara;
+						f.WriteString(e.id);
+						f.WriteLn;
+					END;
+					f.rider.SetAttr(TextModels.NewSize(f.rider.attr, corpusSize));
+					IF e.date = MAX(LONGINT) THEN
+						f.WriteMsg("#Duniter:Never");
+					ELSE
+						B.TimestampToString(e.date, s);
+						f.WriteString(s);
+					END;
+					f.WriteTab;
+					f.WriteString(": "); f.WriteMsg("#Duniter:Proba"); f.WriteString(" = ");
+					f.WriteIntForm(ENTIER(Math.Round(e.proba * 100)), 10, 3, " ", FALSE);
+					f.WriteString("%");
+					f.WriteLn;
+				END;
+				e := invOccur.Next(e);
+			END;
+		END ByNames;
+	
+	(* Write the text of the View v *)
+	PROCEDURE (v: View) WriteText, NEW;
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			r: TextRulers.Ruler;
+			nowS: B.DateTime;
+		
+		(* Insert into the text the two radio buttons and one or two command buttons *)
+		PROCEDURE InsertControls (IN f: TextMappers.Formatter);
+			
+			CONST
+				
+				radioOffset = 5 * Ports.mm;
+				buttonOffset = 5 * Ports.mm;
+			
+			VAR
+				
+				r: TextRulers.Ruler;
+				prop: Controls.Prop;
+				c: Controls.Control;
+				s: Dialog.String;
+				w, h: INTEGER;
+			
+			PROCEDURE InitProp (VAR p: Controls.Prop);
+				
+				BEGIN (*InitProp*)
+					NEW(p);
+					p.link := ""; p.label := ""; p.guard := ""; p.notifier := "";
+					p.level := 0;
+					p.opt[0] := FALSE; p.opt[1] := FALSE;
+					p.opt[2] := FALSE; p.opt[3] := FALSE;
+					p.opt[4] := FALSE;
+				END InitProp;
+			
+			BEGIN (*InsertControls*)
+				f.WriteLn;
+				r := TextRulers.dir.New(NIL);
+				TextRulers.AddTab(r, firstCtrlPos);
+				TextRulers.MakeCenterTab(r);
+				TextRulers.AddTab(r, secondCtrlPos);
+				TextRulers.MakeCenterTab(r);
+				f.WriteView(r);
+				f.WriteTab;
+				InitProp(prop);
+				prop.link := "DuniterWWViews.dateOrName";
+				prop.label := "#Duniter:ByName";
+				prop.notifier := "DuniterWWViews.DateOrNameNotifier";
+				prop.level := 1;
+				Dialog.MapString(prop.label, s);
+				c := Controls.dir.NewRadioButton(prop);
+				f.WriteView(c);
+				c.context.GetSize(w, h);
+				c.context.SetSize(c.font.StringWidth(s) + radioOffset, h);
+				f.WriteTab;
+				InitProp(prop);
+				prop.link := "DuniterWWViews.dateOrName";
+				prop.label := "#Duniter:ByDate";
+				prop.notifier := "DuniterWWViews.DateOrNameNotifier";
+				prop.level := 0;
+				Dialog.MapString(prop.label, s);
+				c := Controls.dir.NewRadioButton(prop);
+				f.WriteView(c);
+				c.context.GetSize(w, h);
+				c.context.SetSize(c.font.StringWidth(s) + radioOffset, h);
+				f.WriteLn;
+				f.WriteLn;
+				f.WriteTab;
+				IF v.modified THEN
+					InitProp(prop);
+					prop.link := "DuniterWWViews.Clear";
+					prop.label := "#Duniter:Checked";
+					Dialog.MapString(prop.label, s);
+					c := Controls.dir.NewPushButton(prop);
+					f.WriteView(c);
+					c.context.GetSize(w, h);
+					c.context.SetSize(c.font.StringWidth(s) + buttonOffset, h);
+				END;
+				f.WriteTab;
+				InitProp(prop);
+				prop.link := "DuniterBlockchain.UpdateAll";
+				prop.label := "#Duniter:Update";
+				Dialog.MapString(prop.label, s);
+				c := Controls.dir.NewPushButton(prop);
+				f.WriteView(c);
+				c.context.GetSize(w, h);
+				c.context.SetSize(c.font.StringWidth(s) + buttonOffset, h);
+				f.WriteLn;
+			END InsertControls;
+		
+		BEGIN (*WriteText*)
+			t := v.text.ThisModel();
+			t.Delete(0, t.Length());
+			f.ConnectTo(t);
+			r := TextRulers.dir.New(NIL);
+			TextRulers.SetCentered(r);
+			TextRulers.SetFixedRight(r, width);
+			f.WriteView(r);
+			f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.normal));
+			f.rider.SetAttr(TextModels.NewSize(f.rider.attr, titleSize));
+			IF v.modified THEN
+				f.WriteString("* ");
+			END;
+			f.WriteMsg(title);
+			IF v.modified THEN
+				f.WriteString(" *");
+			END;
+			f.WriteLn;
+			B.TimestampToString(B.Now(), nowS);
+			f.rider.SetAttr(TextModels.NewSize(f.rider.attr, headSize));
+			f.WriteString(nowS);
+			f.WriteString(" (UTC+0)");
+			f.WriteLn;
+			InsertControls(f);
+			f.rider.SetAttr(TextModels.NewSize(f.rider.attr, corpusSize));
+			IF ~v.occur.IsEmpty() THEN
+				CASE dateOrName OF
+					|byDate:
+						ByDates(f, v.occur);
+					|byName:
+						ByNames(f, v.invOccur);
+				END;
+			END;
+			Views.Update(v, Views.keepFrames);
+			IF ~v.changed THEN
+				v.SetNotDirty;
+			END;
+		END WriteText;
+	
+	(* When the WotWizard lists have been modified, stores on disk the old version (by dates) in oldEntriesName file *)
+	PROCEDURE Entries (occur: A.Tree);
+		
+		VAR
+			
+			r: TextRulers.Ruler;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			v: Views.View;
+			loc: Files.Locator;
+		
+		BEGIN (*Entries*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			r := TextRulers.dir.New(NIL);
+			TextRulers.SetCentered(r);
+			TextRulers.SetFixedRight(r, width);
+			f.WriteView(r);
+			f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.normal));
+			f.rider.SetAttr(TextModels.NewSize(f.rider.attr, titleSize));
+			f.WriteMsg(title);
+			f.WriteLn;
+			f.rider.SetAttr(TextModels.NewSize(f.rider.attr, headSize));
+			f.WriteMsg("#Duniter:PreviousDisplay");
+			f.WriteLn;
+			ByDates(f, occur);
+			v := TextViews.dir.New(t);
+			loc := Files.dir.This(""); ASSERT(loc.res = 0);
+			Views.RegisterView(v, loc, oldEntriesName); 
+			IF showOldEntries THEN
+				Views.OpenView(v);
+			END;
+		END Entries;
+	
+	(* Test whether the WotWizard lists have changed *)
+	PROCEDURE (v: View) UpdateText, NEW;
+		
+		VAR
+			
+			occur, invOccur: A.Tree;
+			b, oM: BOOLEAN;
+		
+		BEGIN (*UpdateText*)
+			IF ~W.BuildEntries(occur, invOccur) THEN
+				A.New(occur); A.New(invOccur);
+			END;
+			oM := v.modified;
+			b := ~OccursEqual(occur, v.occur);
+			v.modified := v.modified OR b;
+			v.changed := v.changed OR b;
+			IF (v.modified # oM) & ~v.occur.IsEmpty() THEN
+				Entries(v.occur);
+			END;
+			v.occur := occur; v.invOccur := invOccur;
+		END UpdateText;
+	
+	(* Save the WotWizard lists on disk, in files textByName and textByDate, whenever they have changed *)
+	PROCEDURE (v: View) StoreText, NEW;
+		
+		CONST
+			
+			textByName = "WWByName";
+			textByDate = "WWByDate";
+			textExt = "txt";
+			textConv = "CpcUtf8Conv.ExportUtf8";
+		
+		VAR
+			
+			loc: Files.Locator;
+			name: Files.Name;
+			conv: Converters.Converter;
+			res: INTEGER;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			nowS: B.DateTime;
+		
+		BEGIN (*StoreText*)
+			IF v.modified THEN
+				loc := Files.dir.This(""); ASSERT(loc.res = 0);
+				conv := Converters.list;
+				WHILE (conv # NIL) & (conv.exp # textConv) DO
+					conv := conv.next;
+				END;
+				ASSERT(conv # NIL);
+				B.TimestampToString(B.Now(), nowS);
+				t := TextModels.dir.New();
+				f.ConnectTo(t);
+				f.WriteString("    ");
+				f.WriteString(nowS);
+				f.WriteString(" (UTC+0)");
+				f.WriteLn;
+				W.ByDates(f, v.occur);
+				name := textByDate + '.' + textExt;
+				Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, conv, res); ASSERT(res = 0);
+				t := TextModels.dir.New();
+				f.ConnectTo(t);
+				f.WriteString("    ");
+				f.WriteString(nowS);
+				f.WriteString(" (UTC+0)");
+				f.WriteLn;
+				W.ByNames(f, v.invOccur);
+				name := textByName + '.' + textExt;
+				Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, conv, res); ASSERT(res = 0);
+			END;
+		END StoreText;
+	
+	PROCEDURE (v: View) InstallText, NEW;
+		
+		BEGIN (*InstallText*)
+			v.text := TextViews.dir.New(TextModels.dir.New());
+			Stores.Join(v, v.text);
+			v.text.ThisController().SetOpts({Containers.noCaret});
+			v.UpdateText;
+		END InstallText;
+	
+	PROCEDURE (v: View) Internalize (VAR rd: Stores.Reader);
+		
+		VAR
+			
+			version, n, i, l, m: INTEGER;
+			p: W.Propagation;
+			e: A.Elem;
+			b: BOOLEAN;
+		
+		BEGIN (*Internalize*)
+			IF ~rd.cancelled THEN
+				rd.ReadVersion(minVersion, maxVersion, version);
+				IF ~rd.cancelled THEN
+					A.New(v.occur);
+					rd.ReadInt(n);
+					FOR i := 1 TO n DO
+						NEW(p);
+						rd.ReadInt(l); NEW(p.id, l + 1);
+						rd.ReadString(p.id^);
+						rd.ReadLong(p.date);
+						rd.ReadReal(p.proba);
+						e := p;
+						b := v.occur.SearchIns(e, m); ASSERT(~b);
+					END;
+					rd.ReadBool(v.modified);
+					v.InstallText;
+					v.changed := FALSE;
+					v.WriteText;
+					v.StoreText;
+				END;
+			END;
+		END Internalize;
+	
+	PROCEDURE (v: View) Externalize (VAR wr: Stores.Writer);
+		
+		VAR
+			
+			e: A.Elem;
+		
+		BEGIN (*Externalize*)
+			wr.WriteVersion(maxVersion);
+			wr.WriteInt(v.occur.NumberOfElems());
+			e := v.occur.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: W.Propagation DO
+					wr.WriteInt(LEN(e.id$));
+					wr.WriteString(e.id);
+					wr.WriteLong(e.date);
+					wr.WriteReal(e.proba);
+				END;
+				e := v.occur.Next(e);
+			END;
+			wr.WriteBool(v.modified);
+			v.changed := FALSE;
+		END Externalize;
+	
+	PROCEDURE (v: View) CopyFromModelView (source: Views.View; model: Models.Model);
+		
+		BEGIN (*CopyFromModelView*)
+			WITH source: View DO
+				v.occur := source.occur.Copy();
+				v.invOccur := source.invOccur.Copy();
+				IF model = NIL THEN
+					v.text := Views.CopyOf(source.text, Views.deep)(TextViews.View);
+				ELSE
+					v.text := Views.CopyWithNewModel(source.text, model)(TextViews.View);
+				END;
+				v.modified := source.modified;
+				v.changed := FALSE;
+			END;
+		END CopyFromModelView;
+	
+	PROCEDURE (v: View) ThisModel (): Models.Model;
+		
+		BEGIN (*ThisModel*)
+			RETURN v.text.ThisModel();
+		END ThisModel;
+	
+	PROCEDURE (v: View) InitContext (context: Models.Context);
+		
+		BEGIN (*InitContext*)
+			v.InitContext^(context);
+			v.text.InitContext(context);
+		END InitContext;
+	
+	PROCEDURE (v: View) Neutralize;
+		
+		BEGIN (*Neutralize*)
+			v.text.Neutralize;
+		END Neutralize;
+	
+	PROCEDURE (v: View) Restore (f: Views.Frame; l, t, r, b: INTEGER);
+		
+		BEGIN (*Restore*)
+			Views.InstallFrame(f, v.text, 0, 0, 0, TRUE);
+		END Restore;
+	
+	PROCEDURE (v: View) HandleViewMsg (f: Views.Frame; VAR msg: Views.Message);
+		
+		BEGIN (*HandleViewMsg*)
+			WITH msg: FindMsg DO
+				IF msg.v = NIL THEN
+					msg.v := v;
+				END;
+			ELSE
+			END;
+		END HandleViewMsg;
+	
+	PROCEDURE (v: View) HandleCtrlMsg (f: Views.Frame; VAR msg: Controllers.Message; VAR focus: Views.View);
+		
+		BEGIN (*HandleCtrlMsg*)
+			WITH
+				|msg: Controllers.PollOpsMsg DO
+					msg.type := "DuniterWWViews.View";
+					IF v.text.ThisController().HasSelection() THEN
+						msg.valid := {Controllers.copy};
+					END;
+				ELSE
+					focus := v.text;
+			END;
+		END HandleCtrlMsg;
+	
+	PROCEDURE (v: View) HandlePropMsg (VAR p: Properties.Message);
+		
+		BEGIN (*HandlePropMsg*)
+			WITH 
+				|p: Properties.SizePref DO
+					IF p.w = Views.undefined THEN
+						p.w := width;
+					END;
+					IF p.h = Views.undefined THEN
+						p.h := height;
+					END;
+				|p: Properties.ResizePref DO
+					p.verFitToWin := TRUE;
+					p.horFitToWin := TRUE;
+				ELSE
+					Views.HandlePropMsg(v.text, p);
+			END;
+		END HandlePropMsg;
+	
+	PROCEDURE Focus* (): Views.View;
+		
+		VAR
+			
+			v: Views.View;
+		
+		BEGIN (*Focus*)
+			v := Controllers.FocusView();
+			IF (v # NIL) & (v IS View) THEN
+				RETURN v;
+			ELSE
+				RETURN NIL;
+			END;
+		END Focus;
+	
+	PROCEDURE Rewrite;
+		
+		VAR
+			
+			v: View;
+		
+		BEGIN (*Rewrite*)
+			v := FindFirst();
+			IF v # NIL THEN
+				v.WriteText;
+			END;
+		END Rewrite;
+	
+	PROCEDURE Update;
+		
+		VAR
+			
+			v: View;
+		
+		BEGIN (*Update*)
+			v := FindFirst();
+			IF v # NIL THEN
+				v.UpdateText;
+				v.WriteText;
+				v.StoreText;
+			END;
+		END Update;
+	
+	(* Remove the asterik marks and the button "Checked" *)
+	PROCEDURE Clear*;
+		
+		VAR
+			
+			v: View;
+		
+		BEGIN (*Clear*)
+			v := FindFirst();
+			IF v # NIL THEN
+				v.changed := v.changed OR v.modified;
+				v.modified := FALSE;
+				v.WriteText;
+			END;
+		END Clear;
+	
+	(* Mark the view as modified *)
+	PROCEDURE SetModified*;
+		
+		VAR
+			
+			v: View;
+		
+		BEGIN (*SetModified*)
+			v := FindFirst();
+			IF v # NIL THEN
+				v.changed := v.changed OR ~v.modified;
+				v.modified := TRUE;
+				v.WriteText;
+			END;
+		END SetModified;
+	
+	PROCEDURE DateOrNameNotifier* (op, from, to: INTEGER);
+		
+		BEGIN (*DateOrNameNotifier*)
+			IF op = Dialog.changed THEN
+				Rewrite;
+			END;
+		END DateOrNameNotifier;
+	
+	PROCEDURE ShowOldEntries*;
+		
+		BEGIN (*ShowOldEntries*)
+			showOldEntries := TRUE;
+		END ShowOldEntries;
+	
+	PROCEDURE HideOldEntries*;
+		
+		BEGIN (*HideOldEntries*)
+			showOldEntries := FALSE;
+		END HideOldEntries;
+	
+	PROCEDURE StoreMaxTime;
+		
+		VAR
+			
+			l: Files.Locator;
+			f: Files.File;
+			wr: Stores.Writer;
+			res: INTEGER;
+		
+		BEGIN (*StoreMaxTime*)
+			l := Files.dir.This(maxTimeDir); ASSERT(l.res = 0);
+			f := Files.dir.New(l, Files.dontAsk); ASSERT(f # NIL);
+			wr.ConnectTo(f);
+			wr.WriteLong(maxTime);
+			f.Register(maxTimeName, '', Files.dontAsk, res); ASSERT(res = 0);
+		END StoreMaxTime;
+	
+	PROCEDURE MaxTimeOK*;
+		
+		BEGIN (*MaxTimeOK*)
+			IF maxTime # oldMaxTime THEN
+				oldMaxTime := maxTime;
+				W.ChangeMaxTime(maxTime);
+				StoreMaxTime;
+			END;
+		END MaxTimeOK;
+	
+	PROCEDURE MaxTimeOKGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*MaxTimeOKGuard*)
+			par.disabled := maxTime = oldMaxTime;
+		END MaxTimeOKGuard;
+	
+	PROCEDURE New* (): Views.View;
+		
+		VAR
+			
+			v: View;
+		
+		BEGIN (*New*)
+			NEW(v);
+			A.New(v.occur);
+			v.InstallText;
+			v.StoreText;
+			v.modified := FALSE;
+			v.changed := TRUE;
+			v.WriteText;
+			RETURN v;
+		END New;
+	
+	PROCEDURE Deposit*;
+		
+		BEGIN (*Deposit*)
+			Views.Deposit(New());
+		END Deposit;
+	
+	PROCEDURE Open*;
+		
+		BEGIN (*Open*)
+			Views.OpenAux(New(), title);
+		END Open;
+	
+	PROCEDURE Init;
+		
+		VAR
+			
+			l: Files.Locator;
+			f: Files.File;
+			rd: Stores.Reader;
+		
+		BEGIN (*Init*)
+			dateOrName := byName;
+			showOldEntries := FALSE;
+			l := Files.dir.This(maxTimeDir);
+			f := Files.dir.Old(l, maxTimeName, Files.shared);
+			IF f = NIL THEN
+				maxTime := W.maxTime;
+				StoreMaxTime;
+			ELSE
+				rd.ConnectTo(f);
+				rd.ReadLong(maxTime);
+				W.ChangeMaxTime(maxTime);
+			END;
+			oldMaxTime := maxTime;
+			B.AddUpdateProc(Update);
+		END Init;
+	
+	BEGIN (*DuniterWWViews*)
+		Init;
+	CLOSE
+		B.RemoveUpdateProc(Update);
+	END DuniterWWViews.
+
+"DuniterWWViews.Deposit;StdCmds.Open"
+
+DuniterBlockchain.UpdateAll;
+
+DuniterWWViews.Clear;
+
+DuniterWWViews.SetModified;
+
+DuniterWWViews.ShowOldEntries;
+
+DuniterWWViews.HideOldEntries;

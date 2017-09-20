@@ -1,0 +1,1218 @@
+(* 
+Util: Utility tools.
+
+Copyright (C) 2001…2006 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE UtilAvlTree;
+	
+	
+	
+	(* This module implements balanced and threaded trees. *)
+	
+	CONST
+		
+		(* Results of comparison. *)
+		lt* = -1; (* less than *)
+		eq* = 0; (* equal *)
+		gt* = + 1; (* greater than *)
+	
+	TYPE
+		
+		Elem* = POINTER TO ABSTRACT RECORD (* Element of a tree. *)
+			left, right: Elem; (* Left and right links. *)
+			lTag, rTag: BOOLEAN; (* Indicate if the corresponding links point to a child or to the next element. *)
+			bal: BYTE; (* AVL balance (lt, eq or gt). *)
+			rank: INTEGER; (* Rank in the tree. *)
+			cop: Elem; (* Used to copy. *)
+		END;
+		
+		Tree* = POINTER TO LIMITED RECORD (* An AVL tree. *)
+			root: Elem;
+		END;
+		
+		VoidElem = POINTER TO RECORD (Elem)
+		END;
+	
+	(* Compare e to el; returns lt if e < el, eq if e = el and gt if e > el. *)
+	PROCEDURE (e: Elem) Compare- (el: Elem): BYTE, NEW, EXTENSIBLE;
+		
+		BEGIN (*Compare*)
+			HALT(25);
+			RETURN eq;
+		END Compare;
+	
+	(* Used in Tree.WalkThrough; action on an element e, with parameter p, while traversing a tree in inorder. *)
+	PROCEDURE (e: Elem) Do- (p: ANYPTR), NEW, EMPTY;
+	
+	(* Copy and return the element e. *)
+	PROCEDURE (e: Elem) Copy- (): Elem, NEW, EXTENSIBLE;
+		
+		BEGIN (*Copy*)
+			HALT(26);
+			RETURN NIL;
+		END Copy;
+	
+	(* Is t empty? *)
+	PROCEDURE (t: Tree) IsEmpty* (): BOOLEAN, NEW;
+		
+		BEGIN (*IsEmpty*)
+			ASSERT(t.root # NIL, 20);
+			RETURN ~t.root.lTag;
+		END IsEmpty;
+	
+	(* Empty the tree t. *)
+	PROCEDURE (t: Tree) Empty*, NEW;
+		
+		VAR
+			
+			e: VoidElem;
+		
+		BEGIN (*Empty*)
+			NEW(e);
+			e.left := e;
+			e.lTag := FALSE;
+			e.right := e;
+			e.rTag := TRUE;
+			t.root := e;
+		END Empty;
+	
+	(* Create a new empty tree t. *)
+	PROCEDURE New* (OUT t: Tree);
+		
+		BEGIN (*New*)
+			NEW(t);
+			t.Empty;
+		END New;
+	
+	(* Test if the tree t is valid. *)
+	PROCEDURE (t: Tree) Valid* (): BOOLEAN, NEW;
+		
+		BEGIN (*Valid*)
+			RETURN t.root # NIL;
+		END Valid;
+	
+	(* Copy the tree t; the method Elem.Copy must be instantiated. *)
+	PROCEDURE (t: Tree) Copy* (): Tree, NEW;
+		
+		VAR
+			
+			u: Tree;
+		
+		PROCEDURE Copy1 (e: Elem; t: BOOLEAN);
+			
+			BEGIN (*Copy1*)
+				IF t THEN
+					e.cop := e.Copy();
+					Copy1(e.left, e.lTag);
+					Copy1(e.right, e.rTag);
+				END;
+			END Copy1;
+		
+		PROCEDURE Copy2 (e: Elem; t: BOOLEAN): Elem;
+			
+			VAR
+				
+				f: Elem;
+			
+			BEGIN (*Copy2*)
+				f := e.cop;
+				IF t THEN
+					f.lTag := e.lTag;
+					f.rTag := e.rTag;
+					f.bal := e.bal;
+					f.rank := e.rank;
+					f.left := Copy2(e.left, e.lTag);
+					f.right := Copy2(e.right, e.rTag);
+				END;
+				RETURN f;
+			END Copy2;
+		
+		BEGIN (*Copy*)
+			ASSERT(t.root # NIL, 20);
+			New(u);
+			t.root.cop := u.root;
+			Copy1(t.root.left, t.root.lTag);
+			u.root.left := Copy2(t.root.left, t.root.lTag);
+			u.root.lTag := t.root.lTag;
+			RETURN u;
+		END Copy;
+	
+	PROCEDURE BalLI (VAR p: Elem; VAR h: BOOLEAN);
+		
+		VAR
+			
+			p1, p2: Elem;
+		
+		BEGIN (*BalLI*)
+			CASE p.bal OF
+				|gt:
+					p.bal := eq;
+					h := FALSE;
+				|eq:
+					p.bal := lt;
+				|lt:
+					p1 := p.left;
+					IF p1.bal = lt THEN
+						IF p1.rTag THEN
+							p.left := p1.right;
+						ELSE
+							p.left := p1;
+						END;
+						p.lTag := p1.rTag;
+						p1.right := p;
+						p1.rTag := TRUE;
+						p.bal := eq;
+						p1.bal := eq;
+						DEC(p.rank, p1.rank);
+						p := p1;
+					ELSE
+						p2 := p1.right;
+						IF p2.lTag THEN
+							p1.right := p2.left;
+						ELSE
+							p1.right := p2;
+						END;
+						p1.rTag := p2.lTag;
+						p2.left := p1;
+						p2.lTag := TRUE;
+						IF p2.rTag THEN
+							p.left := p2.right;
+						ELSE
+							p.left := p2;
+						END;
+						p.lTag := p2.rTag;
+						p2.right := p;
+						p2.rTag := TRUE;
+						IF p2.bal = lt THEN
+							p.bal := gt;
+						ELSE
+							p.bal := eq;
+						END;
+						IF p2.bal = gt THEN
+							p1.bal := lt;
+						ELSE
+							p1.bal := eq;
+						END;
+						p2.bal := eq;
+						INC(p2.rank, p1.rank);
+						DEC(p.rank, p2.rank);
+						p := p2;
+					END;
+					h := FALSE;
+			END;
+		END BalLI;
+	
+	PROCEDURE BalRI (VAR p: Elem; VAR h: BOOLEAN);
+		
+		VAR
+			
+			p1, p2: Elem;
+		
+		BEGIN (*BalRI*)
+			CASE p.bal OF
+				|lt:
+					p.bal := eq;
+					h := FALSE;
+				|eq:
+					p.bal := gt;
+				|gt:
+					p1 := p.right;
+					IF p1.bal = gt THEN
+						IF p1.lTag THEN
+							p.right := p1.left;
+						ELSE
+							p.right := p1;
+						END;
+						p.rTag := p1.lTag;
+						p1.left := p;
+						p1.lTag := TRUE;
+						p.bal := eq;
+						p1.bal := eq;
+						INC(p1.rank, p.rank);
+						p := p1;
+					ELSE
+						p2 := p1.left;
+						IF p2.rTag THEN
+							p1.left := p2.right;
+						ELSE
+							p1.left := p2;
+						END;
+						p1.lTag := p2.rTag;
+						p2.right := p1;
+						p2.rTag := TRUE;
+						IF p2.lTag THEN
+							p.right := p2.left;
+						ELSE
+							p.right := p2;
+						END;
+						p.rTag := p2.lTag;
+						p2.left := p;
+						p2.lTag := TRUE;
+						IF p2.bal = gt THEN
+							p.bal := lt;
+						ELSE
+							p.bal := eq;
+						END;
+						IF p2.bal = lt THEN
+							p1.bal := gt;
+						ELSE
+							p1.bal := eq;
+						END;
+						p2.bal := eq;
+						DEC(p1.rank, p2.rank);
+						INC(p2.rank, p.rank);
+						p := p2;
+					END;
+					h := FALSE;
+			END;
+		END BalRI;
+	
+	PROCEDURE BalLE (VAR p: Elem; VAR h: BOOLEAN);
+		
+		VAR
+			
+			p1, p2: Elem;
+		
+		BEGIN (*BalLE*)
+			CASE p.bal OF
+				|lt:
+					p.bal := eq;
+				|eq:
+					p.bal := gt;
+					h := FALSE;
+				|gt:
+					p1 := p.right;
+					IF p1.bal = lt THEN
+						p2 := p1.left;
+						IF p2.rTag THEN
+							p1.left := p2.right;
+						ELSE
+							p1.left := p2;
+						END;
+						p1.lTag := p2.rTag;
+						p2.right := p1;
+						p2.rTag := TRUE;
+						IF p2.lTag THEN
+							p.right := p2.left;
+						ELSE
+							p.right := p2;
+						END;
+						p.rTag := p2.lTag;
+						p2.left := p;
+						p2.lTag := TRUE;
+						IF p2.bal = gt THEN
+							p.bal := lt;
+						ELSE
+							p.bal := eq;
+						END;
+						IF p2.bal = lt THEN
+							p1.bal := gt;
+						ELSE
+							p1.bal := eq;
+						END;
+						p2.bal := eq;
+						DEC(p1.rank, p2.rank);
+						INC(p2.rank, p.rank);
+						p := p2;
+					ELSE
+						IF p1.lTag THEN
+							p.right := p1.left;
+						ELSE
+							p.right := p1;
+						END;
+						p.rTag := p1.lTag;
+						p1.left := p;
+						p1.lTag := TRUE;
+						IF p1.bal = eq THEN
+							p.bal := gt;
+							p1.bal := lt;
+							h := FALSE;
+						ELSE
+							p.bal := eq;
+							p1.bal := eq;
+						END;
+						INC(p1.rank, p.rank);
+						p := p1;
+					END;
+			END;
+		END BalLE;
+	
+	PROCEDURE BalRE (VAR p: Elem; VAR h: BOOLEAN);
+		
+		VAR
+			
+			p1, p2: Elem;
+		
+		BEGIN (*BalRE*)
+			CASE p.bal OF
+				|gt:
+					p.bal := eq;
+				|eq:
+					p.bal := lt;
+					h := FALSE;
+				|lt:
+					p1 := p.left;
+					IF p1.bal = gt THEN
+						p2 := p1.right;
+						IF p2.lTag THEN
+							p1.right := p2.left;
+						ELSE
+							p1.right := p2;
+						END;
+						p1.rTag := p2.lTag;
+						p2.left := p1;
+						p2.lTag := TRUE;
+						IF p2.rTag THEN
+							p.left := p2.right;
+						ELSE
+							p.left := p2;
+						END;
+						p.lTag := p2.rTag;
+						p2.right := p;
+						p2.rTag := TRUE;
+						IF p2.bal = lt THEN
+							p.bal := gt;
+						ELSE
+							p.bal := eq;
+						END;
+						IF p2.bal = gt THEN
+							p1.bal := lt;
+						ELSE
+							p1.bal := eq;
+						END;
+						p2.bal := eq;
+						INC(p2.rank, p1.rank);
+						DEC(p.rank, p2.rank);
+						p := p2;
+					ELSE
+						IF p1.rTag THEN
+							p.left := p1.right;
+						ELSE
+							p.left := p1;
+						END;
+						p.lTag := p1.rTag;
+						p1.right := p;
+						p1.rTag := TRUE;
+						IF p1.bal = eq THEN
+							p.bal := lt;
+							p1.bal := gt;
+							h := FALSE;
+						ELSE
+							p.bal := eq;
+							p1.bal := eq;
+						END;
+						DEC(p.rank, p1.rank);
+						p := p1;
+					END;
+			END;
+		END BalRE;
+	
+	PROCEDURE DelL (first: BOOLEAN; VAR r: Elem; VAR t: BOOLEAN; OUT s: Elem; OUT h: BOOLEAN);
+		
+		BEGIN (*DelL*)
+			IF ~r.rTag THEN
+				s := r;
+				t := r.lTag;
+				IF t OR first THEN
+					r := r.left;
+				END;
+				h := TRUE;
+			ELSE
+				DelL(FALSE, r.right, r.rTag, s, h);
+				IF h THEN
+					BalRE(r, h);
+				END;
+			END;
+		END DelL;
+	
+	(* Search the element key in the sorted tree t; if key is found, return TRUE, else key is inserted in the tree; rank returns the rank of key in the tree; Elem.Compare must be instantiated. It's key.Compare which is used when testing the position of key in the tree t. *)
+	PROCEDURE (t: Tree) SearchIns* (VAR key: Elem; OUT rank: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			h, found: BOOLEAN;
+		
+		PROCEDURE Ins (q: Elem; l: BOOLEAN; VAR p: Elem; VAR t: BOOLEAN);
+			
+			BEGIN (*Ins*)
+				IF ~t THEN
+					found := FALSE;
+					h := TRUE;
+					t := TRUE;
+					IF l THEN
+						key.left := p;
+						key.right := q;
+					ELSE
+						key.right := p;
+						key.left := q;
+					END;
+					p := key;
+					p.lTag := FALSE;
+					p.rTag := FALSE;
+					p.bal := eq;
+					p.rank := 1;
+					rank := 1;
+				ELSE
+					CASE key.Compare(p) OF
+						|lt:
+							Ins(p, TRUE, p.left, p.lTag);
+							IF ~found THEN
+								INC(p.rank);
+							END;
+							IF h THEN
+								BalLI(p, h);
+							END;
+						|gt:
+							Ins(p, FALSE, p.right, p.rTag);
+							INC(rank, p.rank);
+							IF h THEN
+								BalRI(p, h);
+							END;
+						|eq:
+							h := FALSE;
+							found := TRUE;
+							key := p;
+							rank := p.rank;
+					END;
+				END;
+			END Ins;
+		
+		BEGIN (*SearchIns*)
+			ASSERT(t.root # NIL, 20);
+			ASSERT(key # NIL, 21);
+			Ins(t.root, TRUE, t.root.left, t.root.lTag);
+			RETURN found;
+		END SearchIns;
+	
+	(* Search the element key in the sorted tree t; if key is found, return TRUE; rank returns the rank of key in the tree, or 0 if not found; Elem.Compare must be instantiated. It's key.Compare which is used when testing the position of key in the tree t. *)
+	PROCEDURE (t: Tree) Search* (VAR key: Elem; OUT rank: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			tag: BOOLEAN;
+			val: Elem;
+		
+		BEGIN (*Search*)
+			ASSERT(t.root # NIL, 20);
+			ASSERT(key # NIL, 21);
+			tag := t.root.lTag;
+			val := t.root.left;
+			rank := 0;
+			LOOP
+				IF ~tag THEN
+					rank := 0;
+					RETURN FALSE;
+				ELSE
+					CASE key.Compare(val) OF
+						|lt:
+							tag := val.lTag;
+							val := val.left;
+						|eq:
+							INC(rank, val.rank);
+							key := val;
+							RETURN TRUE;
+						|gt:
+							INC(rank, val.rank);
+							tag := val.rTag;
+							val := val.right;
+					END;
+				END;
+			END;
+		END Search;
+	
+	(* Search the element key in the sorted tree t, or the next element if not found; if key is found, return TRUE, the found element in key and its rank in rank; otherwise, return FALSE, the successor in key and its rank in rank; return NIL in key and 0 in rank if key is not found and has no successor; Elem.Compare must be instantiated. It's key.Compare which is used when testing the position of key in the tree t. *)
+	PROCEDURE (t: Tree) SearchNext* (VAR key: Elem; OUT rank: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			tag: BOOLEAN;
+			val, valNext: Elem;
+			comp: BYTE;
+		
+		BEGIN (*SearchNext*)
+			ASSERT(t.root # NIL, 20);
+			ASSERT(key # NIL, 21);
+			tag := t.root.lTag;
+			val := t.root.left;
+			rank := 0;
+			comp := gt;
+			LOOP
+				IF ~tag THEN
+					IF comp = lt THEN
+						val := valNext;
+						INC(rank);
+					END;
+					IF val = t.root THEN
+						key := NIL;
+						rank := 0;
+					ELSE
+						key := val;
+					END;
+					RETURN FALSE;
+				ELSE
+					comp := key.Compare(val);
+					CASE comp OF
+						|lt:
+							tag := val.lTag;
+							valNext := val;
+							val := val.left;
+						|eq:
+							INC(rank, val.rank);
+							key := val;
+							RETURN TRUE;
+						|gt:
+							INC(rank, val.rank);
+							tag := val.rTag;
+							val := val.right;
+					END;
+				END;
+			END;
+		END SearchNext;
+	
+	PROCEDURE FixLThread (p, q: Elem);
+		
+		BEGIN (*FixLThread*)
+			WHILE p.lTag DO
+				p := p.left;
+			END;
+			p.left := q;
+		END FixLThread;
+	
+	PROCEDURE FixRThread (p, q: Elem);
+		
+		BEGIN (*FixRThread*)
+			WHILE p.rTag DO
+				p := p.right;
+			END;
+			p.right := q;
+		END FixRThread;
+	
+	(* Delete the element key in the sorted tree t; return TRUE if key is found, else do nothing; Elem.Compare must be instantiated. It's key.Compare which is used when testing the position of key in the tree t. *)
+	PROCEDURE (t: Tree) Delete* (key: Elem): BOOLEAN, NEW;
+		
+		VAR
+			
+			h, found: BOOLEAN;
+		
+		PROCEDURE Del (l: BOOLEAN; VAR p: Elem; VAR t: BOOLEAN);
+			
+			VAR
+				
+				s: Elem;
+			
+			BEGIN (*Del*)
+				IF ~t THEN
+					found := FALSE;
+					h := FALSE;
+				ELSE
+					CASE key.Compare(p) OF
+						|lt:
+							Del(TRUE, p.left, p.lTag);
+							IF found THEN
+								DEC(p.rank);
+							END;
+							IF h THEN
+								BalLE(p, h);
+							END;
+						|gt:
+							Del(FALSE, p.right, p.rTag);
+							IF h THEN
+								BalRE(p, h);
+							END;
+						|eq:
+							found := TRUE;
+							IF ~p.lTag THEN
+								IF p.rTag THEN
+									FixLThread(p.right, p.left);
+									p := p.right;
+								ELSE
+									IF l THEN
+										p := p.left;
+									ELSE
+										p := p.right;
+									END;
+									t := FALSE;
+								END;
+								h := TRUE;
+							ELSIF ~p.rTag THEN
+								FixRThread(p.left, p.right);
+								p := p.left;
+								h := TRUE;
+							ELSE
+								s := p;
+								DelL(TRUE, s.left, s.lTag, p, h);
+								p.left := s.left;
+								p.lTag := s.lTag;
+								p.right := s.right;
+								p.rTag := s.rTag;
+								p.bal := s.bal;
+								p.rank := s.rank - 1;
+								FixLThread(p.right, p);
+								IF h THEN
+									BalLE(p, h);
+								END;
+							END;
+					END;
+				END;
+			END Del;
+		
+		BEGIN (*Delete*)
+			ASSERT(t.root # NIL, 20);
+			ASSERT(key # NIL, 21);
+			Del(TRUE, t.root.left, t.root.lTag);
+			RETURN found;
+		END Delete;
+	
+	PROCEDURE NOE (p: Elem; tag: BOOLEAN): INTEGER;
+		
+		VAR
+			
+			n: INTEGER;
+		
+		BEGIN (*NOE*)
+			n := 0;
+			WHILE tag DO
+				INC(n, p.rank);
+				tag := p.rTag;
+				p := p.right;
+			END;
+			RETURN n;
+		END NOE;
+	
+	(* Return the number of elements in the tree t. *)
+	PROCEDURE (t: Tree) NumberOfElems* (): INTEGER, NEW;
+		
+		BEGIN (*NumberOfElems*)
+			ASSERT(t.root # NIL, 20);
+			RETURN NOE(t.root.left, t.root.lTag);
+		END NumberOfElems;
+	
+	PROCEDURE Ins (pos: INTEGER; key, q: Elem; l: BOOLEAN; VAR p: Elem; VAR t: BOOLEAN; OUT h: BOOLEAN);
+		
+		BEGIN (*Ins*)
+			IF ~t THEN
+				h := TRUE;
+				t := TRUE;
+				IF l THEN
+					key.left := p;
+					key.right := q;
+				ELSE
+					key.right := p;
+					key.left := q;
+				END;
+				p := key;
+				p.lTag := FALSE;
+				p.rTag := FALSE;
+				p.bal := eq;
+				p.rank := 1;
+			ELSIF pos <= p.rank THEN
+				Ins(pos, key, p, TRUE, p.left, p.lTag, h);
+				INC(p.rank);
+				IF h THEN
+					BalLI(p, h);
+				END;
+			ELSE
+				DEC(pos, p.rank);
+				Ins(pos, key, p, FALSE, p.right, p.rTag, h);
+				IF h THEN
+					BalRI(p, h);
+				END;
+			END;
+		END Ins;
+	
+	(* Insert the element key at the position rank in the tree t; the first rank of the tree is 1. *)
+	PROCEDURE (t: Tree) Insert* (key: Elem; rank: INTEGER), NEW;
+		
+		VAR
+			
+			h: BOOLEAN;
+		
+		BEGIN (*Insert*)
+			ASSERT(t.root # NIL, 20);
+			ASSERT(key # NIL, 21);
+			Ins(rank, key, t.root, TRUE, t.root.left, t.root.lTag, h);
+		END Insert;
+	
+	(* Insert the element key at the beginning of the tree t. *)
+	PROCEDURE (t: Tree) Prepend* (key: Elem), NEW;
+		
+		BEGIN (*Prepend*)
+			t.Insert(key, 0);
+		END Prepend;
+	
+	(* Insert the element key at the end of the tree t. *)
+	PROCEDURE (t: Tree) Append* (key: Elem), NEW;
+		
+		BEGIN (*Append*)
+			t.Insert(key, MAX(INTEGER));
+		END Append;
+	
+	(* Erase the element of position rank in the tree t; rank must verify 1 <= rank <= t.NumberOfElems(). *)
+	PROCEDURE (t: Tree) Erase* (rank: INTEGER), NEW;
+		
+		VAR
+			
+			h: BOOLEAN;
+		
+		PROCEDURE Del (l: BOOLEAN; VAR p: Elem; VAR t: BOOLEAN);
+			
+			VAR
+				
+				s: Elem;
+			
+			BEGIN (*Del*)
+				IF ~t THEN
+					HALT(21);
+				ELSIF rank < p.rank THEN
+					Del(TRUE, p.left, p.lTag);
+					DEC(p.rank);
+					IF h THEN
+						BalLE(p, h);
+					END;
+				ELSIF rank > p.rank THEN
+					DEC(rank, p.rank);
+					Del(FALSE, p.right, p.rTag);
+					IF h THEN
+						BalRE(p, h);
+					END;
+				ELSIF ~p.lTag THEN
+					IF p.rTag THEN
+						FixLThread(p.right, p.left);
+						p := p.right;
+					ELSE
+						IF l THEN
+							p := p.left;
+						ELSE
+							p := p.right;
+						END;
+						t := FALSE;
+					END;
+					h := TRUE;
+				ELSIF ~p.rTag THEN
+					FixRThread(p.left, p.right);
+					p := p.left;
+					h := TRUE;
+				ELSE
+					s := p;
+					DelL(TRUE, s.left, s.lTag, p, h);
+					p.left := s.left;
+					p.lTag := s.lTag;
+					p.right := s.right;
+					p.rTag := s.rTag;
+					p.bal := s.bal;
+					p.rank := s.rank - 1;
+					FixLThread(p.right, p);
+					IF h THEN
+						BalLE(p, h);
+					END;
+				END;
+			END Del;
+		
+		BEGIN (*Erase*)
+			ASSERT(t.root # NIL, 20);
+			Del(TRUE, t.root.left, t.root.lTag);
+		END Erase;
+	
+	(* Find and return in val the element of position rank in the tree t; if the element does not exist, val returns NIL; rank must verify 1 <= rank <= t.NumberOfElems(). *)
+	PROCEDURE (t: Tree) Find* (rank: INTEGER; OUT val: Elem), NEW;
+		
+		VAR
+			
+			tag: BOOLEAN;
+		
+		BEGIN (*Find*)
+			ASSERT(t.root # NIL, 20);
+			tag := t.root.lTag;
+			val := t.root.left;
+			LOOP
+				IF ~tag THEN
+					val := NIL;
+					EXIT;
+				ELSIF rank < val.rank THEN
+					tag := val.lTag;
+					val := val.left;
+				ELSIF rank > val.rank THEN
+					DEC(rank, val.rank);
+					tag := val.rTag;
+					val := val.right;
+				ELSE
+					EXIT;
+				END;
+			END;
+		END Find;
+	
+	PROCEDURE FixLRoot (root: Elem);
+		
+		BEGIN (*FixLRoot*)
+			FixLThread(root, root);
+		END FixLRoot;
+	
+	PROCEDURE FixRRoot (root: Elem);
+		
+		BEGIN (*FixRRoot*)
+			IF root.lTag THEN
+				FixRThread(root.left, root);
+			ELSE
+				root.left := root;
+			END;
+		END FixRRoot;
+	
+	PROCEDURE Height (e: Elem; t: BOOLEAN): INTEGER;
+		
+		VAR
+			
+			h: INTEGER;
+		
+		BEGIN (*Height*)
+			h := 0;
+			WHILE t DO
+				INC(h);
+				CASE e.bal OF
+					|lt, eq:
+						t := e.lTag;
+						e := e.left;
+					|gt:
+						t := e.rTag;
+						e := e.right;
+				END;
+			END;
+			RETURN h;
+		END Height;
+	
+	PROCEDURE BindLeft (q1, p1: Elem; t1: BOOLEAN; h1: INTEGER; j: Elem; VAR p2: Elem; VAR t2: BOOLEAN; h2: INTEGER; q2: Elem; OUT h: BOOLEAN);
+		
+		BEGIN (*BindLeft*)
+			ASSERT((t1 = (h1 > 0)) & (t2 = (h2 > 0)));
+			IF h2 > h1 + 1 THEN
+				IF p2.bal = gt THEN
+					DEC(h2);
+				END;
+				BindLeft(q1, p1, t1, h1, j, p2.left, p2.lTag, h2 - 1, p2, h);
+				INC(p2.rank, j.rank);
+				IF h THEN
+					BalLI(p2, h);
+				END;
+			ELSE
+				h := TRUE;
+				IF t2 THEN
+					j.right := p2;
+				ELSE
+					j.right := q2;
+				END;
+				j.rTag := t2;
+				IF t1 THEN
+					j.left := p1;
+				ELSE
+					j.left := q1;
+				END;
+				j.lTag := t1;
+				IF h1 = h2 THEN
+					j.bal := eq;
+				ELSE
+					j.bal := gt;
+				END;
+				j.rank := NOE(p1, t1) + 1;
+				IF t1 THEN 
+					FixRThread(p1, j);
+				END;
+				IF t2 THEN
+					FixLThread(p2, j);
+				END;
+				p2 := j;
+				t2 := TRUE;
+			END;
+		END BindLeft;
+	
+	PROCEDURE BindRight (q1: Elem; VAR p1: Elem; VAR t1: BOOLEAN; h1: INTEGER; j: Elem; p2: Elem; t2: BOOLEAN; h2: INTEGER; q2: Elem; OUT h: BOOLEAN);
+		
+		BEGIN (*BindRight*)
+			ASSERT((t1 = (h1 > 0)) & (t2 = (h2 > 0)));
+			IF h1 > h2 + 1 THEN
+				IF p1.bal = lt THEN
+					DEC(h1);
+				END;
+				BindRight(p1, p1.right, p1.rTag, h1 - 1, j, p2, t2, h2, q2, h);
+				IF h THEN
+					BalRI(p1, h);
+				END;
+			ELSE
+				h := TRUE;
+				IF t1 THEN
+					j.left := p1;
+				ELSE
+					j.left := q1;
+				END;
+				j.lTag := t1;
+				IF t2 THEN
+					j.right := p2;
+				ELSE
+					j.right := q2;
+				END;
+				j.rTag := t2;
+				IF h1 = h2 THEN
+					j.bal := eq;
+				ELSE
+					j.bal := lt;
+				END;
+				j.rank := NOE(p1, t1) + 1;
+				IF t1 THEN 
+					FixRThread(p1, j);
+				END;
+				IF t2 THEN 
+					FixLThread(p2, j);
+				END;
+				p1 := j;
+				t1 := TRUE;
+			END;
+		END BindRight;
+	
+	(* Concatenate the trees t1 and t2; on output return the result in t1, and t2 is no more valid. *)
+	PROCEDURE (t1: Tree) Cat* (t2: Tree), NEW;
+		
+		VAR
+			
+			h: BOOLEAN;
+			j: Elem;
+			h1, h2: INTEGER;
+		
+		PROCEDURE EraseLeft (VAR p: Elem; VAR t: BOOLEAN);
+			
+			BEGIN (*EraseLeft*)
+				IF p.lTag THEN
+					EraseLeft(p.left, p.lTag);
+					DEC(p.rank);
+					IF h THEN
+						BalLE(p, h);
+					END;
+				ELSE
+					j := p;
+					IF p.rTag THEN
+						FixLThread(p.right, p.left);
+						p := p.right;
+					ELSE
+						p := p.left;
+						t := FALSE;
+					END;
+					h := TRUE;
+				END;
+			END EraseLeft;
+		
+		PROCEDURE EraseRight (VAR p: Elem; VAR t: BOOLEAN);
+			
+			BEGIN (*EraseRight*)
+				IF p.rTag THEN
+					EraseRight(p.right, p.rTag);
+					IF h THEN
+						BalRE(p, h);
+					END;
+				ELSE
+					j := p;
+					IF p.lTag THEN
+						FixRThread(p.left, p.right);
+						p := p.left;
+					ELSE
+						p := p.right;
+						t := FALSE;
+					END;
+					h := TRUE;
+				END;
+			END EraseRight;
+		
+		BEGIN (*Cat*)
+			ASSERT(t1.root # NIL, 20); ASSERT(t2.root # NIL, 21); ASSERT(t1 # t2, 22);
+			IF t2.root.lTag THEN
+				IF ~t1.root.lTag THEN
+					t1.root := t2.root;
+				ELSE
+					h1 := Height(t1.root.left, t1.root.lTag);
+					h2 := Height(t2.root.left, t2.root.lTag);
+					IF h1 < h2 THEN
+						EraseRight(t1.root.left, t1.root.lTag);
+						IF h THEN
+							DEC(h1);
+						END;
+						BindLeft(t2.root, t1.root.left, t1.root.lTag, h1, j, t2.root.left, t2.root.lTag, h2, t2.root, h);
+						t1.root := t2.root;
+						FixLRoot(t1.root);
+					ELSE
+						EraseLeft(t2.root.left, t2.root.lTag);
+						IF h THEN
+							DEC(h2);
+						END;
+						BindRight(t1.root, t1.root.left, t1.root.lTag, h1, j, t2.root.left, t2.root.lTag, h2, t1.root, h);
+						FixRRoot(t1.root);
+					END;
+				END;
+			END;
+			t2.root := NIL;
+		END Cat;
+	
+	(* Split the tree t1 after the element of rank after; the result is returned in t1 and t2. *)
+	PROCEDURE (t1: Tree) Split* (after: INTEGER; OUT t2: Tree), NEW;
+		
+		VAR
+			
+			e1, e2: Elem;
+			tag1, tag2: BOOLEAN;
+			h1, h2, hh: INTEGER;
+		
+		PROCEDURE DoSplit (p: Elem; t: BOOLEAN);
+			
+			VAR
+				
+				h, b: BOOLEAN;
+				he: INTEGER;
+				s: Elem;
+			
+			BEGIN (*DoSplit*)
+				IF after < p.rank THEN
+					DoSplit(p.left, p.lTag);
+					INC(hh);
+					IF p.bal = gt THEN
+						INC(hh);
+					END;
+					he := hh - 1;
+					IF p.bal = lt THEN
+						DEC(he);
+					END;
+					s := p.right; b := p.rTag;
+					IF h2 < he THEN
+						BindLeft(t2.root, e2, tag2, h2, p, s, b, he, t2.root, h);
+						e2 := s; tag2 := b; h2 := he;
+					ELSE
+						BindRight(t2.root, e2, tag2, h2, p, s, b, he, t2.root, h);
+					END;
+					IF h THEN
+						INC(h2);
+					END;
+				ELSIF after > p.rank THEN
+					DEC(after, p.rank);
+					DoSplit(p.right, p.rTag);
+					INC(hh);
+					IF p.bal = lt THEN
+						INC(hh);
+					END;
+					he := hh - 1;
+					IF p.bal = gt THEN
+						DEC(he);
+					END;
+					s := p.left; b := p.lTag;
+					IF he < h1 THEN
+						BindLeft(t1.root, s, b, he, p, e1, tag1, h1, t1.root, h);
+					ELSE
+						BindRight(t1.root, s, b, he, p, e1, tag1, h1, t1.root, h);
+						e1 := s; tag1 := b; h1 := he;
+					END;
+					IF h THEN
+						INC(h1);
+					END;
+				ELSE
+					hh := Height(p, t);
+					h1 := hh - 1; h2 := h1;
+					CASE p.bal OF
+						|lt: DEC(h2);
+						|eq:
+						|gt: DEC(h1);
+					END;
+					e1 := p.left; tag1 := p.lTag;
+					e2 := p.right; tag2 := p.rTag;
+					Ins(MAX(INTEGER), p, t1.root, TRUE, e1, tag1, h);
+					IF h THEN
+						INC(h1);
+					END;
+				END;
+			END DoSplit;
+		
+		BEGIN (*Split*)
+			ASSERT(t1.root # NIL, 20);
+			New(t2);
+			IF after < t1.NumberOfElems() THEN
+				IF after <= 0 THEN
+					t2.root := t1.root;
+					t1.Empty;
+				ELSE
+					DoSplit(t1.root.left, t1.root.lTag);
+					t1.root.left := e1; t1.root.lTag := tag1;
+					t2.root.left := e2; t2.root.lTag := tag2;
+					FixLRoot(t1.root); FixRRoot(t1.root);
+					FixLRoot(t2.root); FixRRoot(t2.root);
+				END;
+			END;
+		END Split;
+	
+	(* Walk through the tree t in inorder and call the method Elem.Do, with p as parameter, on each element; the method Elem.Do must be instantiated. *)
+	PROCEDURE (t: Tree) WalkThrough* (p: ANYPTR), NEW;
+		
+		PROCEDURE Ahead (e: Elem; t: BOOLEAN);
+			
+			BEGIN (*Ahead*)
+				IF t THEN
+					Ahead(e.left, e.lTag);
+					e.Do(p);
+					Ahead(e.right, e.rTag);
+				END;
+			END Ahead;
+		
+		BEGIN (*WalkThrough*)
+			ASSERT(t.root # NIL, 20);
+			Ahead(t.root.left, t.root.lTag);
+		END WalkThrough;
+	
+	(* Return the element following e in the tree t; if e = NIL, the first element is returned; if e is the last element of the tree, NIL is returned. *)
+	PROCEDURE (t: Tree) Next* (e: Elem): Elem, NEW;
+		
+		VAR
+			
+			tag: BOOLEAN;
+		
+		BEGIN (*Next*)
+			ASSERT(t.root # NIL, 20);
+			IF e = NIL THEN
+				e := t.root;
+			END;
+			tag := e.rTag;
+			e := e.right;
+			IF tag THEN
+				WHILE e.lTag DO
+					e := e.left;
+				END;
+			END;
+			IF e = t.root THEN
+				RETURN NIL;
+			END;
+			RETURN e;
+		END Next;
+	
+	(* Return the element preceding e in the tree t; if e = NIL, the last element is returned; if e is the first element of the tree, NIL is returned. *)
+	PROCEDURE (t: Tree) Previous* (e: Elem): Elem, NEW;
+		
+		VAR
+			
+			tag: BOOLEAN;
+		
+		BEGIN (*Previous*)
+			ASSERT(t.root # NIL, 20);
+			IF e = NIL THEN
+				e := t.root;
+			END;
+			tag := e.lTag;
+			e := e.left;
+			IF tag THEN
+				WHILE e.rTag DO
+					e := e.right;
+				END;
+			END;
+			IF e = t.root THEN
+				RETURN NIL;
+			END;
+			RETURN e;
+		END Previous;
+	
+	END UtilAvlTree.

@@ -1,0 +1,251 @@
+UtilAvlTree
+
+DEFINITION UtilAvlTree;
+
+	CONST
+		lt = -1;
+		eq = 0;
+		gt = 1;
+
+	TYPE
+		Elem = POINTER TO ABSTRACT RECORD 
+			(e: Elem) Compare- (el: Elem): BYTE, NEW, EXTENSIBLE;
+			(e: Elem) Copy- (): Elem, NEW, EXTENSIBLE;
+			(e: Elem) Do- (p: ANYPTR), NEW, EMPTY
+		END;
+
+		Tree = POINTER TO LIMITED RECORD 
+			(t: Tree) SearchIns (VAR key: Elem; OUT rank: INTEGER): BOOLEAN, NEW;
+			(t: Tree) Search (VAR key: Elem; OUT rank: INTEGER): BOOLEAN, NEW;
+			(t: Tree) SearchNext (VAR key: Elem; OUT rank: INTEGER): BOOLEAN, NEW;
+			(t: Tree) Delete (key: Elem): BOOLEAN, NEW;
+			(t: Tree) Insert (key: Elem; rank: INTEGER), NEW;
+			(t: Tree) Prepend (key: Elem), NEW;
+			(t: Tree) Append (key: Elem), NEW;
+			(t: Tree) Find (rank: INTEGER; OUT val: Elem), NEW;
+			(t: Tree) Erase (rank: INTEGER), NEW;
+			(t: Tree) Empty, NEW;
+			(t: Tree) IsEmpty (): BOOLEAN, NEW;
+			(t: Tree) Copy (): Tree, NEW;
+			(t1: Tree) Cat (t2: Tree), NEW;
+			(t1: Tree) Split (after: INTEGER; OUT t2: Tree), NEW;
+			(t: Tree) NumberOfElems (): INTEGER, NEW;
+			(t: Tree) Next (e: Elem): Elem, NEW;
+			(t: Tree) Previous (e: Elem): Elem, NEW;
+			(t: Tree) WalkThrough (p: ANYPTR), NEW;
+			(t: Tree) Valid (): BOOLEAN, NEW
+		END;
+
+	PROCEDURE New (OUT t: Tree);
+
+END UtilAvlTree.
+
+This module implements balanced and threaded trees. All elements must be of the same extension of Elem.
+
+CONST lt
+Result of a comparison: less than.
+
+CONST eq
+Result of a comparison: equal.
+
+CONST eq
+Result of a comparison: greater than.
+
+TYPE Elem
+ABSTRACT
+Element of a tree.
+
+TYPE Tree
+LIMITED
+A tree.
+
+PROCEDURE (e: Elem) Compare- (el: Elem): BYTE
+NEW, EXTENSIBLE
+Compare e to el; returns lt if e< el, eq if e= el and eq if e> el; must be extended before use (in Tree.SearchIns, Tree.Search, Tree.SearchNext and Tree.Delete).
+
+Pre
+Extended	25
+
+PROCEDURE (e: Elem) Copy- (): Elem
+NEW, EXTENSIBLE
+Copies and returns the element e; must be extended before use (in Tree.Copy).
+
+Pre
+Extended	26
+
+PROCEDURE (e: Elem) Do- (p: ANYPTR)
+NEW, EMPTY
+Used in Tree.WalkThrough; action on an element e, with parameter p, while traversing a tree in inorder.
+
+PROCEDURE (t: Tree) SearchIns (VAR key: Elem; OUT rank: INTEGER): BOOLEAN
+NEW
+Searches the element key in the sorted tree t; if key is found, returns TRUE, else key is inserted in the tree; rank returns the rank of key in the tree (beginning at 1); Elem.Compare must be instantiated. It's key.Compare which is used when testing the position of key in the tree t.
+
+Pre
+t.Valid()	20
+key # NIL	21
+
+Post
+t.Valid()
+
+PROCEDURE (t: Tree) Search (VAR key: Elem; OUT rank: INTEGER): BOOLEAN
+NEW
+Searches the element key in the sorted tree t; if key is found, returns TRUE; rank returns the rank of key in the tree (beginning at 1), or 0 if not found; Elem.Compare must be instantiated. It's key.Compare which is used when testing the position of key in the tree t.
+
+Pre
+t.Valid()	20
+key # NIL	21
+
+PROCEDURE (t: Tree) SearchNext (VAR key: Elem; OUT rank: INTEGER): BOOLEAN
+NEW
+Searches the element key in the sorted tree t, or the next element if not found; if key is found, returns TRUE, the found element in key and its rank in rank; otherwise, returns FALSE, the successor in key and its rank in rank; returns NIL in key and 0 in rank if key is not found and has no successor; Elem.Compare must be instantiated. It's key.Compare which is used when testing the position of key in the tree t.
+
+Pre
+t.Valid()	20
+key # NIL	21
+
+PROCEDURE (t: Tree) Delete (key: Elem): BOOLEAN
+NEW
+Erases the element key in the sorted tree t; returns TRUE if key is found, else does nothing; Elem.Compare must be instantiated. It's key.Compare which is used when testing the position of key in the tree t.
+
+Pre
+t.Valid()	20
+key # NIL	21
+
+Post
+t.Valid()
+
+PROCEDURE (t: Tree) Insert (key: Elem; rank: INTEGER)
+NEW
+Inserts the element key at the position rank in the tree t; the first rank of the tree is 1.
+
+Pre
+t.Valid()	20
+key # NIL	21
+
+Post
+t.Valid()
+
+PROCEDURE (t: Tree) Prepend (key: Elem)
+NEW
+Inserts the element key at the beginning of the tree t.
+
+Pre
+t.Valid()	20
+key # NIL	21
+
+Post
+t.Valid()
+
+PROCEDURE (t: Tree) Append (key: Elem)
+NEW
+Inserts the element key at the end of the tree t.
+
+Pre
+t.Valid()	20
+key # NIL	21
+
+Post
+t.Valid()
+
+PROCEDURE (t: Tree) Find (rank: INTEGER; OUT val: Elem)
+NEW
+Finds and returns in val the element of position rank in the tree t (beginning at 1); if the element does not exist, val returns NIL; rank must verify 1<= rank<= t.NumberOfElems().
+
+Pre
+t.Valid()	20
+
+PROCEDURE (t: Tree) Erase (rank: INTEGER)
+NEW
+Erases the element of position rank in the tree t (beginning at 1).
+
+Pre
+t.Valid()	20
+1<= rank<= t.NumberOfElems()	21
+
+Post
+t.Valid()
+
+PROCEDURE (t: Tree) Empty
+NEW
+Empties the tree t.
+
+Post
+t.Valid() & (t.NumberOfElems()= 0)
+
+PROCEDURE (t: Tree) IsEmpty (): BOOLEAN
+NEW
+Is t empty?
+
+Pre
+t.Valid()	20
+
+PROCEDURE (t: Tree) Copy (): Tree
+NEW
+Makes a deep copy of the tree t; the method Elem.Copy must be instantiated.
+
+Pre
+t.Valid()	20
+
+Post
+result.Valid()
+
+PROCEDURE (t1: Tree) Cat (t2: Tree)
+NEW
+Concatenates the trees t1 and t2; returns the result in t1; t2 is no more valid.
+
+Pre
+t1.Valid()	20
+t2.Valid()	21
+t1# t2	22
+
+Post
+t1.Valid() & ~t2.Valid()
+
+PROCEDURE (t1: Tree) Split (after: INTEGER; OUT t2: Tree)
+NEW
+Splits the tree t1 after the element of rank after (beginning at 1); the result is returned in t1 and t2.
+
+Pre
+t1.Valid()	20
+
+Post
+t1.Valid() & t2.Valid() & (t1.Cat(t2)= t1' ) & (t1.NumberOfElems()= MIN(after, t1'.NumberOfElems())
+
+PROCEDURE (t: Tree) NumberOfElems (): INTEGER
+NEW
+Returns the number of elements in the tree t.
+
+Pre
+t.Valid()	20
+
+PROCEDURE (t: Tree) Next (e: Elem): Elem
+NEW
+Returns the element following e in the tree t; if e = NIL, the first element is returned; if e is the last element of the tree, NIL is returned.
+
+Pre
+t.Valid()	20
+
+PROCEDURE (t: Tree) Previous (e: Elem): Elem
+NEW
+Returns the element preceding e in the tree t; if e = NIL, the last element is returned; if e is the first element of the tree, NIL is returned.
+
+Pre
+t.Valid()	20
+
+PROCEDURE (t: Tree) WalkThrough (p: ANYPTR)
+NEW
+Traverses the tree t in inorder and calls the method Elem.Do, with p as parameter, on each element; the method Elem.Do must be instantiated.
+
+Pre
+t.Valid()	20
+
+PROCEDURE (t: Tree) Valid (): BOOLEAN
+NEW
+Tests if the tree t is valid; the method Tree.Cat invalidates its argument.
+
+PROCEDURE New (OUT t: Tree)
+Creates a new empty tree t.
+
+Post
+t.Valid() & (t.NumberOfElems() = 0)
