@@ -1,0 +1,114 @@
+{"now":"31/10/2017 07:46:00","dates":[
+  {"precision":"at","date":"01/11/2017 15:44:29","names":[
+    {"name":"Azimut","proba":" 17"},
+    {"name":"ClaraLefort","proba":" 17"},
+    {"name":"DaphneSvanias","proba":" 17"},
+    {"name":"HgO","proba":" 17"},
+    {"name":"Lionel","proba":" 17"},
+    {"name":"MarcLefort","proba":" 17"}
+  ]},
+  {"precision":"at","date":"01/11/2017 18:37:12","names":[
+    {"name":"Rikiki","proba":"100"}
+  ]},
+  {"precision":"at","date":"02/11/2017 11:02:44","names":[
+    {"name":"Lwayz","proba":"100"}
+  ]},
+  {"precision":"at","date":"02/11/2017 19:18:59","names":[
+    {"name":"RomainR","proba":"100"}
+  ]},
+  {"precision":"at","date":"03/11/2017 14:51:47","names":[
+    {"name":"Sebbaz","proba":"100"}
+  ]},
+  {"precision":"at","date":"03/11/2017 15:09:02","names":[
+    {"name":"evechat","proba":" 33"},
+    {"name":"jeromesabin","proba":" 33"},
+    {"name":"KatyHeteau","proba":" 33"}
+  ]},
+  {"precision":"at","date":"03/11/2017 17:42:26","names":[
+    {"name":"Clement","proba":"100"},
+    {"name":"deudeuch","proba":" 67"}
+  ]},
+  {"precision":"at","date":"04/11/2017 00:26:23","names":[
+    {"name":"DamageCo","proba":"100"}
+  ]},
+  {"precision":"at","date":"04/11/2017 12:09:26","names":[
+    {"name":"VirginieDeleu","proba":"100"}
+  ]},
+  {"precision":"at","date":"04/11/2017 13:06:29","names":[
+    {"name":"ama","proba":" 20"},
+    {"name":"cerato","proba":" 20"},
+    {"name":"claudia","proba":" 20"},
+    {"name":"Juliette","proba":" 20"},
+    {"name":"lia","proba":" 20"}
+  ]},
+  {"precision":"at","date":"06/11/2017 15:44:29","names":[
+    {"name":"Azimut","proba":" 17"},
+    {"name":"ClaraLefort","proba":" 17"},
+    {"name":"DaphneSvanias","proba":" 17"},
+    {"name":"HgO","proba":" 17"},
+    {"name":"Lionel","proba":" 17"},
+    {"name":"MarcLefort","proba":" 17"}
+  ]},
+  {"precision":"at","date":"06/11/2017 18:37:12","names":[
+    {"name":"lili","proba":"100"}
+  ]},
+  {"precision":"at","date":"08/11/2017 15:09:02","names":[
+    {"name":"deudeuch","proba":" 25"},
+    {"name":"evechat","proba":" 46"},
+    {"name":"jeromesabin","proba":" 46"},
+    {"name":"nicolemoreau","proba":"  8"}
+  ]},
+  {"precision":"at","date":"09/11/2017 13:06:29","names":[
+    {"name":"ama","proba":" 20"},
+    {"name":"cerato","proba":" 20"},
+    {"name":"claudia","proba":" 20"},
+    {"name":"Juliette","proba":" 20"},
+    {"name":"lia","proba":" 20"}
+  ]},
+  {"precision":"at","date":"11/11/2017 15:44:29","names":[
+    {"name":"Azimut","proba":" 17"},
+    {"name":"ClaraLefort","proba":" 17"},
+    {"name":"DaphneSvanias","proba":" 17"},
+    {"name":"HgO","proba":" 17"},
+    {"name":"Lionel","proba":" 17"},
+    {"name":"MarcLefort","proba":" 17"}
+  ]},
+  {"precision":"at","date":"13/11/2017 14:51:47","names":[
+    {"name":"KatyHeteau","proba":" 33"}
+  ]},
+  {"precision":"at","date":"13/11/2017 15:09:02","names":[
+    {"name":"deudeuch","proba":"  8"},
+    {"name":"evechat","proba":" 21"},
+    {"name":"jeromesabin","proba":" 21"},
+    {"name":"KatyHeteau","proba":" 17"},
+    {"name":"nicolemoreau","proba":" 92"}
+  ]},
+  {"precision":"not_before_or_never","date":"13/11/2017 17:42:26","names":[
+    {"name":"GuillaumeDesplatz","proba":"100"}
+  ]},
+  {"precision":"not_before_or_never","date":"14/11/2017 13:06:29","names":[
+    {"name":"ama","proba":" 60"},
+    {"name":"cerato","proba":" 60"},
+    {"name":"claudia","proba":" 60"},
+    {"name":"Juliette","proba":" 60"},
+    {"name":"lia","proba":" 60"}
+  ]},
+  {"precision":"not_before_or_never","date":"15/11/2017 19:38:32","names":[
+    {"name":"damzaza","proba":"100"},
+    {"name":"Veronika","proba":"100"}
+  ]},
+  {"precision":"not_before_or_never","date":"16/11/2017 15:44:29","names":[
+    {"name":"Azimut","proba":" 50"},
+    {"name":"ClaraLefort","proba":" 50"},
+    {"name":"DaphneSvanias","proba":" 50"},
+    {"name":"HgO","proba":" 50"},
+    {"name":"Lionel","proba":" 50"},
+    {"name":"MarcLefort","proba":" 50"}
+  ]},
+  {"precision":"not_before_or_never","date":"17/11/2017 05:07:57","names":[
+    {"name":"annelaure","proba":"100"}
+  ]},
+  {"precision":"at","date":"Never","names":[
+    {"name":"KatyHeteau","proba":" 17"}
+  ]}
+]}
