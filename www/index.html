@@ -98,39 +98,43 @@
       })
 
       $( document ).ready(function() {
-        $.getJSON('./WWByDate.json', function (jsonByDate) {
-          var jsonByName = toJsonByName(jsonByDate)
-          console.log('Données WotWizard : ', jsonByDate)
-          $('#nbFolders').text(jsonByName.names.length)
-          $('#timeBCT').text(jsonByDate.now + ' BCT¹')
-          // By date
-          for (var i = 0; i < jsonByDate.dates.length; i++) {
-            var entry = jsonByDate.dates[i]
-            var html = '<blockquote>'
-            html += '<h2 class="' + entry.precision + '">' + entry.date + '</h2>'
-            for (var j = 0; j < entry.names.length; j++) {
-              var name = entry.names[j]
-              var proba = parseInt(name.proba.replace(' ', ''))
-              var probaClass = proba == 100 ? 'sure' : (isNaN(proba) ? 'never' : 'possible')
-              html += '<p>' + name.name + ' (<span class="' + probaClass + '">' + proba + '%</span>)</p>'
+        $.getJSON('./WWMeta.json', function (jsonMeta) {
+          $.getJSON('./WWByDate.json', function (jsonByDate) {
+            var jsonByName = toJsonByName(jsonByDate)
+            console.log('Données WotWizard : ', jsonByDate)
+            $('#nbFolders').text(jsonMeta.dossNb)
+            $('#timeBCT').text(jsonMeta.now + ' BCT¹')
+            $('#currentBlock').text(jsonMeta.block)
+            $('#computationDuration').text(jsonMeta.computation_duration)
+            // By date
+            for (var i = 0; i < jsonByDate.dates.length; i++) {
+              var entry = jsonByDate.dates[i]
+              var html = '<blockquote>'
+              html += '<h2 class="' + entry.precision + '">' + entry.date + '</h2>'
+              for (var j = 0; j < entry.names.length; j++) {
+                var name = entry.names[j]
+                var proba = name.proba
+                var probaClass = proba == 100 ? 'sure' : (isNaN(proba) ? 'never' : 'possible')
+                html += '<p>' + name.name + ' (<span class="' + probaClass + '">' + proba + '%</span>)</p>'
+              }
+              html += '</blockquote>'
+              $('#contentDate').append(html)
             }
-            html += '</blockquote>'
-            $('#contentDate').append(html)
-          }
-          // By names
-          for (var i = 0; i < jsonByName.names.length; i++) {
-            var entry = jsonByName.names[i]
-            var html = '<blockquote>'
-            html += '<h2>' + entry.name + '</h2>'
-            for (var j = 0; j < entry.dates.length; j++) {
-              var date = entry.dates[j]
-              var proba = parseInt(date.proba.replace(' ', ''))
-              var probaClass = proba == 100 ? 'sure' : (isNaN(proba) ? 'never' : 'possible')
-              html += '<p class="' + date.precision + '">' + date.date + ' (<span class="' + probaClass + '">' + proba + '%</span>)</p>'
+            // By names
+            for (var i = 0; i < jsonByName.names.length; i++) {
+              var entry = jsonByName.names[i]
+              var html = '<blockquote>'
+              html += '<h2>' + entry.name + '</h2>'
+              for (var j = 0; j < entry.dates.length; j++) {
+                var date = entry.dates[j]
+                var proba = date.proba
+                var probaClass = proba == 100 ? 'sure' : (isNaN(proba) ? 'never' : 'possible')
+                html += '<p class="' + date.precision + '">' + date.date + ' (<span class="' + probaClass + '">' + proba + '%</span>)</p>'
+              }
+              html += '</blockquote>'
+              $('#contentName').append(html)
             }
-            html += '</blockquote>'
-            $('#contentName').append(html)
-          }
+          })
         })
       })
 
@@ -168,6 +172,8 @@
   <body>
     <h2>Dossiers en attente : <span id="nbFolders"></span></h2>
     <h3>Heure actuelle : <span id="timeBCT"></span></h3>
+    <h3>Bloc courant : #<span id="currentBlock"></span></h3>
+    <h3>Durée du calcul WotWizard : <span id="computationDuration"></span></h3>
     <div class="groups">
       <p>
           <input type="radio" name="sort" id="radioByDate" checked>
