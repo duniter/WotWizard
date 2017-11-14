@@ -110,7 +110,7 @@
             for (var i = 0; i < jsonByDate.dates.length; i++) {
               var entry = jsonByDate.dates[i]
               var html = '<blockquote>'
-              html += '<h2 class="' + entry.precision + '">' + entry.date + '</h2>'
+              html += '<h2 class="' + (entry.after ? 'not_before_or_never' : 'at') + '">' + entry.date + '</h2>'
               for (var j = 0; j < entry.names.length; j++) {
                 var name = entry.names[j]
                 var proba = name.proba
@@ -150,7 +150,7 @@
             var name = entry.names[j]
             names[name.name] = names[name.name] || { name: name.name, dates: [] }
             names[name.name].dates.push({
-              precision: entry.precision,
+              precision: (entry.after ? 'not_before_or_never' : 'at'),
               date: entry.date,
               proba: name.proba
             })

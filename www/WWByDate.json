@@ -1,146 +1,32 @@
 {
 	"now":
-		"06/11/2017 10:04:17",
+		"14/11/2017 08:16:41",
 	"dates":
 		[
 			{
 				"after":
 					false,
 				"date":
-					"06/11/2017 15:51:42",
-				"names":
-					[
-						{
-							"name":
-								"Azimut",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"ClaraLefort",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"DaphneSvanias",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"HgO",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"MarcLefort",
-							"proba":
-								20
-						}
-					]
-			},
-			{
-				"after":
-					false,
-				"date":
-					"06/11/2017 16:21:32",
-				"names":
-					[
-						{
-							"name":
-								"Sebbaz",
-							"proba":
-								100
-						}
-					]
-			},
-			{
-				"after":
-					false,
-				"date":
-					"06/11/2017 18:49:16",
-				"names":
-					[
-						{
-							"name":
-								"lili",
-							"proba":
-								100
-						}
-					]
-			},
-			{
-				"after":
-					false,
-				"date":
-					"07/11/2017 11:10:30",
-				"names":
-					[
-						{
-							"name":
-								"Mathilde",
-							"proba":
-								100
-						}
-					]
-			},
-			{
-				"after":
-					false,
-				"date":
-					"08/11/2017 14:58:42",
-				"names":
-					[
-						{
-							"name":
-								"evechat",
-							"proba":
-								50
-						},
-						{
-							"name":
-								"KatyHeteau",
-							"proba":
-								50
-						},
-						{
-							"name":
-								"renardisa",
-							"proba":
-								100
-						}
-					]
-			},
-			{
-				"after":
-					false,
-				"date":
-					"09/11/2017 00:34:47",
-				"names":
-					[
-						{
-							"name":
-								"Guillaume",
-							"proba":
-								100
-						}
-					]
-			},
-			{
-				"after":
-					false,
-				"date":
-					"09/11/2017 13:14:56",
+					"14/11/2017 13:31:25",
 				"names":
 					[
 						{
 							"name":
 								"cerato",
 							"proba":
-								100
+								33
+						},
+						{
+							"name":
+								"claudia",
+							"proba":
+								33
+						},
+						{
+							"name":
+								"lia",
+							"proba":
+								33
 						}
 					]
 			},
@@ -148,73 +34,7 @@
 				"after":
 					false,
 				"date":
-					"11/11/2017 15:51:42",
-				"names":
-					[
-						{
-							"name":
-								"Azimut",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"ClaraLefort",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"DaphneSvanias",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"HgO",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"MarcLefort",
-							"proba":
-								20
-						}
-					]
-			},
-			{
-				"after":
-					false,
-				"date":
-					"13/11/2017 14:58:42",
-				"names":
-					[
-						{
-							"name":
-								"evechat",
-							"proba":
-								25
-						},
-						{
-							"name":
-								"KatyHeteau",
-							"proba":
-								25
-						},
-						{
-							"name":
-								"nicolemoreau",
-							"proba":
-								50
-						}
-					]
-			},
-			{
-				"after":
-					false,
-				"date":
-					"13/11/2017 17:48:17",
+					"15/11/2017 08:24:07",
 				"names":
 					[
 						{
@@ -229,12 +49,54 @@
 				"after":
 					false,
 				"date":
-					"15/11/2017 19:50:00",
+					"15/11/2017 19:58:06",
 				"names":
 					[
 						{
 							"name":
-								"damzaza",
+								"resp_corp",
+							"proba":
+								67
+						}
+					]
+			},
+			{
+				"after":
+					false,
+				"date":
+					"16/11/2017 16:07:38",
+				"names":
+					[
+						{
+							"name":
+								"Azimut",
+							"proba":
+								33
+						},
+						{
+							"name":
+								"ClaraLefort",
+							"proba":
+								33
+						},
+						{
+							"name":
+								"HgO",
+							"proba":
+								33
+						}
+					]
+			},
+			{
+				"after":
+					false,
+				"date":
+					"16/11/2017 16:37:58",
+				"names":
+					[
+						{
+							"name":
+								"JulienM",
 							"proba":
 								100
 						}
@@ -244,65 +106,50 @@
 				"after":
 					false,
 				"date":
-					"16/11/2017 15:51:42",
+					"18/11/2017 15:25:59",
 				"names":
 					[
 						{
 							"name":
-								"Azimut",
+								"alretailleau",
 							"proba":
-								20
+								40
 						},
 						{
 							"name":
-								"ClaraLefort",
+								"dgi",
 							"proba":
-								20
+								75
 						},
 						{
 							"name":
-								"DaphneSvanias",
+								"GerardSiegle",
 							"proba":
 								20
-						},
-						{
-							"name":
-								"HgO",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"MarcLefort",
-							"proba":
-								20
-						}
-					]
-			},
-			{
-				"after":
-					false,
-				"date":
-					"18/11/2017 14:58:42",
-				"names":
-					[
-						{
-							"name":
-								"evechat",
-							"proba":
-								12
 						},
 						{
 							"name":
 								"jeromesabin",
 							"proba":
-								37
+								40
 						},
 						{
 							"name":
-								"nicolemoreau",
+								"NicolasToudic",
 							"proba":
-								50
+								20
+						},
+						{
+							"name":
+								"RemiBouteloup",
+							"proba":
+								100
+						},
+						{
+							"name":
+								"RosineDumesnil",
+							"proba":
+								20
 						}
 					]
 			},
@@ -310,9 +157,78 @@
 				"after":
 					false,
 				"date":
-					"20/11/2017 19:50:00",
+					"18/11/2017 20:10:30",
 				"names":
 					[
+						{
+							"name":
+								"Mattgris",
+							"proba":
+								100
+						}
+					]
+			},
+			{
+				"after":
+					false,
+				"date":
+					"19/11/2017 00:50:05",
+				"names":
+					[
+						{
+							"name":
+								"Mari-Sans-E",
+							"proba":
+								100
+						}
+					]
+			},
+			{
+				"after":
+					true,
+				"date":
+					"19/11/2017 13:31:25",
+				"names":
+					[
+						{
+							"name":
+								"cerato",
+							"proba":
+								67
+						},
+						{
+							"name":
+								"claudia",
+							"proba":
+								67
+						},
+						{
+							"name":
+								"lia",
+							"proba":
+								67
+						}
+					]
+			},
+			{
+				"after":
+					true,
+				"date":
+					"20/11/2017 19:58:06",
+				"names":
+					[
+						{
+							"name":
+								"damzaza",
+							"proba":
+								100
+						},
+						{
+							"name":
+								"resp_corp",
+							"proba":
+								33
+						},
 						{
 							"name":
 								"Veronika",
@@ -323,61 +239,73 @@
 			},
 			{
 				"after":
-					false,
+					true,
 				"date":
-					"21/11/2017 15:51:42",
+					"21/11/2017 16:07:38",
 				"names":
 					[
 						{
 							"name":
 								"Azimut",
 							"proba":
-								20
+								67
 						},
 						{
 							"name":
 								"ClaraLefort",
 							"proba":
-								20
-						},
-						{
-							"name":
-								"DaphneSvanias",
-							"proba":
-								20
+								67
 						},
 						{
 							"name":
 								"HgO",
 							"proba":
-								20
-						},
-						{
-							"name":
-								"MarcLefort",
-							"proba":
-								20
+								67
 						}
 					]
 			},
 			{
 				"after":
-					false,
+					true,
 				"date":
-					"23/11/2017 14:58:42",
+					"23/11/2017 15:25:59",
 				"names":
 					[
 						{
 							"name":
-								"evechat",
+								"alretailleau",
 							"proba":
-								12
+								60
+						},
+						{
+							"name":
+								"dgi",
+							"proba":
+								25
+						},
+						{
+							"name":
+								"GerardSiegle",
+							"proba":
+								80
 						},
 						{
 							"name":
 								"jeromesabin",
 							"proba":
-								62
+								60
+						},
+						{
+							"name":
+								"NicolasToudic",
+							"proba":
+								80
+						},
+						{
+							"name":
+								"RosineDumesnil",
+							"proba":
+								80
 						}
 					]
 			},
@@ -385,69 +313,9 @@
 				"after":
 					false,
 				"date":
-					"25/11/2017 19:50:00",
+					"Jamais",
 				"names":
 					[
-						{
-							"name":
-								"claudia",
-							"proba":
-								100
-						}
-					]
-			},
-			{
-				"after":
-					false,
-				"date":
-					"26/11/2017 15:51:42",
-				"names":
-					[
-						{
-							"name":
-								"Azimut",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"ClaraLefort",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"DaphneSvanias",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"HgO",
-							"proba":
-								20
-						},
-						{
-							"name":
-								"MarcLefort",
-							"proba":
-								20
-						}
-					]
-			},
-			{
-				"after":
-					false,
-				"date":
-					"Never",
-				"names":
-					[
-						{
-							"name":
-								"ama",
-							"proba":
-								100
-						},
 						{
 							"name":
 								"annelaure",
@@ -457,12 +325,6 @@
 						{
 							"name":
 								"KatyHeteau",
-							"proba":
-								25
-						},
-						{
-							"name":
-								"lia",
 							"proba":
 								100
 						}
