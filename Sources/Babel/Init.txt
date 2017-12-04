@@ -1,0 +1,61 @@
+(* 
+Babel: a compiler compiler.
+
+Copyright (C) 2001 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*)
+
+MODULE BabelInit;
+	
+	(* The module BabelInit is part of the Babel subsystem, a compiler compiler. BabelInit loads a hard coded version of the tbl file corresponding to the definition document BabelSrc.odc. *)
+	
+	
+	
+	IMPORT
+		
+		C := BabelCompil, Dialog, Kernel;
+	
+	TYPE
+		
+		Directory = POINTER TO RECORD (C.Directory)
+			pos: INTEGER;
+		END;
+		
+		pInt* = POINTER TO ARRAY OF INTEGER;
+	
+	VAR
+		
+		a*: pInt;
+	
+	PROCEDURE (d: Directory) ReadInt (OUT i: INTEGER);
+		
+		BEGIN (*ReadInt*)
+			i := a[d.pos];
+			INC(d.pos);
+		END ReadInt;
+	
+	PROCEDURE InitBabel* (): C.Compiler;
+		
+		VAR
+			
+			d: Directory;
+			res: INTEGER;
+			c: C.Compiler;
+		
+		BEGIN (*InitBabel*)
+			NEW(d);
+			Dialog.Call("BabelInit0.RemplisA", "", res);
+			ASSERT(res = 0);
+			Kernel.UnloadMod(Kernel.ThisMod("BabelInit0"));
+			d.pos := 0;
+			c := d.ReadCompiler();
+			a := NIL;
+			RETURN c;
+		END InitBabel;
+	
+	END BabelInit.

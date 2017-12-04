@@ -1,7 +1,7 @@
 (* 
 Duniter: WotWizard.
 
-Copyright (C) 2017 Gérard Meunier
+Copyright (C) 2017 GérardMeunier
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
 
@@ -14,7 +14,7 @@ MODULE DuniterBlockchain;
 	
 	
 	
-	(* Version with the blockchain's data in a UtilBTree file on disk *)
+	(* Collect blockchain data; server version *)
 	
 	IMPORT
 		
@@ -22,25 +22,27 @@ MODULE DuniterBlockchain;
 		StdLog,
 		*)
 		
-		A := UtilAvlTree, B := UtilBBTree, Dates, Dialog, Files, HostFiles, Kernel, Math, Services, S := SqlDB, Strings, TextMappers, TextModels, TextViews, Views;
+		A := UtilAvlTree, B := UtilBBTree, BA := DuniterBasic, L := DuniterLog, Files, Math, Services, S := SqlDB, Strings, TextMappers, TextModels, TextViews, Views;
 	
 	CONST
 		
+		(* Default path to the Duniter database *)
+		duniBaseDef = "D:\.config\duniter\duniter_default\duniter.db";
+		
+		(* Driver SQLite *)
 		driver* = "SQLiteDriver";
 		
 		(* Directory & name of the file where the path to the Duniter database is written *)
 		initDir = "Duniter/Rsrc";
-		initName = "Init.odc";
+		initName = "Init.txt";
 		
 		pageNb = 2000; (* Number of pages used by UtilBTree *)
 		
-		year0 = 1970; month0 = 1; day0 = 1; (* Start date of computing history *)
-		
 		pubkeyLen* = 44; (* Max length of a Pubkey *)
 		
-		secureGap = 6; (* Number of last blocks to be read again at every update, since they could have changed *)
+		secureGap = 6; (* Number of last blocks to be read again at every update, since they could have changed; change for 3? *)
 		
-		dBase = "DBase.data"; (* Name of the WotWizard database, in the WotWizard.exe directory *)
+		dBase = "Duniter\DBase.data"; (* Name of the WotWizard database, in the WotWizard.exe directory *)
 		
 		(* Numbers of the places of the indexes in dBase *)
 		timePlace = 0;
@@ -64,14 +66,11 @@ MODULE DuniterBlockchain;
 			next: UpdateList;
 			update: UpdateProc;
 		END;
-	
-		UpdateAction = POINTER TO RECORD (Services.Action)
-		END;
 		
 		Pubkey* = ARRAY pubkeyLen + 1 OF CHAR;
 		String* = POINTER TO ARRAY OF CHAR;
-		DateTime* = ARRAY 20 OF CHAR;
 		
+		(* Duniter Parameters *)
 		Parameters* = RECORD
 			c-: REAL;
 			dt-,
@@ -99,6 +98,7 @@ MODULE DuniterBlockchain;
 	
 	CONST
 		
+		(* Types of elements in List *)
 		timeList = 0;
 		joinList = 1;
 		leaveList = 2;
@@ -166,7 +166,7 @@ MODULE DuniterBlockchain;
 		IntKeyFac = POINTER TO RECORD (B.DataFac) (* Factory of IntKey *)
 		END;
 		
-		IntKeyMan = POINTER TO RECORD (B.KeyManager)
+		IntKeyMan = POINTER TO RECORD (B.KeyManager) (* Manager of IntKey *)
 		END;
 		
 		(* Pubkey index key *)
@@ -177,10 +177,15 @@ MODULE DuniterBlockchain;
 		PubKeyFac = POINTER TO RECORD (B.DataFac) (* Factory of PubKey *)
 		END;
 		
-		PubKeyMan = POINTER TO RECORD (B.KeyManager)
+		PubKeyMan = POINTER TO RECORD (B.KeyManager) (* Manager of PubKey *)
 		END;
 		
-		(* Manager of Certification sorted by dates *)
+		(* Uid index key manager *)
+		UidKeyManager = POINTER TO RECORD (B.StringKeyManager) 
+		END;
+
+		
+		(* Manager of Certification sorted by expiration dates *)
 		CertKTimeMan = POINTER TO RECORD (B.KeyManager)
 		END;
 		
@@ -197,24 +202,14 @@ MODULE DuniterBlockchain;
 	
 	CONST
 		
-		minDelay = 2 * 60 * Services.resolution; (* Minimum delay between two updates *)
-		
 		(* Sizes of B.Data *)
-		listS = 2 * B.INS + B.BYS;
-		timeS = B.INS + 2 * B.LIS;
 		pubKeyS = (pubkeyLen + 1) * B.CHS;
-		joinAndLeaveS = pubKeyS + 2 * B.INS;
-		minIdentityS = pubKeyS + 2 * B.INS; (* Minimal size *)
-		certificationS = 2 * pubKeyS + B.INS + B.LIS;
 	
 	VAR
 		
 		duniBase-: Files.Name; (* Path to the Duniter database *)
 		
-		t0: INTEGER; (* Origin of dates *)
-		
 		updateList: UpdateList; (* Head of UpdateList *)
-		update: UpdateAction;
 		
 		pars-: Parameters; (* Duniter parmeters *)
 		
@@ -226,7 +221,7 @@ MODULE DuniterBlockchain;
 		idPubT, (* PubKey -> Identity *)
 		idUidT, (* B.String -> Identity *)
 		certFromT, certToT, (* PubKey -> sub-index(PubKey -> Certification) *)
-		certTimeT: B.Index; (* IntKey -> nothing; addresses of Certification sorted by dates *)
+		certTimeT: B.Index; (* IntKey -> nothing; addresses of Certification sorted by expiration dates *)
 		
 		sentriesT: A.Tree; (* AVL tree of sentries *)
 		
@@ -240,7 +235,7 @@ MODULE DuniterBlockchain;
 		certToCur: B.IndexPos;
 		sentryCur: A.Elem;
 		
-		delay, (* Wished delay between two updates *)
+		lastBlock: INTEGER; (* Last read & updated block *)
 		now, rNow: LONGINT; (* Present medianTime and time *)
 		
 		(* Factories *)
@@ -262,7 +257,7 @@ MODULE DuniterBlockchain;
 		
 		(* Key managers *)
 		pubKeyMan: PubKeyMan;
-		uidKeyMan: B.StringKeyManager;
+		uidKeyMan: UidKeyManager;
 		intKeyMan: IntKeyMan;
 		certKTimeMan: CertKTimeMan;
 	
@@ -291,7 +286,6 @@ MODULE DuniterBlockchain;
 			t: Time;
 		
 		BEGIN (*New*)
-			ASSERT(size = timeS);
 			NEW(t);
 			RETURN t;
 		END New;
@@ -325,14 +319,9 @@ MODULE DuniterBlockchain;
 	
 	PROCEDURE (id: Identity) Read (VAR r: B.Reader);
 		
-		VAR
-			
-			n: INTEGER;
-		
 		BEGIN (*Read*)
 			r.InChars(id.pubkey);
-			n := r.InInt();
-			NEW(id.uid, n + 1);
+			NEW(id.uid, r.InCharsLen() + 1);
 			r.InChars(id.uid);
 			id.block_number := r.InInt();
 		END Read;
@@ -341,7 +330,6 @@ MODULE DuniterBlockchain;
 		
 		BEGIN (*Write*)
 			w.OutChars(id.pubkey);
-			w.OutInt(LEN(id.uid$));
 			w.OutChars(id.uid);
 			w.OutInt(id.block_number);
 		END Write;
@@ -409,7 +397,6 @@ MODULE DuniterBlockchain;
 			l: List;
 		
 		BEGIN (*New*)
-			ASSERT(size = listS);
 			NEW(l);
 			RETURN l;
 		END New;
@@ -460,7 +447,6 @@ MODULE DuniterBlockchain;
 			pub: PubKey;
 		
 		BEGIN (*New*)
-			ASSERT((size >= 0) & (size <= pubKeyS) & (size MOD B.CHS = 0));
 			NEW(pub);
 			IF size = 0 THEN
 				pub.ref := "";
@@ -544,6 +530,28 @@ MODULE DuniterBlockchain;
 			p2 := p;
 		END PrefP;
 	
+	(* Comparison method of two Strings. Use the lexical order. *)
+	PROCEDURE (um: UidKeyManager) CompP (key1, key2: B.Data): BYTE;
+		
+		BEGIN (*CompP*)
+			ASSERT((key1 # NIL) & (key2 # NIL), 20);
+			WITH key1: B.String DO
+				WITH key2: B.String DO
+					IF key1.c = NIL THEN
+						IF key2.c = NIL THEN
+							RETURN B.eq;
+						END;
+						RETURN B.lt;
+					END;
+					IF key2.c = NIL THEN
+						RETURN B.gt;
+					END;
+					RETURN BA.CompP(key1.c, key2.c);
+				END;
+			END;
+		END CompP;
+	
+	(* Comparison of Certification(s) by expiration dates *)
 	PROCEDURE (im: CertKTimeMan) CompP (i1, i2: B.Data): BYTE;
 		
 		VAR
@@ -558,7 +566,7 @@ MODULE DuniterBlockchain;
 				c2 := certMan.ReadData(i2.ref)(Certification);
 			END;
 			IF c1.expires_on < c2.expires_on THEN
-				RETURN B.gt; (* Inverse order, for the use of B.Index.Search *)
+				RETURN B.gt; (* Inverse order, for the use of B.Index.Search to get all the expired certifications *)
 			END;
 			IF c1.expires_on > c2.expires_on THEN
 				RETURN B.lt;
@@ -593,6 +601,13 @@ MODULE DuniterBlockchain;
 			END;
 		END Compare;
 	
+	(* Last read & updated block *)
+	PROCEDURE LastBlock* (): INTEGER;
+		
+		BEGIN (*LastBlock*)
+			RETURN lastBlock;
+		END LastBlock;
+	
 	(* medianTime *)
 	PROCEDURE Now* (): LONGINT;
 		
@@ -607,37 +622,12 @@ MODULE DuniterBlockchain;
 			RETURN rNow;
 		END RealNow;
 	
-	PROCEDURE TimestampToDate* (t: LONGINT; OUT date: Dates.Date; OUT time: Dates.Time);
-		
-		BEGIN (*TimestampToDate*)
-			time.second := SHORT(t MOD 60); t := t DIV 60;
-			time.minute := SHORT(t MOD 60); t := t DIV 60;
-			time.hour := SHORT(t MOD 24);
-			Dates.DayToDate(SHORT(t DIV 24 + t0), date);
-		END TimestampToDate;
-	
-	PROCEDURE TimestampToString* (t: LONGINT; OUT dt: DateTime);
-		
-		VAR
-			
-			ti, da: ARRAY 11 OF CHAR;
-			date: Dates.Date;
-			time: Dates.Time;
-		
-		BEGIN (*TimestampToString*)
-			TimestampToDate(t, date, time);
-			Dates.DateToString(date, Dates.short, da);
-			Dates.TimeToString(time, ti);
-			dt := da + " " + ti;
-		END TimestampToString;
-	
 	(* Open the WotWizard database *)
 	PROCEDURE OpenB;
 		
 		VAR
 			
 			b: BOOLEAN;
-			n: INTEGER;
 		
 		BEGIN (*OpenB*)
 			IF database = NIL THEN
@@ -646,13 +636,13 @@ MODULE DuniterBlockchain;
 				IF database = NIL THEN
 					b := B.fac.CreateBase(dBase, placeNb); ASSERT(b);
 					database := B.fac.OpenBase(dBase, pageNb); ASSERT(database # NIL);
-					n := database.CreateIndex(B.INS); database.WritePlace(timePlace, n);
-					n := database.CreateIndex(0); database.WritePlace(joinAndLeavePlace, n);
-					n := database.CreateIndex(0); database.WritePlace(idPubPlace, n);
-					n := database.CreateIndex(0); database.WritePlace(idUidPlace, n);
-					n := database.CreateIndex(0); database.WritePlace(certFromPlace, n);
-					n := database.CreateIndex(0); database.WritePlace(certToPlace, n);
-					n := database.CreateIndex(B.INS); database.WritePlace(certTimePlace, n);
+					database.WritePlace(timePlace, database.CreateIndex(B.INS));
+					database.WritePlace(joinAndLeavePlace, database.CreateIndex(0));
+					database.WritePlace(idPubPlace, database.CreateIndex(0));
+					database.WritePlace(idUidPlace, database.CreateIndex(0));
+					database.WritePlace(certFromPlace, database.CreateIndex(0));
+					database.WritePlace(certToPlace, database.CreateIndex(0));
+					database.WritePlace(certTimePlace, database.CreateIndex(B.INS));
 					database.WritePlace(listPlace, B.bNil);
 					database.WritePlace(lastNPlace, 0);
 				END;
@@ -792,6 +782,22 @@ MODULE DuniterBlockchain;
 			RETURN idUidT.NumberOfKeys();
 		END IdLen;
 	
+	(* Position next Identity's pubkey for IdNextPubkey *)
+	PROCEDURE IdPosPubkey* (IN pubkey: Pubkey);
+		
+		VAR
+			
+			idP: PubKey;
+			b: BOOLEAN;
+		
+		BEGIN (*IdPosPubkey*)
+			NEW(idP);
+			idP.ref := pubkey;
+			b := idPubT.Search(idP);
+			idPubT.Previous;
+			idPubkeyCur := idPubT.GetCurrPos();
+		END IdPosPubkey;
+	
 	(* Browse all Identity's pubkeys step by step *)
 	PROCEDURE IdNextPubkey* (first: BOOLEAN; OUT pubkey: Pubkey): BOOLEAN;
 		
@@ -809,6 +815,22 @@ MODULE DuniterBlockchain;
 			pubkey := idPubT.CurrentKey()(PubKey).ref;
 			RETURN TRUE;
 		END IdNextPubkey;
+	
+	(* Position next Identity's uid for IdNextUid *)
+	PROCEDURE IdPosUid* (IN uid: ARRAY OF CHAR);
+		
+		VAR
+			
+			idU: B.String;
+			b: BOOLEAN;
+		
+		BEGIN (*IdPosUid*)
+			NEW(idU);
+			NEW(idU.c, LEN(uid$) + 1); idU.c^ := uid$;
+			b := idUidT.Search(idU);
+			idUidT.Previous;
+			idUidCur := idUidT.GetCurrPos();
+		END IdPosUid;
 	
 	(* Browse all Identity's uid(s) lexicographically step by step *)
 	PROCEDURE IdNextUid* (first: BOOLEAN; OUT uid: String): BOOLEAN;
@@ -1006,6 +1028,7 @@ MODULE DuniterBlockchain;
 			RETURN sentriesT.Search(e, m);
 		END IsSentry;
 	
+	(* Return in pubkey the next sentry's pubkey if ~first or the first one if first; return FALSE if there is no more sentry *)
 	PROCEDURE NextSentry* (first: BOOLEAN; OUT pubkey: Pubkey): BOOLEAN;
 		
 		BEGIN (*NextSentry*)
@@ -1022,6 +1045,7 @@ MODULE DuniterBlockchain;
 			RETURN TRUE;
 		END NextSentry;
 	
+	(* Return the number of sentries *)
 	PROCEDURE SentriesLen* (): INTEGER;
 		
 		BEGIN (*SentriesLen*)
@@ -1177,7 +1201,7 @@ MODULE DuniterBlockchain;
 			
 			t: Time;
 			i: IntKey;
-			res, n, tRef: INTEGER;
+			res, tRef: INTEGER;
 			b: BOOLEAN;
 			tL: List; (* timeList *)
 		
@@ -1186,16 +1210,14 @@ MODULE DuniterBlockchain;
 			Strings.StringToInt(s1, t.bnb, res); ASSERT(res = 0);
 			Strings.StringToLInt(s2, t.mTime, res); ASSERT(res = 0);
 			Strings.StringToLInt(s3, t.time, res); ASSERT(res = 0);
-			tRef := timeMan.AllocateData(timeS);
-			timeMan.WriteData(tRef, t);
+			lastBlock := t.bnb;
+			tRef := timeMan.WriteAllocateData(t);
 			NEW(i); i.ref := t.bnb;
 			b := timeT.SearchIns(i); ASSERT(~b);
 			timeT.WriteValue(tRef);
 			IF withList THEN
-				n := listMan.AllocateData(listS);
-				NEW(tL); tL.ref := tRef; tL.type := timeList;
-				tL.next := list; list := n;
-				listMan.WriteData(n, tL);
+				NEW(tL); tL.ref := tRef; tL.type := timeList; tL.next := list;
+				list := listMan.WriteAllocateData(tL);
 			END;
 			now := MAX(now, t.mTime);
 			rNow := MAX(rNow, t.time);
@@ -1206,7 +1228,7 @@ MODULE DuniterBlockchain;
 		
 		VAR
 			
-			i, n, idRef, jlRef, cRef, indRef, ind2Ref, res: INTEGER;
+			i, idRef, jlRef, cRef, indRef, ind2Ref, res: INTEGER;
 			s: ARRAY 101 OF CHAR;
 			b: BOOLEAN;
 			id: Identity;
@@ -1231,8 +1253,7 @@ MODULE DuniterBlockchain;
 					INC(i);
 				END;
 				Strings.StringToInt(nb, id.block_number, res); ASSERT(res = 0);
-				idRef := idMan.AllocateData(minIdentityS + LEN(id.uid) * B.CHS);
-				idMan.WriteData(idRef, id);
+				idRef := idMan.WriteAllocateData(id);
 				NEW(idP); idP.ref := id.pubkey;
 				b := idPubT.SearchIns(idP); ASSERT(~b);
 				idPubT.WriteValue(idRef);
@@ -1243,15 +1264,11 @@ MODULE DuniterBlockchain;
 				jl.pubkey := id.pubkey;
 				jl.joiningBlock := id.block_number;
 				jl.leavingBlock := hasNotLeaved;
-				jlRef := joinAndLeaveMan.AllocateData(joinAndLeaveS);
-				joinAndLeaveMan.WriteData(jlRef, jl);
 				b := joinAndLeaveT.SearchIns(idP); ASSERT(~b);
-				joinAndLeaveT.WriteValue(jlRef);
+				joinAndLeaveT.WriteValue(joinAndLeaveMan.WriteAllocateData(jl));
 				IF withList THEN
-					n := listMan.AllocateData(listS);
-					NEW(idL); idL.ref := idRef; idL.type := joinList;
-					idL.next := list; list := n;
-					listMan.WriteData(n, idL);
+					NEW(idL); idL.ref := idRef; idL.type := joinList; idL.next := list;
+					list := listMan.WriteAllocateData(idL);
 				END;
 			END;
 			i := 1;
@@ -1267,16 +1284,14 @@ MODULE DuniterBlockchain;
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
 				IF withList THEN
-					n := listMan.AllocateData(listS);
-					NEW(idL); idL.ref := idRef; idL.type := leaveList;
-					idL.next := list; list := n;
-					listMan.WriteData(n, idL);
+					NEW(idL); idL.ref := idRef; idL.type := leaveList; idL.next := list;
+					list := listMan.WriteAllocateData(idL);
 				ELSE
 					idMan.EraseData(idRef);
 				END;
-				idPubT.Erase(idP);
+				b := idPubT.Erase(idP); ASSERT(b);
 				NEW(idU); idU.c := id.uid;
-				idUidT.Erase(idU);
+				b := idUidT.Erase(idU); ASSERT(b);
 				b := joinAndLeaveT.Search(idP); ASSERT(b);
 				jlRef := joinAndLeaveT.ReadValue();
 				jl := joinAndLeaveMan.ReadData(jlRef)(JoinAndLeave);
@@ -1292,10 +1307,8 @@ MODULE DuniterBlockchain;
 					WHILE ind.PosSet() DO
 						cRef := ind.ReadValue();
 						IF withList THEN
-							NEW(cL); cL.ref := cRef; cL.type := certRemoveList;
-							n := listMan.AllocateData(listS);
-							cL.next := list; list := n;
-							listMan.WriteData(n, cL);
+							NEW(cL); cL.ref := cRef; cL.type := certRemoveList; cL.next := list;
+							list := listMan.WriteAllocateData(cL);
 						ELSE
 							certMan.EraseData(cRef);
 						END;
@@ -1303,18 +1316,18 @@ MODULE DuniterBlockchain;
 						b := certToT.Search(idP2); ASSERT(b);
 						ind2Ref := certToT.ReadValue();
 						ind2 := database.OpenIndex(ind2Ref, pubKeyMan, pubKeyFac);
-						ind2.Erase(idP);
+						b := ind2.Erase(idP); ASSERT(b);
 						b := ind2.NumberOfKeys() = 0;
 						ind2.Close;
 						IF b THEN
 							database.DeleteIndex(ind2Ref);
-							certToT.Erase(idP2);
+							b := certToT.Erase(idP2); ASSERT(b);
 						END;
 						ind.Next;
 					END;
 					ind.Close;
 					database.DeleteIndex(indRef);
-					certFromT.Erase(idP);
+					b := certFromT.Erase(idP); ASSERT(b);
 				END;
 				IF certToT.Search(idP) THEN
 					indRef := certToT.ReadValue();
@@ -1326,18 +1339,18 @@ MODULE DuniterBlockchain;
 						b := certFromT.Search(idP2); ASSERT(b);
 						ind2Ref := certFromT.ReadValue();
 						ind2 := database.OpenIndex(ind2Ref, pubKeyMan, pubKeyFac);
-						ind2.Erase(idP);
+						b := ind2.Erase(idP); ASSERT(b);
 						b := ind2.NumberOfKeys() = 0;
 						ind2.Close;
 						IF b THEN
 							database.DeleteIndex(ind2Ref);
-							certFromT.Erase(idP2);
+							b := certFromT.Erase(idP2); ASSERT(b);
 						END;
 						ind.Next;
 					END;
 					ind.Close;
 					database.DeleteIndex(indRef);
-					certToT.Erase(idP);
+					b := certToT.Erase(idP); ASSERT(b);
 				END;
 			END;
 		END Identities;
@@ -1371,8 +1384,7 @@ MODULE DuniterBlockchain;
 					Strings.StringToInt(nb, c.block_number, res); ASSERT(res = 0);
 					Strings.StringToLInt(time, c.expires_on, res); ASSERT(res = 0);
 					INC(c.expires_on, pars.sigValidity);
-					pC := certMan.AllocateData(certificationS);
-					certMan.WriteData(pC, c);
+					pC := certMan.WriteAllocateData(c);
 					NEW(idP);
 					idP.ref := c.from;
 					IF certFromT.SearchIns(idP) THEN
@@ -1400,10 +1412,8 @@ MODULE DuniterBlockchain;
 					NEW(iK); iK.ref := pC;
 					b := certTimeT.SearchIns(iK); ASSERT(~b);
 					IF withList THEN
-						NEW(cL); cL.ref := pC; cL.type := certAddList;
-						n := listMan.AllocateData(listS);
-						cL.next := list; list := n;
-						listMan.WriteData(n, cL);
+						NEW(cL); cL.ref := pC; cL.type := certAddList; cL.next := list;
+						list := listMan.WriteAllocateData(cL);
 					END;
 				END;
 			END;
@@ -1415,7 +1425,7 @@ MODULE DuniterBlockchain;
 		VAR
 			
 			pKFrom, pKTo: PubKey;
-			b: BOOLEAN;
+			b, empty: BOOLEAN;
 			n: INTEGER;
 			ind: B.Index;
 		
@@ -1426,23 +1436,23 @@ MODULE DuniterBlockchain;
 			b := certFromT.Search(pKFrom); ASSERT(b);
 			n := certFromT.ReadValue();
 			ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
-			ind.Erase(pKTo);
-			b := ind.NumberOfKeys() = 0;
+			b := ind.Erase(pKTo); ASSERT(b);
+			empty := ind.NumberOfKeys() = 0;
 			ind.Close;
-			IF b THEN
+			IF empty THEN
 				database.DeleteIndex(n);
-				certFromT.Erase(pKFrom);
+				b := certFromT.Erase(pKFrom); ASSERT(b);
 			END;
 			
 			b := certToT.Search(pKTo); ASSERT(b);
 			n := certToT.ReadValue();
 			ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
-			ind.Erase(pKFrom);
-			b := ind.NumberOfKeys() = 0;
+			b := ind.Erase(pKFrom); ASSERT(b);
+			empty := ind.NumberOfKeys() = 0;
 			ind.Close;
-			IF b THEN
+			IF empty THEN
 				database.DeleteIndex(n);
-				certToT.Erase(pKTo);
+				b := certToT.Erase(pKTo); ASSERT(b);
 			END;
 		END RemoveCert;
 	
@@ -1454,13 +1464,12 @@ MODULE DuniterBlockchain;
 			c: Certification;
 			cTi: IntKey;
 			b: BOOLEAN;
-			n, pC: INTEGER;
+			pC: INTEGER;
 			cL: List; (* certRemoveList *)
 		
 		BEGIN (*RemoveExpiredCerts*)
 			NEW(c); c.expires_on := now; c.from := "";
-			pC := certMan.AllocateData(certificationS);
-			certMan.WriteData(pC, c);
+			pC := certMan.WriteAllocateData(c);
 			NEW(cTi); cTi.ref := pC;
 			b := certTimeT.Search(cTi);
 			certMan.EraseData(pC);
@@ -1469,10 +1478,8 @@ MODULE DuniterBlockchain;
 				c := certMan.ReadData(pC)(Certification);
 				RemoveCert(c);
 				IF c.expires_on > secureNow THEN
-					NEW(cL); cL.ref := pC; cL.type := certRemoveList;
-					n := listMan.AllocateData(listS);
-					cL.next := list; list := n;
-					listMan.WriteData(n, cL);
+					NEW(cL); cL.ref := pC; cL.type := certRemoveList; cL.next := list;
+					list := listMan.WriteAllocateData(cL);
 				ELSE
 					certMan.EraseData(pC);
 				END;
@@ -1504,18 +1511,18 @@ MODULE DuniterBlockchain;
 					|timeList:
 						t := timeMan.ReadData(l.ref)(Time);
 						NEW(i); i.ref := t.bnb;
-						timeT.Erase(i);
+						b := timeT.Erase(i); ASSERT(b);
 						timeMan.EraseData(l.ref);
 					|joinList:
 						id := idMan.ReadData(l.ref)(Identity);
 						NEW(p); p.ref := id.pubkey;
-						idPubT.Erase(p);
+						b := idPubT.Erase(p); ASSERT(b);
 						NEW(u); u.c := id.uid;
-						idUidT.Erase(u);
+						b := idUidT.Erase(u); ASSERT(b);
 						idMan.EraseData(l.ref);
 						b := joinAndLeaveT.Search(p); ASSERT(b);
 						joinAndLeaveMan.EraseData(joinAndLeaveT.ReadValue());
-						joinAndLeaveT.Erase(p);
+						b := joinAndLeaveT.Erase(p); ASSERT(b);
 					|leaveList:
 						id := idMan.ReadData(l.ref)(Identity);
 						NEW(p); p.ref := id.pubkey;
@@ -1533,7 +1540,7 @@ MODULE DuniterBlockchain;
 						c := certMan.ReadData(l.ref)(Certification);
 						RemoveCert(c);
 						NEW(i); i.ref := l.ref;
-						certTimeT.Erase(i);
+						b := certTimeT.Erase(i); ASSERT(b);
 						certMan.EraseData(l.ref);
 					|certRemoveList:
 						c := certMan.ReadData(l.ref)(Certification);
@@ -1592,7 +1599,6 @@ MODULE DuniterBlockchain;
 			ASSERT((t.rows = 0) OR (t.columns = 7), 103);
 			FOR i := 0 TO t.rows - 1 DO
 				t.Read(i, cur);
-				Dialog.ShowStatus(cur.fields[0]);
 				withList := i >= t.rows - secureGap;
 				Times(withList , cur.fields[0], cur.fields[1], cur.fields[2]);
 				IF cur.fields[5]$ = "[]" THEN
@@ -1694,17 +1700,6 @@ MODULE DuniterBlockchain;
 			END;
 		END RemoveUpdateProc;
 	
-	(* Help emptying the memory *)
-	PROCEDURE Collect;
-		
-		BEGIN (*Collect*)
-			IF Kernel.WouldFinalize() THEN
-				Kernel.Collect;
-			ELSE
-				Kernel.FastCollect;
-			END;
-		END Collect;
-	
 	(* Scan the Duniter database *)
 	PROCEDURE Scan;
 		
@@ -1712,11 +1707,26 @@ MODULE DuniterBlockchain;
 			
 			d: S.Database;
 			res: INTEGER;
+			t: LONGINT;
+			s: BA.TimeString;
+			dt: BA.DateTime;
+			ss: ARRAY 11 OF CHAR;
 		
 		BEGIN (*Scan*)
+			L.log.Msg("Updating blockchain in DBase.data");
+			t := Services.Ticks();
 			S.OpenDatabase(driver, "", "", duniBase, S.sync, S.hideErrors, d, res); ASSERT(res = 0, 100);
 			ScanBlocks(d);
+			BA.TimeToString(Services.Ticks() - t, s);
+			L.log.Msg("End updating blockchain in DBase.data. Time spent: " + s);
+			BA.TimestampToString(now, dt);
+			Strings.IntToString(LastBlock(), ss);
+			L.log.Msg("It is now " + dt + " - block " + ss);
+			t := Services.Ticks();
+			L.log.Msg("Calculating sentries");
 			CalculateSentries;
+			BA.TimeToString(Services.Ticks() - t, s);
+			L.log.Msg("End calculating sentries. Time spent: " + s);
 		END Scan;
 	
 	(* Scan the Duniter parameters in block 0 *)
@@ -1737,155 +1747,59 @@ MODULE DuniterBlockchain;
 		VAR
 			
 			l: UpdateList;
-			t0, t1, rest: LONGINT;
 		
 		BEGIN (*UpdateAll*)
-			Services.RemoveAction(update);
-			t0 := Services.Ticks();
 			l := updateList;
 			WHILE l # NIL DO
 				l.update;
 				l := l.next;
 			END;
-			Collect;
-			t1 := Services.Ticks();
-			rest := delay - (t1 - t0);
-			Services.DoLater(update, t1 + MAX(rest, minDelay));
+			BA.Collect;
 		END UpdateAll;
-	
-	PROCEDURE (update: UpdateAction) Do;
-		
-		BEGIN (*Do*)
-			UpdateAll;
-		END Do;
-	
-	PROCEDURE ChooseDuniterDataBase*;
-		
-		VAR
-			
-			loc, l: Files.Locator;
-			path, name: Files.Name;
-			t: TextModels.Model;
-			f: TextMappers.Formatter;
-		
-		PROCEDURE SplitFullName (full: ARRAY OF CHAR; OUT path, name: ARRAY OF CHAR): BOOLEAN;
-			
-			VAR
-				
-				res, drive, p: INTEGER;
-				ok: BOOLEAN;
-			
-			BEGIN (*SplitFullName*)
-				res := 0;
-				LOOP
-					Strings.Find(full, '\', res, res);
-					IF res = - 1 THEN
-						EXIT;
-					END;
-					full[res] := '/';
-				END;
-				Strings.Find(full, ':', 0, res);
-				ok := (res = - 1) OR (res = 1);
-				IF ok THEN
-					drive := res;
-					Strings.Find(full, '/', res + 1, p);
-					WHILE p >= 0 DO
-						res := p;
-						Strings.Find(full, '/', res + 1, p);
-					END;
-					IF res < 0 THEN
-						path := "";
-						name := full$;
-					ELSE
-						IF res <= drive + 1 THEN
-							Strings.Extract(full, 0, res + 1, path);
-						ELSE
-							Strings.Extract(full, 0, res, path);
-						END;
-						Strings.Extract(full, res + 1, LEN(full), name);
-					END;
-					ok := LEN(name$) > 0;
-				END;
-				RETURN ok;
-			END SplitFullName;
-		
-		BEGIN (*ChooseDuniterDataBase*)
-			IF ~SplitFullName(duniBase, path, name) THEN
-				path := ''; name := '';
-			END;
-			loc := Files.dir.This(path); ASSERT(loc.res = 0);
-			Dialog.GetIntSpec("*", loc, name);
-			IF loc # NIL THEN
-				duniBase := loc(HostFiles.Locator).path + "/" + name;
-				t := TextModels.dir.New();
-				f.ConnectTo(t);
-				f.WriteString('"' + duniBase + '"');
-				l := Files.dir.This(initDir); ASSERT(l.res = 0);
-				Views.RegisterView(TextViews.dir.New(t), l, initName);
-			END;
-		END ChooseDuniterDataBase;
-	
-	PROCEDURE ResetDataBase*;
-		
-		VAR
-			
-			l: Files.Locator;
-			res: INTEGER;
-		
-		BEGIN (*ResetDataBase*)
-			Dialog.GetOK("#Duniter:ResetBase", "", "", "", {Dialog.ok, Dialog.cancel}, res);
-			IF res = Dialog.ok THEN
-				CloseB;
-				l := Files.dir.This(''); ASSERT(l.res = 0);
-				Files.dir.Delete(l, dBase); ASSERT(l.res = 0);
-				OpenB;
-			END;
-		END ResetDataBase;
 	
 	PROCEDURE Init;
 		
 		VAR
 			
-			loc, l: Files.Locator;
+			l: Files.Locator;
 			v: Views.View;
 			s: TextMappers.Scanner;
-			date: Dates.Date;
-			res: INTEGER;
 			t: TextModels.Model;
 			f: TextMappers.Formatter;
+			name: Files.Name;
+			res: INTEGER;
+			ti: LONGINT;
+			ss: BA.TimeString;
 		
 		BEGIN (*Init*)
+			(* Can we mix both sets of constants? *)
+			ASSERT((B.lt = A.lt) & (B.eq = A.eq) & (B.gt = A.gt), 100);
 			duniBase := '';
-			l := Files.dir.This(initDir); ASSERT(l.res = 0);
-			REPEAT
-				v := Views.OldView(l, initName);
-				IF v = NIL THEN
-					Dialog.GetOK("#Duniter:DuniterDataBase", "", "", "", {Dialog.ok}, res);
-					loc := Files.dir.This(''); ASSERT(loc.res = 0);
-					Dialog.GetIntSpec("*", loc, duniBase);
-					IF loc = NIL THEN
-						HALT(128);
-					ELSE
-						t := TextModels.dir.New();
-						f.ConnectTo(t);
-						duniBase := loc(HostFiles.Locator).path + "/" + duniBase;
-						f.WriteString('"' + duniBase + '"');
-						Views.RegisterView(TextViews.dir.New(t), l, initName);
-					END;
-				ELSE
-					ASSERT(v IS TextViews.View);
-					s.ConnectTo(v(TextViews.View).ThisModel());
-					s.Scan;
-					IF s.type = TextMappers.string THEN
-						duniBase := s.string$;
-					END;
+			l := Files.dir.This(initDir); ASSERT(l.res = 0, 101);
+			v := Views.OldView(l, initName);
+			IF v = NIL THEN
+				duniBase := duniBaseDef;
+				t := TextModels.dir.New();
+				f.ConnectTo(t);
+				f.WriteString('"' + duniBase + '"');
+				name := initName;
+				Views.Register(TextViews.dir.New(t), Views.dontAsk, l, name, BA.utf8Conv, res);
+				ASSERT(res = 0);
+			ELSE
+				ASSERT(v IS TextViews.View);
+				s.ConnectTo(v(TextViews.View).ThisModel());
+				s.Scan;
+				IF s.type = TextMappers.string THEN
+					duniBase := s.string$;
 				END;
-			UNTIL duniBase # '';
-			date.year := year0; date.month := month0; date.day := day0;
-			t0 := Dates.Day(date);
+			END;
+			L.log.Msg("Duniter database: " + duniBase);
 			now := 0; rNow := 0;
+			L.log.Msg("Scan of block 0");
+			ti := Services.Ticks();
 			Scan1;
-			delay := pars.avgGenTime * Services.resolution;
+			BA.TimeToString(Services.Ticks() - ti, ss);
+			L.log.Msg("End of scan of block 0. Time spent: " + ss);
 			updateList := NIL;
 			AddUpdateProc(Scan);
 			NEW(listFac); NEW(timeFac); NEW(joinAndLeaveFac);
@@ -1893,13 +1807,10 @@ MODULE DuniterBlockchain;
 			NEW(intKeyFac); NEW(uidKeyFac); NEW(pubKeyFac);
 			NEW(pubKeyMan); NEW(uidKeyMan); NEW(intKeyMan); NEW(certKTimeMan);
 			OpenB;
-			NEW(update);
-			UpdateAll;
 		END Init;
 	
 	BEGIN (*DuniterBlockchain*)
 		Init;
 	CLOSE
 		CloseB;
-		Services.RemoveAction(update);
 	END DuniterBlockchain.

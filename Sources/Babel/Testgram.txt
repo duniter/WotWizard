@@ -1,0 +1,232 @@
+(* 
+Babel: a compiler compiler.
+
+Copyright (C) 2001-2015 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*)
+
+MODULE BabelTestgram;
+	
+	
+	
+	(* The module BabelTestgram is part of the Babel subsystem, a compiler compiler. BabelTestgram tests whether a given text satisfies a given grammar. *)
+	
+	IMPORT
+		
+		A := BabelAvl, B := BabelCompil, DevMarkers, Dialog, Files, Stores, TextControllers, TextModels;
+	
+	TYPE
+		
+		Directory = POINTER TO RECORD (B. Directory)
+			r: Stores.Reader;
+		END;
+		
+		Compilation = POINTER TO RECORD (B.Compilation)
+			r: TextModels.Reader;
+			err: A.Tree;
+		END;
+		
+		ErrElem = POINTER TO RECORD (A.Elem)
+			pos: INTEGER;
+			mark: DevMarkers.View;
+		END;
+	
+	VAR
+		
+		dial*: RECORD
+			gram-: Files.Name;
+		END;
+		loc: Files.Locator;
+		comp-: B.Compiler;
+	
+	PROCEDURE (d: Directory) ReadInt (OUT i: INTEGER);
+		
+		BEGIN (*ReadInt*)
+			d.r.ReadInt(i);
+		END ReadInt;
+	
+	PROCEDURE (c: Compilation) Read (OUT ch: CHAR);
+		
+		BEGIN (*Read*)
+			c.r.Read;
+			IF c.r.eot THEN
+				ch := B.eOF1;
+			ELSE
+				ch := c.r.char;
+			END;
+		END Read;
+	
+	PROCEDURE (c: Compilation) Pos (): INTEGER;
+		
+		BEGIN (*Pos*)
+			RETURN c.r.Pos();
+		END Pos;
+	
+	PROCEDURE (c: Compilation) SetPos (pos: INTEGER);
+		
+		BEGIN (*SetPos*)
+			IF pos <= c.r.Base().Length() THEN
+				c.r.SetPos(pos);
+			END;
+		END SetPos;
+	
+	PROCEDURE (e1: ErrElem) Compare (e2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH e2: ErrElem DO
+				IF e1.pos < e2.pos THEN
+					RETURN A.inf;
+				ELSIF e1.pos > e2.pos THEN
+					RETURN A.sup;
+				ELSIF e1.mark.msg$ < e2.mark.msg$ THEN
+					RETURN A.inf;
+				ELSIF e1.mark.msg$ > e2.mark.msg$ THEN
+					RETURN A.sup;
+				ELSE
+					RETURN A.ega;
+				END;
+			END;
+		END Compare;
+	
+	PROCEDURE (c: Compilation) Execution (fNum, parsNb: INTEGER; pars: B.ObjectsList; OUT o: B.Object; OUT res: ANYPTR): BOOLEAN;
+		
+		BEGIN (*Execution*)
+			RETURN TRUE;
+		END Execution;
+	
+	PROCEDURE (comp: Compilation) Error (p, li, co: INTEGER; IN mes: ARRAY OF CHAR);
+		
+		VAR
+			
+			e: ErrElem;
+			el: A.Elem;
+			b: BOOLEAN;
+			n: INTEGER;
+		
+		BEGIN (*Error*)
+			IF comp.err # NIL THEN
+				NEW(e);
+				e.pos := p - 1;
+				e.mark := DevMarkers.dir.NewMsg(mes);
+				el := e;
+				b := comp.err.SearchIns(el, n);
+				ASSERT(~b);
+			END;
+		END Error;
+	
+	PROCEDURE (c: Compilation) Map (IN index: ARRAY OF CHAR): B.String;
+		
+		VAR
+			
+			s: Dialog.String;
+			ch: B.String;
+		
+		BEGIN (*Map*)
+			Dialog.MapString("#Babel:" + index, s);
+			NEW(ch, LEN(s$) + 1);
+			ch^ := s$;
+			RETURN ch;
+		END Map;
+	
+	PROCEDURE SetGram*;
+		
+		VAR
+			
+			l: Files.Locator;
+			name: Files.Name;
+			f: Files.File;
+			d: Directory;
+		
+		BEGIN (*SetGram*)
+			Dialog.GetIntSpec("tbl", l, name);
+			IF l # NIL THEN
+				f := Files.dir.Old(l, name, Files.shared);
+				ASSERT(f # NIL, 20);
+				NEW(d);
+				d.r.ConnectTo(f);
+				comp := d.ReadCompiler();
+				loc := l;
+				dial.gram := name;
+				Dialog.Update(dial);
+			END;
+		END SetGram;
+	
+	PROCEDURE ResetGram*;
+		
+		VAR
+			
+			f: Files.File;
+			d: Directory;
+		
+		BEGIN (*ResetGram*)
+			IF dial.gram # "" THEN
+				ASSERT(loc # NIL);
+				f := Files.dir.Old(loc, dial.gram, Files.shared);
+				IF f # NIL THEN
+					NEW(d);
+					d.r.ConnectTo(f);
+					comp := d.ReadCompiler();
+				ELSE
+					dial.gram := "";
+				END;
+			END;
+		END ResetGram;
+	
+	PROCEDURE ResetGramGuard* (VAR p: Dialog.Par);
+		
+		BEGIN (*ResetGramGuard*)
+			p.disabled := dial.gram = "";
+		END ResetGramGuard;
+	
+	PROCEDURE Do*;
+		
+		VAR
+			
+			co: Compilation;
+			c: TextControllers.Controller;
+			el: A.Elem;
+		
+		BEGIN (*Do*)
+			IF comp # NIL THEN
+				c := TextControllers.Focus();
+				IF c # NIL THEN
+					DevMarkers.Unmark(c.text);
+					NEW(co);
+					A.New(co.err);
+					co.r := c.text.NewReader(NIL);
+					IF co.Compile(comp, FALSE) THEN
+						Dialog.ShowStatus("Ok");
+					ELSE
+						el := co.err.Previous(NIL);
+						WHILE el # NIL DO
+							WITH el: ErrElem DO
+								DevMarkers.Insert(c.text, el.pos, el.mark);
+							END;
+							el := co.err.Previous(el);
+						END;
+						DevMarkers.ShowFirstError(c.text, TRUE);
+					END;
+				END;
+			END;
+		END Do;
+	
+	PROCEDURE DoGuard* (VAR p: Dialog.Par);
+		
+		VAR
+			
+			c: TextControllers.Controller;
+		
+		BEGIN (*DoGuard*)
+			c := TextControllers.Focus();
+			p.disabled := (comp = NIL) OR (c = NIL);
+		END DoGuard;
+	
+	BEGIN (*BabelTestgram*)
+		comp := NIL;
+		dial.gram := "";
+	END BabelTestgram.

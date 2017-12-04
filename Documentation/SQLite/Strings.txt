@@ -1,0 +1,74 @@
+SQLiteStrings
+
+DEFINITION SQLiteStrings	(* nonportable (i386) *);
+
+	IMPORT Dialog, Dates, SQLiteLib;
+
+	TYPE
+		Chars = POINTER TO ARRAY OF CHAR;
+
+		ShortChars = POINTER TO ARRAY OF SHORTCHAR;
+
+		ShortString = POINTER TO ARRAY OF SHORTCHAR;
+
+		String = POINTER TO ARRAY OF CHAR;
+
+	PROCEDURE CurrencyToSql (IN c: Dialog.Currency; VAR out: ARRAY OF CHAR);
+	PROCEDURE DateToSql (IN d: Dates.Date; VAR out: ARRAY OF CHAR);
+	PROCEDURE FromUtf8 (IN us: ARRAY OF SHORTCHAR; OUT s: ARRAY OF CHAR);
+	PROCEDURE NewEmptyStr (length: INTEGER): SQLiteLib.Str;
+	PROCEDURE StrToChars (str: SQLiteLib.Str): POINTER TO ARRAY OF CHAR;
+	PROCEDURE StrToShortChars (str: SQLiteLib.Str): POINTER TO ARRAY OF SHORTCHAR;
+	PROCEDURE StringToCurrency (IN s: ARRAY OF CHAR; OUT c: Dialog.Currency; OUT res: INTEGER);
+	PROCEDURE StringToDate (IN s: ARRAY OF CHAR; OUT d: Dates.Date; OUT res: INTEGER);
+	PROCEDURE StringToTime (IN s: ARRAY OF CHAR; OUT t: Dates.Time; OUT res: INTEGER);
+	PROCEDURE ToShortChar (IN str: ARRAY OF CHAR): POINTER TO ARRAY OF SHORTCHAR;
+	PROCEDURE ToStr (IN str: ARRAY OF CHAR; OUT len: INTEGER): SQLiteLib.Str;
+	PROCEDURE ToUtf8 (IN s: ARRAY OF CHAR; OUT us: ARRAY OF SHORTCHAR);
+
+END SQLiteStrings.
+
+
+String manupulations needed for SQLite driver.
+
+
+PROCEDURE StringToDate (IN s: ARRAY OF CHAR; OUT d: Dates.Date; OUT res: INTEGER)
+Converts string s into date d.
+s must be "" or a well formed string representing a date in format "YYYY-MM-DD".
+If s = "" then 0 will be returned in d.year, d.month and d.day.
+Post
+	res = 0	No error found converting s into d
+	res # 0	s is malformed
+
+
+PROCEDURE StringToTime (IN s: ARRAY OF CHAR; OUT t: Dates.Time; OUT res: INTEGER)
+Converts string s into time t.
+s must be "" or a well formed string representing a time in format "HH:MM:SS".
+If s = "" then 0 will be returned in t.hour, t.minute and t.second.
+Post
+	res = 0	No error found converting s into t
+	res # 0	s is malformed
+
+
+PROCEDURE StringToCurrency (IN s: ARRAY OF CHAR; OUT c: Dialog.Currency; OUT res: INTEGER)
+Converts string s into currency c.
+s must be "" or a well formed string representing a valid decimal fixed point number, in which case s always contains a period and at least a digit following it, can begin by a sign, and the rest of its chars are digits. Example s = "-1234.56".
+If s = "" then 0 will be returned in c.val and c.scale.
+Post
+	res = 0	No error found converting s into c
+	res # 0	s is malformed because:
+						doesn't have a period (decimal point) or there is no digit following it
+						contains a char different from "+", "-", ".", "0".."9"
+						has more than a char "+", "-", "."
+						has a char "+", "-" at position different from 0
+
+
+PROCEDURE DateToSql (IN d: Dates.Date; VAR out: ARRAY OF CHAR)
+Converts date d into string out, representing the date in format "YYYY-MM-DD". out could be stored into a text column of database.
+Exception: If d.hour = d.minute = d.second = 0 then out will be "".
+
+
+PROCEDURE CurrencyToSql (IN c: Dialog.Currency; VAR out: ARRAY OF CHAR)
+Converts currency c into string out, suitable to be stored into a text column of database as a decimal fixed point number. Example out = "-1234.56".
+Exception: If c.val = c.scale = 0 then out will be "".
+Pre	out is large enough

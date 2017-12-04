@@ -1,0 +1,2674 @@
+(* 
+Babel: a compiler compiler.
+
+Copyright (C) 2001 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*)
+
+MODULE BabelSyntaxe;
+	
+	
+	
+	(* The module BabelSyntaxe is part of the Babel subsystem, a compiler compiler. BabelSyntaxe builds the parser tables. *)
+	
+	IMPORT
+		
+		D := BabelDef, L := BabelLexique;
+	
+	CONST
+		
+		taSet = MAX(SET)- MIN(SET) + 1;
+	
+	TYPE
+		
+		ListeNN* = POINTER TO RECORD
+			 suivant: ListeNN;
+			 nom: D.String;
+			 num: INTEGER;
+		 END;
+		
+		Gram* = POINTER TO RECORD
+			suivant*: Gram;
+			num*: INTEGER;
+			tOuNT*: BOOLEAN;
+		END;
+		
+		ListeAttribs* = POINTER TO RECORD
+			suivant*: ListeAttribs;
+			numTNT*,
+			numAttrib*: INTEGER;
+		END;
+		
+		Action* = POINTER TO RECORD
+			numNT*,
+			numAtt*,
+			numFct*: INTEGER;
+			softOrHard*: BOOLEAN;
+			params*: ListeAttribs;
+		END;
+		
+		ListeAction* = POINTER TO RECORD
+			 suivant*: ListeAction;
+			 action*: Action;
+		 END;
+	
+	CONST
+		
+		dumping = FALSE;
+	
+	TYPE
+		
+		EnsTok = POINTER TO ARRAY OF SET;
+		
+		ListeNT = POINTER TO RECORD
+			 suivant: ListeNT;
+			 mark: BOOLEAN;
+			 nomNT: D.String;
+			 lAtt: ListeNN;
+		 END;
+		
+		Regle = POINTER TO RECORD
+			 suivant: Regle;
+			 gNT: INTEGER;
+			 dGram: Gram;
+			 actions: ListeAction;
+			 numR,
+			 nouvNumR,
+			 precR: INTEGER;
+			 assocR: BOOLEAN;
+		 END;
+		
+		NTDesc = RECORD
+			desc: ListeNT;
+			numerNT: INTEGER;
+			regles: Regle;
+			first: EnsTok;
+			epsFirst,
+			utilNT: BOOLEAN;
+		END;
+		
+		NTTab = POINTER TO ARRAY OF NTDesc;
+		
+		LRItem = POINTER TO RECORD
+			suivant: LRItem;
+			regleP: Regle;
+			posP: Gram;
+			posN: INTEGER;
+			look: EnsTok;
+			propag: LRPropag;
+		END;
+		
+		LRPropag = POINTER TO RECORD
+			suivant: LRPropag;
+			to: LRItem;
+		END;
+		
+		LRSet = POINTER TO RECORD
+			 suivant: LRSet;
+			 set: LRItem;
+			 goto: LRGoto;
+			 numSet: INTEGER;
+		 END;
+		
+		LRGoto = POINTER TO RECORD
+			suivant: LRGoto;
+			trans: LRSet;
+			tNT: INTEGER;
+			tOuNT: BOOLEAN;
+		END;
+		
+		Syntaxical* = POINTER TO RECORD
+			lx*: L.Lexical;
+			listeNT: ListeNT;
+			listeFH,
+			listeFS: ListeNN;
+			dNT: NTTab;
+			termine,
+			nbNT,
+			derNT,
+			nbRegles,
+			nbBS: INTEGER;
+			lRS: LRSet;
+			yAAffichage*,
+			yAAttention*: BOOLEAN;
+		END;
+	
+	PROCEDURE (ls: Syntaxical) InitEnsTok (OUT eT: EnsTok), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*InitEnsTok*)
+			NEW(eT, ls.nbBS);
+			FOR i := 0 TO ls.nbBS - 1 DO
+				eT[i] := {};
+			END;
+		END InitEnsTok;
+	
+	PROCEDURE (ls: Syntaxical) FixeTerminaison* (numTerm: INTEGER), NEW;
+		
+		BEGIN (*FixeTerminaison*)
+			ls.termine := numTerm;
+		END FixeTerminaison;
+	
+	PROCEDURE (ls: Syntaxical) InsereNonTerm* (nT: D.String; marque: BOOLEAN; lA: ListeNN): BOOLEAN, NEW;
+		
+		VAR
+			
+			l, m: ListeNT;
+		
+		BEGIN (*InsereNonTerm*)
+			l := ls.listeNT;
+			LOOP
+				IF l = NIL THEN
+					EXIT;
+				END;
+				CASE D.CompStr(l.nomNT, nT) OF
+					|D.inf:
+						 m := l;
+						 l := l.suivant;
+					|D.ega:
+						 RETURN FALSE;
+					|D.sup:
+						 EXIT;
+				END;
+			END;
+			NEW(l);
+			l.nomNT := nT;
+			l.mark := marque;
+			l.lAtt := lA;
+			IF m = NIL THEN
+				l.suivant := ls.listeNT;
+				ls.listeNT := l;
+			ELSE
+				l.suivant := m.suivant;
+				m.suivant := l;
+			END;
+			INC(ls.nbNT);
+			RETURN TRUE;
+		END InsereNonTerm;
+	
+	PROCEDURE InsereNN* (VAR l: ListeNN; nomN: D.String; numN: INTEGER): BOOLEAN;
+		
+		VAR
+			
+			p, q: ListeNN;
+		
+		BEGIN (*InsereNN*)
+			p := l;
+			LOOP
+				IF p = NIL THEN
+					EXIT;
+				ELSE
+					CASE D.CompStr(p.nom, nomN) OF
+						|D.inf:
+							 q := p;
+							 p := p.suivant;
+						|D.ega:
+							 RETURN FALSE;
+						|D.sup:
+							 EXIT;
+					END;
+				END;
+			END;
+			NEW(p);
+			p.nom := nomN;
+			p.num := numN;
+			IF q = NIL THEN
+				p.suivant := l;
+				l := p;
+			ELSE
+				p.suivant := q.suivant;
+				q.suivant := p;
+			END;
+			RETURN TRUE;
+		END InsereNN;
+	
+	PROCEDURE ChercheNN (l: ListeNN; nomN: D.String; OUT posN, numN: INTEGER): BOOLEAN;
+		
+		BEGIN (*ChercheNN*)
+			posN := 1;
+			LOOP
+				IF l = NIL THEN
+					RETURN FALSE;
+				END;
+				CASE D.CompStr(l.nom, nomN) OF
+					|D.inf:
+						 INC(posN);
+						 l := l.suivant;
+					|D.ega:
+						 numN := l.num;
+						 RETURN TRUE;
+					|D.sup:
+						 RETURN FALSE;
+				END;
+			END;
+		END ChercheNN;
+	
+	PROCEDURE (ls: Syntaxical) InsereFonctionHard* (nomFct: D.String; numFct: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			n, m: INTEGER;
+		
+		BEGIN (*InsereFonctionHard*)
+			IF ChercheNN(ls.listeFS, nomFct, n, m) THEN
+				RETURN FALSE;
+			ELSE
+				RETURN InsereNN(ls.listeFH, nomFct, numFct);
+			END;
+		END InsereFonctionHard;
+	
+	PROCEDURE (ls: Syntaxical) InsereFonctionSoft* (nomFct: D.String; numFct: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			n, m: INTEGER;
+		
+		BEGIN (*InsereFonctionSoft*)
+			IF ChercheNN(ls.listeFH, nomFct, n, m) THEN
+				RETURN FALSE;
+			ELSE
+				RETURN InsereNN(ls.listeFS, nomFct, numFct);
+			END;
+		END InsereFonctionSoft;
+	
+	PROCEDURE (ls: Syntaxical) ChercheNT* (nT: D.String; OUT numNT: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			l: ListeNT;
+		
+		BEGIN (*ChercheNT*)
+			numNT := 0;
+			l := ls.listeNT;
+			LOOP
+				IF l = NIL THEN
+					RETURN FALSE;
+				END;
+				CASE D.CompStr(l.nomNT, nT) OF
+					|D.inf:
+						 INC(numNT);
+						 l := l.suivant;
+					|D.ega:
+						 RETURN TRUE;
+					|D.sup:
+						 RETURN FALSE;
+				END;
+			END;
+		END ChercheNT;
+	
+	PROCEDURE (ls: Syntaxical) InsereRegle* (gauche: INTEGER; droite: Gram), NEW;
+		
+		VAR
+			
+			r: Regle;
+		
+		BEGIN (*InsereRegle*)
+			INC(ls.nbRegles);
+			NEW(r);
+			r.suivant := ls.dNT[gauche].regles;
+			r.gNT := gauche;
+			r.dGram := droite;
+			r.numR := ls.nbRegles;
+			r.precR := 0;
+			r.assocR := TRUE;
+			WHILE droite # NIL DO
+				IF droite.tOuNT THEN
+					ls.lx.Precedence(droite.num, r.precR, r.assocR);
+				END;
+				droite := droite.suivant;
+			END;
+			ls.dNT[gauche].regles := r;
+			ls.derNT := gauche;
+		END InsereRegle;
+	
+	PROCEDURE (ls: Syntaxical) InsereSem* (lA: ListeAction), NEW;
+		
+		BEGIN (*InsereSem*)
+			ls.dNT[ls.derNT].regles.actions := lA;
+		END InsereSem;
+	
+	PROCEDURE (ls: Syntaxical) ChercheGramCour* (pos: INTEGER; OUT numTNT: INTEGER; OUT termOuNT: BOOLEAN): BOOLEAN, NEW;
+		
+		VAR
+			
+			l: Gram;
+		
+		BEGIN (*ChercheGramCour*)
+			IF ls.derNT = 0 THEN
+				RETURN FALSE;
+			ELSIF pos = 0 THEN
+				numTNT := ls.derNT;
+				termOuNT := FALSE;
+				RETURN TRUE;
+			ELSE
+				l := ls.dNT[ls.derNT].regles.dGram;
+				WHILE (l # NIL) & (pos > 1) DO
+					DEC(pos);
+					l := l.suivant;
+				END;
+				IF l = NIL THEN
+					RETURN FALSE;
+				ELSE
+					numTNT := l.num;
+					termOuNT := l.tOuNT;
+					RETURN TRUE;
+				END;
+			END;
+		END ChercheGramCour;
+	
+	PROCEDURE (ls: Syntaxical) ChercheAtt* (numNT: INTEGER; nomAttrib: D.String; OUT nAtt: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			n: INTEGER;
+		
+		BEGIN (*ChercheAtt*)
+			IF numNT >= ls.nbNT THEN
+				RETURN FALSE;
+			ELSE
+				RETURN ChercheNN(ls.dNT[numNT].desc.lAtt, nomAttrib, nAtt, n);
+			END;
+		END ChercheAtt;
+	
+	PROCEDURE (ls: Syntaxical) ChercheFonction* (nomFct: D.String; OUT numFct: INTEGER; OUT sH: BOOLEAN): BOOLEAN, NEW;
+		
+		VAR
+			
+			n: INTEGER;
+		
+		BEGIN (*ChercheFonction*)
+			IF ChercheNN(ls.listeFH, nomFct, n, numFct) THEN
+				sH := FALSE;
+				RETURN TRUE;
+			ELSIF ChercheNN(ls.listeFS, nomFct, n, numFct) THEN
+				sH := TRUE;
+				RETURN TRUE;
+			ELSE
+				RETURN FALSE;
+			END;
+		END ChercheFonction;
+	
+	PROCEDURE (ls: Syntaxical) FixeRegleCourPrec* (pr: INTEGER; ass: BOOLEAN), NEW;
+		
+		VAR
+			
+			r: Regle;
+		
+		BEGIN (*FixeRegleCourPrec*)
+			IF ls.derNT > 0 THEN
+				r := ls.dNT[ls.derNT].regles;
+				r.precR := pr;
+				r.assocR := ass;
+			END;
+		END FixeRegleCourPrec;
+	
+	PROCEDURE (ls: Syntaxical) InitSynt*, NEW;
+		
+		BEGIN (*InitSynt*)
+			ls.termine := 0;
+			ls.nbNT := 0;
+			ls.nbRegles := 0;
+			ls.derNT := 0;
+		END InitSynt;
+	
+	PROCEDURE (ls: Syntaxical) DebutSynt*, NEW;
+		
+		BEGIN (*DebutSynt*)
+			ls.nbBS := (ls.lx.NbTerm() - 1) DIV taSet + 1;
+		END DebutSynt;
+	
+	PROCEDURE (ls: Syntaxical) FinDeclaration*, NEW;
+		
+		VAR
+			
+			i: INTEGER;
+			l: ListeNT;
+			s: D.String;
+			b: BOOLEAN;
+			r: Regle;
+			g: Gram;
+		
+		BEGIN (*FinDeclaration*)
+			NEW(s, 1); s[0] := D.eOS;
+			b := ls.InsereNonTerm(s, FALSE, NIL);
+			NEW(ls.dNT, ls.nbNT);
+			l := ls.listeNT;
+			FOR i := 0 TO ls.nbNT - 1 DO
+				ls.dNT[i].desc := l;
+				ls.InitEnsTok(ls.dNT[i].first);
+				ls.dNT[i].epsFirst := FALSE;
+				ls.dNT[i].utilNT := FALSE;
+				l := l.suivant;
+			END;
+			ls.dNT[0].utilNT := TRUE;
+			NEW(r);
+			ls.dNT[0].regles := r;
+			r.gNT := 0;
+			NEW(g);
+			r.dGram := g;
+			g.tOuNT := FALSE;
+			r.numR := 0;
+			r.precR := 0;
+			r.assocR := TRUE;
+		END FinDeclaration;
+	
+	PROCEDURE (ls: Syntaxical) FixeAxiome* (numNT: INTEGER), NEW;
+		
+		BEGIN (*FixeAxiome*)
+			IF ls.dNT[0].regles.dGram # NIL THEN
+				ls.dNT[0].regles.dGram.num := numNT;
+			END;
+		END FixeAxiome;
+	
+	PROCEDURE (ls: Syntaxical) EcrisNonTerm (nTerm: INTEGER): D.String, NEW;
+		
+		VAR
+			
+			l: ListeNT;
+			i: INTEGER;
+			c: D.String;
+		
+		BEGIN (*EcrisNonTerm*)
+			l := ls.listeNT;
+			FOR i := 1 TO nTerm DO
+				l := l.suivant;
+			END;
+			NEW(c, LEN(l.nomNT$) + 2);
+			c^ := "_" + l.nomNT$;
+			RETURN c;
+		END EcrisNonTerm;
+	
+	PROCEDURE (ls: Syntaxical) EcrisRegle (nR: INTEGER), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+			r: Regle;
+			g: Gram;
+		
+		BEGIN (*EcrisRegle*)
+			i := 0;
+			LOOP
+				r := ls.dNT[i].regles;
+				WHILE r # NIL DO
+					IF r.numR = nR THEN
+						EXIT;
+					END;
+					r := r.suivant;
+				END;
+				INC(i);
+			END;
+			ls.lx.so.String(ls.EcrisNonTerm(r.gNT));
+			ls.lx.so.String(" = ");
+			g := r.dGram;
+			WHILE g # NIL DO
+				IF g.tOuNT THEN
+					ls.lx.so.String(ls.lx.EcrisTerm(g.num));
+				ELSE
+					ls.lx.so.String(ls.EcrisNonTerm(g.num));
+				END;
+				ls.lx.so.String(" ");
+				g := g.suivant;
+			END;
+			ls.lx.so.String(";");
+			ls.lx.so.Ln;
+		END EcrisRegle;
+	
+	PROCEDURE (ls: Syntaxical) VerifSynt* (): BOOLEAN, NEW;
+		
+		VAR
+			
+			i: INTEGER;
+			b: BOOLEAN;
+		
+		BEGIN (*VerifSynt*)
+			b := TRUE;
+			FOR i := 0 TO ls.nbNT - 1 DO
+				IF ls.dNT[i].regles = NIL THEN
+					b := FALSE;
+					ls.lx.so.String(ls.lx.so.Map("AnError", "", "", ""));
+					ls.lx.so.Ln; ls.lx.so.Ln;
+					ls.lx.so.String(ls.lx.so.Map("SNoRule", ls.EcrisNonTerm(i), "", ""));
+					ls.lx.so.Ln; ls.lx.so.Ln; ls.lx.so.Ln;
+				END;
+			END;
+			RETURN b;
+		END VerifSynt;
+	
+	PROCEDURE (ls: Syntaxical) VerifSem* (): BOOLEAN, NEW;
+		
+		TYPE
+			
+			Lien = POINTER TO RECORD
+				suivant: Lien;
+				fleche: INTEGER;
+			END;
+			
+			NTGraph = POINTER TO ARRAY OF Lien;
+			
+			NTGraphs = POINTER TO RECORD
+				suivant: NTGraphs;
+				graf: NTGraph;
+			END;
+		
+		CONST
+			
+			inconnu = 0;
+			syntLoc = 1;
+			syntGlob = 2;
+			herLoc = 3;
+			herGlob = 4;
+			faux = 5;
+		
+		TYPE
+			
+			GenresAtt = POINTER TO ARRAY OF BYTE;
+			
+			NTAtt = RECORD
+				tailGrafs: INTEGER;
+				grafs: NTGraphs;
+				genres: GenresAtt;
+			END;
+			
+			NTAtts = POINTER TO ARRAY OF NTAtt;
+		
+		CONST
+			
+			invisible = 0;
+			visible = 1;
+			vu = 2;
+		
+		TYPE
+			
+			LienDouble = POINTER TO RECORD
+				suivant: LienDouble;
+				versNT,
+				versAtt: INTEGER;
+			END;
+			
+			AttSem = RECORD
+				entraine: LienDouble;
+				vis: BYTE;
+			 END;
+			
+			AttsSem = POINTER TO ARRAY OF AttSem;
+			
+			NTSem = RECORD
+				numNTSem: INTEGER;
+				attsSem: AttsSem;
+			END;
+			
+			NTSems = POINTER TO ARRAY OF NTSem;
+			
+			IndsSem = POINTER TO ARRAY OF NTGraphs;
+			
+			RegSem = RECORD
+				 nbNTSem: INTEGER;
+				 nTSems: NTSems;
+				 indsSem: IndsSem;
+			 END;
+			
+			RegSems = POINTER TO ARRAY OF RegSem;
+		
+		VAR
+			
+			nTAtts: NTAtts;
+			regSems: RegSems;
+		
+		PROCEDURE CreeGraphNT (tail: INTEGER; OUT g: NTGraph);
+			
+			BEGIN (*CreeGraphNT*)
+				IF tail = 0 THEN
+					g := NIL;
+				ELSE
+					NEW(g, tail);
+				END;
+			END CreeGraphNT;
+		
+		PROCEDURE CreeNTAtts (OUT nTAtts: NTAtts);
+			
+			VAR
+				
+				l: ListeNT;
+				a: ListeNN;
+				i, j: INTEGER;
+			
+			BEGIN (*CreeNTAtts*)
+				NEW(nTAtts, ls.nbNT);
+				l := ls.listeNT;
+				FOR i := 0 TO ls.nbNT - 1 DO
+					nTAtts[i].tailGrafs := 0;
+					a := l.lAtt;
+					WHILE a # NIL DO
+						INC(nTAtts[i].tailGrafs);
+						a := a.suivant;
+					END;
+					NEW(nTAtts[i].grafs);
+					CreeGraphNT(nTAtts[i].tailGrafs, nTAtts[i].grafs.graf);
+					IF nTAtts[i].tailGrafs # 0 THEN
+						NEW(nTAtts[i].genres, nTAtts[i].tailGrafs);
+					END;
+					FOR j := 0 TO nTAtts[i].tailGrafs - 1 DO
+						nTAtts[i].genres[j] := inconnu;
+					END;
+					l := l.suivant;
+				END;
+			END CreeNTAtts;
+		
+		PROCEDURE InsereLD (VAR l: LienDouble; nNT, nAtt: INTEGER);
+			
+			VAR
+				
+				p: LienDouble;
+			
+			BEGIN (*InsereLD*)
+				p := l;
+				WHILE (p # NIL) & ((p.versNT # nNT) OR (p.versAtt # nAtt)) DO
+					p := p.suivant;
+				END;
+				IF p = NIL THEN
+					NEW(p);
+					p.suivant := l;
+					p.versNT := nNT;
+					p.versAtt := nAtt;
+					l := p;
+				END;
+			END InsereLD;
+		
+		PROCEDURE CreeRegSems (nTAtts: NTAtts; OUT regSems: RegSems);
+			
+			VAR
+				
+				i, j, k: INTEGER;
+				r: Regle;
+				g: Gram;
+				a: ListeAction;
+				ac: Action;
+				p: ListeAttribs;
+			
+			PROCEDURE EstNT (g: Gram; pos: INTEGER): BOOLEAN;
+				
+				VAR
+					
+					i: INTEGER;
+				
+				BEGIN (*EstNT*)
+					IF pos = 0 THEN
+						RETURN TRUE;
+					ELSE
+						FOR i := 2 TO pos DO
+							g := g.suivant;
+						END;
+						RETURN ~g.tOuNT;
+					END;
+				END EstNT;
+			
+			PROCEDURE Conv (g: Gram; pos: INTEGER): INTEGER;
+				
+				VAR
+					
+					i, n: INTEGER;
+				
+				BEGIN (*Conv*)
+					n := 0;
+					FOR i := 1 TO pos DO
+						IF ~g.tOuNT THEN
+							INC(n);
+						END;
+						g := g.suivant;
+					END;
+					RETURN n;
+				END Conv;
+			
+			BEGIN (*CreeRegSems*)
+				NEW(regSems, ls.nbRegles + 1);
+				FOR i := 0 TO ls.nbNT - 1 DO
+					r := ls.dNT[i].regles;
+					WHILE r # NIL DO
+						regSems[r.numR].nbNTSem := 1;
+						g := r.dGram;
+						WHILE g # NIL DO
+							IF ~g.tOuNT THEN
+								INC(regSems[r.numR].nbNTSem);
+							END;
+							g := g.suivant;
+						END;
+						NEW(regSems[r.numR].nTSems, regSems[r.numR].nbNTSem);
+						IF regSems[r.numR].nbNTSem # 1 THEN
+							NEW(regSems[r.numR].indsSem, regSems[r.numR].nbNTSem - 1);
+						END;
+						regSems[r.numR].nTSems[0].numNTSem := i;
+						IF nTAtts[i].tailGrafs # 0 THEN
+							NEW(regSems[r.numR].nTSems[0].attsSem, nTAtts[i].tailGrafs);
+						END;
+						FOR k := 0 TO nTAtts[i].tailGrafs - 1 DO
+							regSems[r.numR].nTSems[0].attsSem[k].vis := invisible;
+						END;
+						g := r.dGram;
+						j := 1;
+						WHILE g # NIL DO
+							IF ~g.tOuNT THEN
+								regSems[r.numR].nTSems[j].numNTSem := g.num;
+								IF nTAtts^[g.num].tailGrafs # 0 THEN
+									NEW(regSems[r.numR].nTSems[j].attsSem, nTAtts[g.num].tailGrafs);
+								END;
+								FOR k := 0 TO nTAtts[g.num].tailGrafs - 1 DO
+									regSems[r.numR].nTSems[j].attsSem[k].vis := invisible;
+								END;
+								INC(j);
+							END;
+							g := g.suivant;
+						END;
+						a := r.actions;
+						WHILE a # NIL DO
+							ac := a.action;
+							p := ac.params;
+							WHILE p # NIL DO
+								IF EstNT(r.dGram, p.numTNT) THEN
+									InsereLD(regSems[r.numR].nTSems[Conv(r.dGram, p.numTNT)].attsSem[p.numAttrib - 1].entraine,
+													 Conv(r.dGram, ac.numNT), ac.numAtt);
+								END;
+								p := p.suivant;
+							END;
+							a := a.suivant;
+						END;
+						r := r.suivant;
+					END;
+				END;
+			END CreeRegSems;
+		
+		PROCEDURE EcrisAtt (nNT, nAtt: INTEGER): D.String;
+			
+			VAR
+				
+				l: ListeNN;
+				i: INTEGER;
+				c: D.String;
+			
+			BEGIN (*EcrisAtt*)
+				l := ls.dNT[nNT].desc.lAtt;
+				FOR i := 2 TO nAtt DO
+					l := l^.suivant;
+				END;
+				NEW(c, LEN(l.nom$) + 1);
+				c^ := l.nom$;
+				RETURN c;
+			END EcrisAtt;
+		
+		PROCEDURE DetGenre (nTAtts: NTAtts): BOOLEAN;
+			
+			VAR
+				
+				b: BOOLEAN;
+				i, j: INTEGER;
+				r: Regle;
+				lA: ListeAction;
+				g: Gram;
+				a: Action;
+			
+			PROCEDURE ErreurSH (nNT, nAtt: INTEGER);
+				
+				BEGIN (*ErreurSH*)
+					ls.lx.so.String(ls.lx.so.Map("AnError", "", "", ""));
+					ls.lx.so.Ln; ls.lx.so.Ln;
+					ls.lx.so.String(ls.lx.so.Map("SSyntAndHer", EcrisAtt(nNT, nAtt), ls.EcrisNonTerm(nNT), ""));
+					ls.lx.so.Ln; ls.lx.so.Ln; ls.lx.so.Ln;
+				END ErreurSH;
+			
+			BEGIN (*DetGenre*)
+				b := TRUE;
+				FOR i := 0 TO ls.nbNT - 1 DO
+					r := ls.dNT[i].regles;
+					WHILE r # NIL DO
+						lA := r.actions;
+						WHILE lA # NIL DO
+							a := lA.action;
+							IF a.numNT = 0 THEN
+								CASE nTAtts[i].genres[a.numAtt - 1] OF
+									|inconnu:
+										 nTAtts[i].genres[a.numAtt - 1] := syntLoc;
+									|herLoc:
+										 b := FALSE;
+										 nTAtts[i].genres[a.numAtt - 1] := faux;
+										 ErreurSH(i, a.numAtt);
+									ELSE
+								END;
+							ELSE
+								g := r.dGram;
+								FOR j := 2 TO a.numNT DO
+									g := g.suivant;
+								END;
+								CASE nTAtts[g.num].genres[a.numAtt - 1] OF
+									|inconnu:
+										 nTAtts[g.num].genres[a.numAtt - 1] := herLoc;
+									|syntLoc:
+										 b := FALSE;
+										 nTAtts[g.num].genres[a.numAtt - 1] := faux;
+										 ErreurSH(g.num, a.numAtt);
+									ELSE
+								END;
+							END;
+							lA := lA.suivant;
+						END;
+						r := r.suivant;
+					END;
+				END;
+				RETURN b;
+			END DetGenre;
+		
+		PROCEDURE DetGlob (nTAtts: NTAtts): BOOLEAN;
+			
+			VAR
+				
+				b: BOOLEAN;
+				i, j: INTEGER;
+				r: Regle;
+				lA: ListeAction;
+				l: ListeAttribs;
+				g: Gram;
+			
+			PROCEDURE ErreurI (nNT, nAtt: INTEGER; err: BOOLEAN);
+				
+				BEGIN (*ErreurI*)
+					IF err THEN
+						ls.lx.so.String(ls.lx.so.Map("AnError", "", "", ""));
+					ELSE
+						ls.yAAttention := TRUE;
+						ls.lx.so.String(ls.lx.so.Map("AnWarning", "", "", ""));
+					END;
+					ls.lx.so.Ln; ls.lx.so.Ln;
+					IF err THEN
+						ls.lx.so.String(ls.lx.so.Map("SNeverCalc", EcrisAtt(nNT, nAtt), ls.EcrisNonTerm(nNT), ""));
+					ELSE
+						ls.lx.so.String(ls.lx.so.Map("SNeverUsedAtt", EcrisAtt(nNT, nAtt), ls.EcrisNonTerm(nNT), ""));
+					END;
+					ls.lx.so.Ln; ls.lx.so.Ln; ls.lx.so.Ln;
+				END ErreurI;
+			
+			BEGIN (*DetGlob*)
+				b := TRUE;
+				FOR i := 0 TO ls.nbNT - 1 DO
+					r := ls.dNT[i].regles;
+					WHILE r # NIL DO
+						lA := r.actions;
+						WHILE lA # NIL DO
+							l := lA.action.params;
+							WHILE l # NIL DO
+								IF l.numTNT = 0 THEN
+									CASE nTAtts[i].genres[l.numAttrib - 1] OF
+										|inconnu:
+											 b := FALSE;
+											 ErreurI(i, l.numAttrib, TRUE);
+											 nTAtts[i].genres[l.numAttrib - 1] := faux;
+										|herLoc:
+											 nTAtts[i].genres[l.numAttrib - 1] := herGlob;
+										ELSE
+									END;
+								ELSE
+									g := r.dGram;
+									FOR j := 2 TO l.numTNT DO
+										g := g.suivant;
+									END;
+									IF ~g.tOuNT THEN
+										CASE nTAtts[g.num].genres[l.numAttrib - 1] OF
+											|inconnu:
+												 b := FALSE;
+												 ErreurI(g.num, l.numAttrib, TRUE);
+												 nTAtts[g.num].genres[l.numAttrib - 1] := faux;
+											|syntLoc:
+												 nTAtts[g.num].genres[l.numAttrib - 1] := syntGlob;
+											ELSE
+										END;
+									END;
+								END;
+								l := l.suivant;
+							END;
+							lA := lA.suivant;
+						END;
+						r := r.suivant;
+					END;
+				END;
+				FOR i := 0 TO ls.nbNT - 1 DO
+					FOR j := 1 TO nTAtts[i].tailGrafs DO
+						IF nTAtts[i].genres[j - 1] = inconnu THEN
+							ErreurI(i, j, FALSE);
+						END;
+					END;
+				END;
+				RETURN b;
+			END DetGlob;
+		
+		PROCEDURE VerifGenre (nTAtts: NTAtts): BOOLEAN;
+			
+			VAR
+				
+				b: BOOLEAN;
+				i, j: INTEGER;
+				r: Regle;
+				g: Gram;
+				s: D.String;
+			
+			PROCEDURE ErreurPasCalc (nR, nNT, nAtt: INTEGER; g: BYTE);
+				
+				BEGIN (*ErreurPasCalc*)
+					ls.lx.so.String(ls.lx.so.Map("AnError", "", "", ""));
+					ls.lx.so.Ln; ls.lx.so.Ln;
+					CASE g OF
+						|syntLoc:
+							s := ls.lx.so.Map("SLocSynt", "", "", "")
+						|syntGlob:
+							s := ls.lx.so.Map("SGlobSynt", "", "", "")
+						|herLoc	:
+							s := ls.lx.so.Map("SLocHer", "", "", "")
+						|herGlob:
+							s := ls.lx.so.Map("SGlobHer", "", "", "")
+					END;
+					ls.lx.so.String(ls.lx.so.Map("SNoCalc", s, EcrisAtt(nNT, nAtt), ls.EcrisNonTerm(nNT)));
+					ls.lx.so.Ln; ls.lx.so.Ln;
+					ls.EcrisRegle(nR);
+					ls.lx.so.Ln; ls.lx.so.Ln;
+				END ErreurPasCalc;
+			
+			PROCEDURE ErreurTropCalc (nR, nNT, nAtt: INTEGER);
+				
+				BEGIN (*ErreurTropCalc*)
+					ls.lx.so.String(ls.lx.so.Map("AnError", "", "", ""));
+					ls.lx.so.Ln; ls.lx.so.Ln;
+					ls.lx.so.String(ls.lx.so.Map("SSeveralCalc", EcrisAtt(nNT, nAtt), ls.EcrisNonTerm(nNT), ""));
+					ls.lx.so.Ln; ls.lx.so.Ln;
+					ls.EcrisRegle(nR);
+					ls.lx.so.Ln; ls.lx.so.Ln;
+				END ErreurTropCalc;
+			
+			PROCEDURE VGenreGlob (posNT, nNT, tG, nR: INTEGER; g: BYTE; gs: GenresAtt; a: ListeAction): BOOLEAN;
+				
+				VAR
+					
+					b: BOOLEAN;
+					i, n: INTEGER;
+					l: ListeAction;
+					ac: Action;
+				
+				BEGIN (*VGenreGlob*)
+					b := TRUE;
+					FOR i := 1 TO tG DO
+						IF gs[i - 1] = g THEN
+							n := 0;
+							l := a;
+							WHILE l # NIL DO
+								ac := l^.action;
+								IF (ac.numNT = posNT) & (ac.numAtt = i) THEN
+									INC(n);
+								END;
+								l := l.suivant;
+							END;
+							IF n = 0 THEN
+								b := FALSE;
+								ErreurPasCalc(nR, nNT, i, g);
+							ELSIF n > 1 THEN
+								b := FALSE;
+								ErreurTropCalc(nR, nNT, i);
+							END;
+						END;
+					END;
+					RETURN b;
+				END VGenreGlob;
+			
+			PROCEDURE VGenreLoc (posNT, nNT, tG, nR: INTEGER; g: BYTE; gs: GenresAtt; a: ListeAction): BOOLEAN;
+				
+				VAR
+					
+					b, calcule: BOOLEAN;
+					i, n: INTEGER;
+					l: ListeAction;
+					lA: ListeAttribs;
+					ac: Action;
+				
+				BEGIN (*VGenreLoc*)
+					b := TRUE;
+					FOR i := 1 TO tG DO
+						IF gs[i - 1] = g THEN
+							n := 0;
+							calcule := FALSE;
+							l := a;
+							WHILE l # NIL DO
+								ac := l.action;
+								IF (ac.numNT = posNT) & (ac.numAtt = i) THEN
+									INC(n);
+								END;
+								lA := ac.params;
+								WHILE lA # NIL DO
+									IF (lA.numTNT = posNT) & (lA.numAttrib = i) THEN
+										calcule := TRUE;
+									END;
+									lA := lA.suivant;
+								END;
+								l := l^.suivant;
+							END;
+							IF calcule & (n = 0) THEN
+								b := FALSE;
+								ErreurPasCalc(nR, nNT, i, g);
+							ELSIF n > 1 THEN
+								b := FALSE;
+								ErreurTropCalc(nR, nNT, i);
+							END;
+						END;
+					END;
+					RETURN b;
+				END VGenreLoc;
+			
+			BEGIN (*VerifGenre*)
+				b := TRUE;
+				FOR i := 0 TO ls.nbNT - 1 DO
+					r := ls.dNT[i].regles;
+					WHILE r # NIL DO
+						b := VGenreGlob(0, i, nTAtts[i].tailGrafs, r.numR, syntGlob, nTAtts[i].genres, r.actions) & b;
+						b := VGenreLoc(0, i, nTAtts[i].tailGrafs, r.numR, syntLoc, nTAtts[i].genres, r.actions) & b;
+						g := r.dGram;
+						j := 1;
+						WHILE g # NIL DO
+							IF ~g.tOuNT THEN
+								b := VGenreGlob(j, g.num, nTAtts[g.num].tailGrafs, r.numR, herGlob, nTAtts[g.num].genres, r.actions) & b;
+								b := VGenreLoc(j, g.num, nTAtts[g.num].tailGrafs, r.numR, herLoc, nTAtts[g.num].genres, r.actions) & b;
+							END;
+							INC(j);
+							g := g.suivant;
+						END;
+						r := r.suivant;
+					END;
+				END;
+				RETURN b;
+			END VerifGenre;
+		
+		PROCEDURE VerifCycle (nTAtts: NTAtts; regSems: RegSems): BOOLEAN;
+			
+			VAR
+				
+				stop: BOOLEAN;
+				i: INTEGER;
+				d: NTSems;
+				g: NTGraph;
+			
+			PROCEDURE InitInd (nTAtts: NTAtts; nTSems: NTSems; nbInd: INTEGER; ind: IndsSem);
+				
+				VAR
+					
+					i: INTEGER;
+				
+				BEGIN (*InitInd*)
+					FOR i := 1 TO nbInd DO
+						ind[i - 1] := nTAtts[nTSems[i].numNTSem].grafs;
+					END;
+				END InitInd;
+			
+			PROCEDURE CopieDagR (nTAtts: NTAtts; nbNTSem: INTEGER; src: NTSems; OUT but: NTSems);
+				
+				VAR
+					
+					i, j: INTEGER;
+				
+				PROCEDURE CopieDLiens (src: LienDouble; OUT but: LienDouble);
+					
+					VAR
+						
+						b: LienDouble;
+					
+					BEGIN (*CopieDLiens*)
+						NEW(but);
+						b := but;
+						WHILE src # NIL DO
+							NEW(but.suivant);
+							but := but^.suivant;
+							but^ := src^;
+							src := src.suivant;
+						END;
+						but := b.suivant;
+					END CopieDLiens;
+				
+				BEGIN (*CopieDagR*)
+					NEW(but, nbNTSem);
+					FOR i := 0 TO nbNTSem - 1 DO
+						but[i].numNTSem := src[i].numNTSem;
+						IF src[i].attsSem # NIL THEN
+							NEW(but[i].attsSem, nTAtts[but[i].numNTSem].tailGrafs);
+						END;
+						FOR j := 0 TO nTAtts[but[i].numNTSem].tailGrafs - 1 DO
+							CopieDLiens(src[i].attsSem[j].entraine, but[i].attsSem[j].entraine);
+							but[i].attsSem[j].vis := invisible;
+						END;
+					END;
+				END CopieDagR;
+			
+			PROCEDURE AjouteDLiens (nTAtts: NTAtts; nbNTSem: INTEGER; ind: IndsSem; d: NTSems);
+				
+				VAR
+					
+					i, j: INTEGER;
+					l: Lien;
+					g: NTGraphs;
+				
+				BEGIN (*AjouteDLiens*)
+					FOR i := 1 TO nbNTSem - 1 DO
+						g := ind[i - 1];
+						FOR j := 0 TO nTAtts[d[i].numNTSem].tailGrafs - 1 DO
+							l := g.graf[j];
+							WHILE l # NIL DO
+								InsereLD(d[i].attsSem[j].entraine, i, l.fleche);
+								l := l.suivant;
+							END;
+						END;
+					END;
+				END AjouteDLiens;
+			
+			PROCEDURE Cyclique (nTAtts: NTAtts; nbNTSem: INTEGER; d: NTSems): BOOLEAN;
+				
+				VAR
+					
+					debNT, debAtt: INTEGER;
+					suite, aff: BOOLEAN;
+					
+					i, j: INTEGER;
+				
+				PROCEDURE Parcours (nNT, nAtt: INTEGER): BOOLEAN;
+					
+					VAR
+						
+						l: LienDouble;
+						s: AttsSem;
+					
+					BEGIN (*Parcours*)
+						s := d[nNT].attsSem;
+						CASE s[nAtt - 1].vis OF
+							|invisible:
+								s[nAtt - 1].vis := visible;
+								l := s[nAtt - 1].entraine;
+								WHILE l # NIL DO
+									IF Parcours(l.versNT, l.versAtt) THEN
+										IF aff THEN
+											IF suite THEN
+												ls.lx.so.String(",");
+												ls.lx.so.Ln;
+												ls.lx.so.String(ls.lx.so.Map("Swhich", "", "", ""));
+												ls.lx.so.String(" ");
+											ELSE
+												ls.lx.so.Ln;
+												suite := TRUE;
+											END;
+											ls.lx.so.String(ls.lx.so.Map("SDerives", EcrisAtt(d[nNT].numNTSem, nAtt), ls.EcrisNonTerm(d[nNT].numNTSem), ""));
+											aff := ~((nNT = debNT) & (nAtt = debAtt));
+										END;
+										RETURN TRUE;
+									END;
+									l := l.suivant;
+								END;
+								s[nAtt - 1].vis := vu;
+								RETURN FALSE;
+							|visible:
+								ls.lx.so.String(ls.lx.so.Map("AnError", "", "", ""));
+								ls.lx.so.Ln; ls.lx.so.Ln;
+								ls.lx.so.String(ls.lx.so.Map("SCyclicAtt", "", "", ""));
+								ls.lx.so.Ln; ls.lx.so.Ln;
+								ls.lx.so.String(ls.lx.so.Map("SAttNonT", EcrisAtt(d[nNT].numNTSem, nAtt), ls.EcrisNonTerm(d[nNT].numNTSem), ""));
+								debNT := nNT; debAtt := nAtt;
+								suite := FALSE;
+								aff := TRUE;
+								RETURN TRUE;
+							|vu:
+								RETURN FALSE;
+						END;
+					END Parcours;
+				
+				BEGIN (*Cyclique*)
+					FOR i := 0 TO nbNTSem - 1 DO
+						FOR j := 1 TO nTAtts[d[i].numNTSem].tailGrafs DO
+							IF (d[i].attsSem[j - 1].vis = invisible) & Parcours(i, j) THEN
+								ls.lx.so.String(".");
+								ls.lx.so.Ln; ls.lx.so.Ln; ls.lx.so.Ln;
+								RETURN TRUE;
+							END;
+						END;
+					END;
+					RETURN FALSE;
+				END Cyclique;
+			
+			PROCEDURE AjouteLiens (tail: INTEGER; d: NTSems; g: NTGraph);
+				
+				VAR
+					
+					src: INTEGER;
+				
+				PROCEDURE InsereLien (VAR l: Lien; nAtt: INTEGER);
+					
+					VAR
+						
+						p, q, r: Lien;
+					
+					BEGIN (*InsereLien*)
+						p := l;
+						WHILE (p # NIL) & (p.fleche < nAtt) DO
+							q := p;
+							p := p.suivant;
+						END;
+						IF (p = NIL) OR (p.fleche > nAtt) THEN
+							NEW(r);
+							r.suivant := p;
+							r.fleche := nAtt;
+							IF q = NIL THEN
+								l := r;
+							ELSE
+								q.suivant := r;
+							END;
+						END;
+					END InsereLien;
+				
+				PROCEDURE Parcours (nNT, nAtt: INTEGER);
+					
+					VAR
+						
+						l: LienDouble;
+					
+					BEGIN (*Parcours*)
+						IF (nNT = 0) & (nAtt # src) THEN
+							InsereLien(g[src - 1], nAtt);
+						END;
+						l := d[nNT].attsSem[nAtt - 1].entraine;
+						WHILE l # NIL DO
+							Parcours(l.versNT, l.versAtt);
+							l := l.suivant;
+						END;
+					END Parcours;
+				
+				BEGIN (*AjouteLiens*)
+					FOR src := 1 TO tail DO
+						Parcours(0, src);
+					END;
+				END AjouteLiens;
+
+			PROCEDURE InsereGraphNT (tail: INTEGER; lG: NTGraphs; g: NTGraph): BOOLEAN;
+				
+				VAR
+					
+					p, q: NTGraphs;
+				
+				PROCEDURE EgGraph (tail: INTEGER; g1, g2: NTGraph): BOOLEAN;
+					
+					VAR
+						
+						i: INTEGER;
+						l1, l2: Lien;
+					
+					BEGIN (*EgGraph*)
+						FOR i := 0 TO tail - 1 DO
+							l1 := g1[i];
+							l2 := g2[i];
+							LOOP
+								IF l1 = NIL THEN
+									IF l2 = NIL THEN
+										EXIT;
+									ELSE
+										RETURN FALSE;
+									END;
+								ELSIF l2 = NIL THEN
+									RETURN FALSE;
+								ELSIF l1.fleche = l2.fleche THEN
+									l1 := l1.suivant;
+									l2 := l2.suivant;
+								ELSE
+									RETURN FALSE;
+								END;
+							END;
+						END;
+						RETURN TRUE;
+					END EgGraph;
+				
+				BEGIN (*InsereGraphNT*)
+					p := lG;
+					WHILE (p # NIL) & ~EgGraph(tail, p.graf, g) DO
+						q := p;
+						p := p.suivant;
+					END;
+					IF p = NIL THEN
+						NEW(p);
+						p.graf := g;
+						q.suivant := p;
+						RETURN TRUE;
+					ELSE
+						RETURN FALSE;
+					END;
+				END InsereGraphNT;
+			
+			PROCEDURE Avance (nTAtts: NTAtts; nTSems: NTSems; nbInd: INTEGER; ind: IndsSem): BOOLEAN;
+				
+				VAR
+					
+					i: INTEGER;
+				
+				BEGIN (*Avance*)
+					i := nbInd;
+					LOOP
+						IF i = 0 THEN
+							RETURN FALSE;
+						END;
+						ind[i - 1] := ind[i - 1].suivant;
+						IF ind[i - 1] # NIL THEN
+							RETURN TRUE;
+						END;
+						ind[i - 1] := nTAtts[nTSems[i].numNTSem].grafs;
+						DEC(i);
+					END;
+				END Avance;
+			
+			BEGIN (*VerifCycle*)
+				REPEAT
+					stop := TRUE;
+					FOR i := 0 TO ls.nbRegles DO
+						InitInd(nTAtts, regSems[i].nTSems, regSems[i].nbNTSem - 1, regSems[i].indsSem);
+						REPEAT
+							CopieDagR(nTAtts, regSems[i].nbNTSem, regSems[i].nTSems, d);
+							AjouteDLiens(nTAtts, regSems[i].nbNTSem, regSems[i].indsSem, d);
+							IF Cyclique(nTAtts, regSems[i].nbNTSem, d) THEN
+								RETURN FALSE;
+							END;
+							CreeGraphNT(nTAtts[regSems[i].nTSems[0].numNTSem].tailGrafs, g);
+							AjouteLiens(nTAtts[regSems[i].nTSems[0].numNTSem].tailGrafs, d, g);
+							stop := ~InsereGraphNT(nTAtts[regSems[i].nTSems[0].numNTSem].tailGrafs, nTAtts[regSems[i].nTSems[0].numNTSem].grafs, g) & stop;
+						UNTIL ~Avance(nTAtts, regSems[i].nTSems, regSems[i].nbNTSem - 1, regSems[i].indsSem);
+					END;
+				UNTIL stop;
+				RETURN TRUE;
+			END VerifCycle;
+		
+		BEGIN (*VerifSem*)
+			CreeNTAtts(nTAtts);
+			IF DetGenre(nTAtts) & DetGlob(nTAtts) & VerifGenre(nTAtts) THEN
+				CreeRegSems(nTAtts, regSems);
+				RETURN VerifCycle(nTAtts, regSems);
+			ELSE
+				RETURN FALSE;
+			END;
+		END VerifSem;
+	
+	PROCEDURE CompLRItem (l: LRItem; r: Regle; pos: INTEGER): BYTE;
+		
+		BEGIN (*CompLRItem*)
+			IF l.regleP.numR < r.numR THEN
+				RETURN D.inf;
+			ELSIF l.regleP.numR > r.numR THEN
+				RETURN D.sup;
+			ELSIF l.posN < pos THEN
+				RETURN D.inf;
+			ELSIF l.posN > pos THEN
+				RETURN D.sup;
+			ELSE
+				RETURN D.ega;
+			END;
+		END CompLRItem;
+	
+	PROCEDURE (ls: Syntaxical) InsereLRItem (VAR l: LRItem; r: Regle; pP: Gram; pN: INTEGER), NEW;
+		
+		VAR
+			
+			p, q: LRItem;
+		
+		BEGIN (*InsereLRItem*)
+			p := l;
+			LOOP
+				IF p = NIL THEN
+					EXIT;
+				END;
+				CASE CompLRItem(p, r, pN) OF
+					|D.inf:
+						 q := p;
+						 p := p.suivant;
+					|D.ega:
+						 RETURN;
+					|D.sup:
+						 EXIT;
+				END;
+			END;
+			NEW(p);
+			p.regleP := r;
+			p.posP := pP;
+			p.posN := pN;
+			ls.InitEnsTok(p.look);
+			IF q = NIL THEN
+				p.suivant := l;
+				l := p;
+			ELSE
+				p.suivant := q.suivant;
+				q.suivant := p;
+			END;
+		END InsereLRItem;
+	
+	PROCEDURE EgLRSet (l1, l2: LRItem): BOOLEAN;
+		
+		BEGIN (*EgLRSet*)
+			WHILE (l1 # NIL) & (l2 # NIL) & (l1.regleP = l2.regleP) & (l1.posN = l2.posN) DO
+				l1 := l1.suivant;
+				l2 := l2.suivant;
+			END;
+			RETURN l1 = l2;
+		END EgLRSet;
+	
+	PROCEDURE (ls: Syntaxical) InsereLRSet (nSet: LRItem; org: LRSet; gram: INTEGER; termOuNT: BOOLEAN), NEW;
+		
+		VAR
+			
+			p, q: LRSet;
+			g: LRGoto;
+		
+		BEGIN (*InsereLRSet*)
+			p := ls.lRS;
+			WHILE (p # NIL) & ~EgLRSet(p.set, nSet) DO
+				q := p;
+				p := p.suivant;
+			END;
+			IF p = NIL THEN
+				NEW(p);
+				p.set := nSet;
+				IF q = NIL THEN
+					p.suivant := ls.lRS;
+					ls.lRS := p;
+				ELSE
+					p.suivant := q.suivant;
+					q.suivant := p;
+				END;
+			END;
+			NEW(g);
+			g.suivant := org.goto;
+			g.trans := p;
+			g.tNT := gram;
+			g.tOuNT := termOuNT;
+			org.goto := g;
+		END InsereLRSet;
+	
+	PROCEDURE (ls: Syntaxical) CopieLRItem (s: LRItem): LRItem, NEW;
+		
+		VAR
+			
+			p, q: LRItem;
+			i: INTEGER;
+		
+		BEGIN (*CopieLRItem*)
+			NEW(p);
+			q := p;
+			WHILE s # NIL DO
+				NEW(p.suivant);
+				p := p.suivant;
+				p^ := s^;
+				ls.InitEnsTok(p.look);
+				FOR i := 0 TO ls.nbBS - 1 DO
+					p.look[i] := s.look[i];
+				END;
+				s := s.suivant;
+			END;
+			p := q.suivant;
+			RETURN p;
+		END CopieLRItem;
+	
+	PROCEDURE (ls: Syntaxical) Closure0 (s: LRItem): LRItem, NEW;
+		
+		VAR
+			
+			t, p, q: LRItem;
+			l: Regle;
+		
+		BEGIN (*Closure0*)
+			s := ls.CopieLRItem(s);
+			t := s;
+			WHILE t # NIL DO
+				IF ~((t.posP = NIL) OR t.posP.tOuNT) THEN
+					l := ls.dNT[t.posP.num].regles;
+					WHILE l # NIL DO
+						p := s;
+						q := NIL;
+						WHILE (p # NIL) & ~((p.posN = 1) & (p.regleP = l)) DO
+							q := p;
+							p := p.suivant;
+						END;
+						IF p = NIL THEN
+							NEW(p);
+							p.suivant := q.suivant;
+							p.regleP := l;
+							p.posP := l.dGram;
+							p.posN := 1;
+							ls.InitEnsTok(p.look);
+							q.suivant := p;
+						END;
+						l := l.suivant;
+					END;
+				END;
+				t := t.suivant;
+			END;
+			RETURN s;
+		END Closure0;
+	
+	PROCEDURE (ls: Syntaxical) Goto (s: LRItem; tNT: INTEGER; termOuNT: BOOLEAN): LRItem, NEW;
+		
+		VAR
+			
+			t: LRItem;
+			g: Gram;
+		
+		BEGIN (*Goto*)
+			WHILE s # NIL DO
+				IF s.posP # NIL THEN
+					g := s.posP;
+					IF (g.num = tNT) & (g.tOuNT = termOuNT) THEN
+						ls.InsereLRItem(t, s.regleP, g.suivant, s.posN + 1);
+					END;
+				END;
+				s := s.suivant;
+			END;
+			RETURN t;
+		END Goto;
+	
+	PROCEDURE (ls: Syntaxical) FaitLR0, NEW;
+		
+		VAR
+			
+			l, p: LRItem;
+			m: LRSet;
+			i: INTEGER;
+		
+		BEGIN (*FaitLR0*)
+			ls.InsereLRItem(l, ls.dNT[0].regles, ls.dNT[0].regles.dGram, 1);
+			NEW(ls.lRS);
+			ls.lRS.set := l;
+			m := ls.lRS;
+			WHILE m # NIL DO
+				l := ls.Closure0(m.set);
+				FOR i := 0 TO ls.lx.NbTerm() - 1 DO
+					p := ls.Goto(l, i, TRUE);
+					IF p # NIL THEN
+						ls.InsereLRSet(p, m, i, TRUE);
+					END;
+				END;
+				FOR i := 0 TO ls.nbNT - 1 DO
+					p := ls.Goto(l, i, FALSE);
+					IF p # NIL THEN
+						ls.InsereLRSet(p, m, i, FALSE);
+						ls.dNT[i].utilNT := TRUE;
+					END;
+				END;
+				m := m.suivant;
+			END;
+		END FaitLR0;
+	
+	PROCEDURE (ls: Syntaxical) FirstX, NEW;
+		
+		VAR
+			
+			stop: BOOLEAN;
+			i, j: INTEGER;
+			r: Regle;
+			g: Gram;
+		
+		BEGIN (*FirstX*)
+			REPEAT
+				stop := TRUE;
+				FOR i := 0 TO ls.nbNT - 1 DO
+					r := ls.dNT[i].regles;
+					WHILE r # NIL DO
+						g := r.dGram;
+						LOOP
+							IF g = NIL THEN
+								IF ~ls.dNT[i].epsFirst THEN
+									stop := FALSE;
+									ls.dNT[i].epsFirst := TRUE;
+								END;
+								EXIT;
+							END;
+							IF g.tOuNT THEN
+								IF ~((g.num MOD taSet) IN ls.dNT[i].first[g.num DIV taSet]) THEN
+									stop := FALSE;
+									INCL(ls.dNT[i].first[g.num DIV taSet], g.num MOD taSet);
+								END;
+								EXIT;
+							ELSE
+								FOR j := 0 TO ls.nbBS - 1 DO
+									IF ls.dNT[g.num].first[j] - ls.dNT[i].first[j] # {} THEN
+										stop := FALSE;
+										ls.dNT[i].first[j] := ls.dNT[i].first[j] + ls.dNT[g.num].first[j];
+									END;
+								END;
+								IF ~ls.dNT[g.num].epsFirst THEN
+									EXIT;
+								END;
+							END;
+							g := g.suivant;
+						END;
+						r := r.suivant;
+					END;
+				END;
+			UNTIL stop;
+		END FirstX;
+	
+	PROCEDURE (ls: Syntaxical) First (g: Gram; derT: EnsTok): EnsTok, NEW;
+		
+		VAR
+			
+			f: EnsTok;
+			i: INTEGER;
+			eps: BOOLEAN;
+		
+		BEGIN (*First*)
+			ls.InitEnsTok(f);
+			eps := TRUE;
+			WHILE eps & (g # NIL) DO
+				IF g.tOuNT THEN
+					INCL(f[g.num DIV taSet], g.num MOD taSet);
+					eps := FALSE;
+				ELSE
+					FOR i := 0 TO ls.nbBS - 1 DO
+						f[i] := f[i] + ls.dNT[g.num].first[i];
+					END;
+					eps := ls.dNT[g.num].epsFirst;
+				END;
+				g := g.suivant;
+			END;
+			IF eps THEN
+				FOR i := 0 TO ls.nbBS - 1 DO
+					f[i] := f[i] + derT[i];
+				END;
+			END;
+			RETURN f;
+		END First;
+	
+	PROCEDURE (ls: Syntaxical) Closure1 (s: LRItem): LRItem, NEW;
+		
+		VAR
+			
+			t, p, q: LRItem;
+			l: Regle;
+			f: EnsTok;
+			i: INTEGER;
+			stop: BOOLEAN;
+		
+		BEGIN (*Closure1*)
+			s := ls.CopieLRItem(s);
+			REPEAT
+				stop := TRUE;
+				t := s;
+				WHILE t # NIL DO
+					IF ~((t.posP = NIL) OR t.posP.tOuNT) THEN
+						f := ls.First(t.posP.suivant, t.look);
+						l := ls.dNT[t.posP.num].regles;
+						WHILE l # NIL DO
+							p := s;
+							WHILE (p # NIL) & ~((p.posN = 1) & (p.regleP = l)) DO
+								q := p;
+								p := p.suivant;
+							END;
+							IF p = NIL THEN
+								NEW(p);
+								p.regleP := l;
+								p.posP := l.dGram;
+								p.posN := 1;
+								ls.InitEnsTok(p.look);
+								q.suivant := p;
+							END;
+							FOR i := 0 TO ls.nbBS - 1 DO
+								IF f[i] - p.look[i] # {} THEN
+									stop := FALSE;
+									p.look[i] := p.look[i] + f[i];
+								END;
+							END;
+							l := l.suivant;
+						END;
+					END;
+					t := t.suivant;
+				END;
+			UNTIL stop;
+			RETURN s;
+		END Closure1;
+	
+	PROCEDURE (ls: Syntaxical) TabuleLook, NEW;
+		
+		VAR
+			
+			s: LRSet;
+			i, j, k, l, p: LRItem;
+			f: EnsTok;
+			t: LRGoto;
+			n: INTEGER;
+			q: LRPropag;
+		
+		BEGIN (*TabuleLook*)
+			s := ls.lRS;
+			WHILE s # NIL DO
+				i := s.set;
+				WHILE i # NIL DO
+					f := i.look;
+					ls.InitEnsTok(i.look);
+					INCL(i.look[0], 1);
+					p := i.suivant;
+					i.suivant := NIL;
+					j := ls.Closure1(i);
+					i.suivant := p;
+					i.look := f;
+					k := j;
+					WHILE k # NIL DO
+						IF k.posP # NIL THEN
+							t := s.goto;
+							WHILE ~((t.tOuNT = k.posP.tOuNT) & (t.tNT = k.posP.num)) DO
+								t := t.suivant
+							END;
+							l := t.trans.set;
+							WHILE ~((l.regleP = k.regleP) & (l.posP = k.posP.suivant)) DO
+								l := l.suivant;
+							END;
+							FOR n := 0 TO ls.nbBS - 1 DO
+								l.look[n] := l.look[n] + k.look[n];
+							END;
+							IF 1 IN k.look[0] THEN
+								EXCL(l.look[0], 1);
+								NEW(q);
+								q.suivant := i.propag;
+								q.to := l;
+								i.propag := q;
+							END;
+						END;
+						k := k.suivant;
+					END;
+					i := i.suivant;
+				END;
+				s := s.suivant;
+			END;
+		END TabuleLook;
+	
+	PROCEDURE (ls: Syntaxical) FaitLR1, NEW;
+		
+		VAR
+			
+			s: LRSet;
+			i: LRItem;
+			p: LRPropag;
+			n: INTEGER;
+			stop: BOOLEAN;
+		
+		BEGIN (*FaitLR1*)
+			INCL(ls.lRS.set.look[ls.termine DIV taSet], ls.termine MOD taSet);
+			ls.TabuleLook;
+			REPEAT
+				stop := TRUE;
+				s := ls.lRS;
+				WHILE s # NIL DO
+					i := s.set;
+					WHILE i # NIL DO
+						p := i.propag;
+						WHILE p # NIL DO
+							FOR n := 0 TO ls.nbBS - 1 DO
+								IF i.look[n] - p.to.look[n] # {} THEN
+									stop := FALSE;
+									p.to.look[n] := p.to.look[n] + i.look[n];
+								END;
+							END;
+							p := p.suivant;
+						END;
+						i := i.suivant;
+					END;
+					s := s.suivant;
+				END;
+			UNTIL stop;
+		END FaitLR1;
+	
+	PROCEDURE (ls: Syntaxical) FabriqueSynt*, NEW;
+		
+		BEGIN (*FabriqueSynt*)
+			ls.FaitLR0;
+			ls.FirstX;
+			ls.FaitLR1;
+		END FabriqueSynt;
+	
+	PROCEDURE (ls: Syntaxical) CreeSynt* (c: D.Compiler), NEW;
+		
+		VAR
+			
+			dump: BOOLEAN;
+		
+		TYPE
+			
+			ActionT = RECORD
+				quoiT: BYTE;
+				auxT,
+				numRT,
+				precT: INTEGER;
+				assocT: BOOLEAN;
+			END;
+			
+			ActionTab = POINTER TO ARRAY OF ActionT;
+			
+			RecupT = POINTER TO RECORD
+				suivant: RecupT;
+				etatDep,
+				nTGoto: INTEGER;
+			END;
+			
+			RecupTab = POINTER TO ARRAY OF RecupT;
+		
+		VAR
+			
+			t: ActionTab;
+			test: D.Card;
+			rec: RecupTab;
+		
+		PROCEDURE EcrisItemPtr (i: LRItem);
+			
+			VAR
+				
+				g: Gram;
+				j: INTEGER;
+				r: Regle;
+			
+			BEGIN (*EcrisItemPtr*)
+				WHILE i # NIL DO
+					r := i.regleP;
+					ls.lx.so.String(ls.EcrisNonTerm(r.gNT));
+					ls.lx.so.String(" = ");
+					g := r.dGram;
+					FOR j := 2 TO i.posN DO
+						IF g.tOuNT THEN
+							ls.lx.so.String(ls.lx.EcrisTerm(g.num));
+						ELSE
+							ls.lx.so.String(ls.EcrisNonTerm(g.num));
+						END;
+						ls.lx.so.String(" ");
+						g := g.suivant;
+					END;
+					ls.lx.so.String("... ");
+					WHILE g # NIL DO
+						IF g.tOuNT THEN
+							ls.lx.so.String(ls.lx.EcrisTerm(g.num));
+						ELSE
+							ls.lx.so.String(ls.EcrisNonTerm(g.num));
+						END;
+						ls.lx.so.String(" ");
+						g := g.suivant;
+					END;
+					ls.lx.so.String(";");
+					ls.lx.so.Ln;
+					i := i.suivant;
+					IF i # NIL THEN
+						ls.lx.so.String(ls.lx.so.Map("Sor", "", "", ""));
+						ls.lx.so.Ln;
+					END;
+				END;
+			END EcrisItemPtr;
+		
+		PROCEDURE Conflit (nS, term: INTEGER; act1, act2: BYTE; aux1, aux2: INTEGER);
+			
+			VAR
+				
+				s: ARRAY 5 OF CHAR;
+			
+			PROCEDURE EcrisItem (nS: INTEGER);
+				
+				VAR
+					
+					l: LRSet;
+				
+				BEGIN (*EcrisItem*)
+					l := ls.lRS;
+					WHILE l.numSet # nS DO
+						l := l.suivant;
+					END;
+					EcrisItemPtr(l.set);
+				END EcrisItem;
+			
+			BEGIN (*Conflit*)
+				IF dumping THEN
+					dump := TRUE;
+				END;
+				ls.yAAttention := TRUE;
+				ls.lx.so.String(ls.lx.so.Map("AnWarning", "", "", ""));
+				ls.lx.so.Ln; ls.lx.so.Ln;
+				IF dumping THEN
+					ls.lx.so.String("Dans l'état ");
+					D.CardToStr(nS, s);
+					ls.lx.so.String(s);
+					ls.lx.so.String(", lorsqu'on a lu :");
+				ELSE
+					ls.lx.so.String(ls.lx.so.Map("SHaveRead", "", "", ""));
+				END;
+				ls.lx.so.Ln; ls.lx.so.Ln;
+				EcrisItem(nS);
+				ls.lx.so.Ln;
+				ls.lx.so.String(ls.lx.so.Map("SIfRead", "", "", ""));
+				ls.lx.so.String(" ");
+				ls.lx.so.String(ls.lx.EcrisTerm(term));
+				ls.lx.so.String(" ;");
+				ls.lx.so.Ln; ls.lx.so.Ln;
+				IF act1 = D.deplaceS THEN
+					ls.lx.so.String(ls.lx.so.Map("SMustRead", "", "", ""));
+					ls.lx.so.Ln; ls.lx.so.Ln;
+					EcrisItem(aux1);
+				ELSE
+					ls.lx.so.String(ls.lx.so.Map("SMustUnderstand", "", "", ""));
+					ls.lx.so.Ln; ls.lx.so.Ln;
+					ls.EcrisRegle(aux1);
+				END;
+				ls.lx.so.Ln;
+				ls.lx.so.String(ls.lx.so.Map("Sor", "", "", ""));
+				ls.lx.so.String(" ");
+				IF act2 = D.deplaceS THEN
+					ls.lx.so.String(ls.lx.so.Map("SMustRead", "", "", ""));
+					ls.lx.so.Ln; ls.lx.so.Ln;
+					EcrisItem(aux2);
+				ELSE
+					ls.lx.so.String(ls.lx.so.Map("SMustUnderstand", "", "", ""));
+					ls.lx.so.Ln; ls.lx.so.Ln;
+					ls.EcrisRegle(aux2);
+				END;
+				ls.lx.so.Ln;
+				ls.lx.so.String(ls.lx.so.Map("SFirst", "", "", ""));
+				ls.lx.so.Ln; ls.lx.so.Ln; ls.lx.so.Ln;
+			END Conflit;
+		
+		PROCEDURE NumeroteEtats;
+			
+			VAR
+				
+				l: LRSet;
+			
+			BEGIN (*NumeroteEtats*)
+				l := ls.lRS;
+				c.nbEtatsSynt := 0;
+				WHILE l # NIL DO
+					l.numSet := c.nbEtatsSynt;
+					INC(c.nbEtatsSynt);
+					l := l.suivant;
+				END;
+			END NumeroteEtats;
+		
+		PROCEDURE CreeTables;
+			
+			VAR
+				
+				i, j: INTEGER;
+				r: Regle;
+				l: ListeAction;
+				p: ListeAttribs;
+				g: Gram;
+			
+			BEGIN (*CreeTables*)
+				NEW(c.actionSynt, c.nbEtatsSynt);
+				c.nbNonTSynt := 0;
+				c.nbRegleSynt := 0;
+				FOR i := 0 TO ls.nbNT - 1 DO
+					IF ls.dNT[i].utilNT THEN
+						ls.dNT[i].numerNT := c.nbNonTSynt;
+						INC(c.nbNonTSynt);
+						r := ls.dNT[i].regles;
+						WHILE r # NIL DO
+							r.nouvNumR := c.nbRegleSynt;
+							INC(c.nbRegleSynt);
+							l := r.actions;
+							WHILE l # NIL DO
+								p := l.action.params;
+								WHILE p # NIL DO
+									IF p.numTNT > 0 THEN
+										g := r.dGram;
+										FOR j := 2 TO p.numTNT DO
+											g := g.suivant;
+										END;
+										IF g.tOuNT THEN
+											c.toksLex[g.num].valUt := TRUE;
+										END;
+									END;
+									p := p.suivant;
+								END;
+								l := l.suivant;
+							END;
+							r := r.suivant;
+						END;
+					ELSE
+						ls.yAAttention := TRUE;
+						ls.lx.so.String(ls.lx.so.Map("AnWarning", "", "", ""));
+						ls.lx.so.Ln; ls.lx.so.Ln;
+						ls.lx.so.String(ls.lx.so.Map("SNeverUsedNonT", ls.EcrisNonTerm(i), "", ""));
+						ls.lx.so.Ln; ls.lx.so.Ln; ls.lx.so.Ln;
+						r := ls.dNT[i].regles;
+						WHILE r # NIL DO
+							r.nouvNumR := 0;
+							r := r.suivant;
+						END;
+					END;
+				END;
+				NEW(c.gotoSynt, c.nbNonTSynt);
+				NEW(c.regleSynt, c.nbRegleSynt);
+			END CreeTables;
+		
+		PROCEDURE CreeAux (OUT t: ActionTab; OUT test: D.Card; OUT rec: RecupTab);
+			
+			BEGIN (*CreeAux*)
+				NEW(t, c.nbToksLex);
+				NEW(test, c.nbEtatsSynt + c.nbRegleSynt);
+				NEW(rec, c.nbToksLex);
+			END CreeAux;
+		
+		PROCEDURE ParcoursEtats (t: ActionTab; test: D.Card; rec: RecupTab);
+			
+			VAR
+				
+				l: LRSet;
+				m, p: LRItem;
+				i, j: INTEGER;
+				a: D.ActionsSynt;
+			
+			PROCEDURE CreeReduit (nS: INTEGER; m: LRItem; t: ActionTab);
+				
+				VAR
+					
+					i: INTEGER;
+					a: BYTE;
+					r: Regle;
+				
+				BEGIN (*CreeReduit*)
+					IF m.posP = NIL THEN
+						FOR i := 0 TO c.nbToksLex - 1 DO
+							IF (i MOD taSet) IN m.look[i DIV taSet] THEN
+								IF m.regleP.numR = 0 THEN
+									a := D.accepteS;
+								ELSE
+									a := D.reduitS;
+								END;
+								IF t[i].quoiT = D.erreurS THEN
+									t[i].quoiT := a;
+									r := m.regleP;
+									t[i].auxT := r.nouvNumR;
+									t[i].numRT := r.numR;
+									t[i].precT := r.precR;
+									t[i].assocT := r.assocR;
+								ELSIF t[i].numRT <= m.regleP.numR THEN
+									Conflit(nS, i, t[i].quoiT, a, t[i].numRT, m.regleP.numR);
+								ELSE
+									Conflit(nS, i, a, t[i].quoiT, m.regleP.numR, t[i].numRT);
+									t[i].quoiT := a;
+									r := m.regleP;
+									t[i].auxT := r.nouvNumR;
+									t[i].numRT := r.numR;
+									t[i].precT := r.precR;
+									t[i].assocT := r.assocR;
+								END;
+							END;
+						END;
+					END;
+				END CreeReduit;
+			
+			PROCEDURE CreeRec (nS: INTEGER; m: LRItem; rec: RecupTab);
+				
+				VAR
+					
+					i: INTEGER;
+					s, q: RecupT;
+				
+				BEGIN (*CreeRec*)
+					IF (m.posN = 1) & ls.dNT[m.regleP.gNT].desc.mark THEN
+						FOR i := 0 TO c.nbToksLex - 1 DO
+							IF (i MOD taSet) IN m.look[i DIV taSet] THEN
+								s := rec[i];
+								q := NIL;
+								WHILE (s # NIL) & (s.etatDep # nS) DO
+									q := s;
+									s := s.suivant;
+								END;
+								IF s = NIL THEN
+									NEW(s);
+									s.etatDep := nS;
+									s.nTGoto := m.regleP.gNT;
+									IF q = NIL THEN
+										rec[i] := s;
+									ELSE
+										q.suivant := s;
+									END;
+								END;
+							END;
+						END;
+					END;
+				END CreeRec;
+			
+			PROCEDURE CreeDeplace (nS: INTEGER; g: LRGoto; t: ActionTab);
+				
+				VAR
+					
+					prTerm: INTEGER;
+					assTerm: BOOLEAN;
+				
+				BEGIN (*CreeDeplace*)
+					WHILE g # NIL DO
+						IF g.tOuNT THEN
+							IF t[g.tNT].quoiT = D.erreurS THEN
+								t[g.tNT].quoiT := D.deplaceS;
+								t[g.tNT].auxT := g.trans.numSet;
+							ELSE
+								ls.lx.Precedence(g.tNT, prTerm, assTerm);
+								IF (t[g.tNT].precT > prTerm) OR (t[g.tNT].precT = prTerm) & ~t[g.tNT].assocT THEN
+									Conflit(nS, g.tNT, t[g.tNT].quoiT, D.deplaceS, t[g.tNT].numRT, g.trans.numSet);
+								ELSE
+									Conflit(nS, g.tNT, D.deplaceS, t[g.tNT].quoiT, g.trans.numSet, t[g.tNT].numRT);
+									t[g.tNT].quoiT := D.deplaceS;
+									t[g.tNT].auxT := g.trans.numSet;
+								END;
+							END;
+						END;
+						g := g.suivant;
+					END;
+				END CreeDeplace;
+			
+			PROCEDURE TailleAction (t: ActionTab; test: D.Card; OUT ind: INTEGER): INTEGER;
+				
+				VAR
+					
+					i, n, ancTest, nbErr, sup: INTEGER;
+				
+				BEGIN (*TailleAction*)
+					nbErr := 0;
+					FOR i := 0 TO c.nbEtatsSynt + c.nbRegleSynt - 1 DO
+						test[i] := 0;
+					END;
+					ancTest := c.nbEtatsSynt + c.nbRegleSynt + 1;
+					FOR i := 0 TO c.nbToksLex - 1 DO
+						CASE t^[i].quoiT OF
+							|D.deplaceS:
+								IF t^[i].auxT + 1 # ancTest THEN
+									ancTest := t^[i].auxT + 1;
+									INC(test[t^[i].auxT]);
+								END;
+							|D.reduitS:
+								IF c.nbEtatsSynt + t^[i].auxT + 1 # ancTest THEN
+									ancTest := c.nbEtatsSynt + t^[i].auxT + 1;
+									INC(test[c.nbEtatsSynt + t^[i].auxT]);
+								END;
+							|D.accepteS:
+								IF c.nbEtatsSynt + 1 # ancTest THEN
+									ancTest := c.nbEtatsSynt + 1;
+									INC(test[c.nbEtatsSynt]);
+								END;
+							|D.erreurS:
+								IF ancTest # 0 THEN
+									ancTest := 0;
+									INC(nbErr);
+								END;
+						END;
+					END;
+					ind := - 1; sup := nbErr;
+					FOR i := 0 TO c.nbEtatsSynt + c.nbRegleSynt - 1 DO
+						IF test[i] > sup THEN
+							ind := i;
+							sup := test[i];
+						END;
+					END;
+					IF ind = - 1 THEN
+						n := 1;
+					ELSE
+						n := nbErr;
+					END;
+					FOR i := 0 TO c.nbEtatsSynt + c.nbRegleSynt - 1 DO
+						IF i = ind THEN
+							INC(n);
+						ELSE
+							INC(n, test[i]);
+						END;
+					END;
+					RETURN n;
+				END TailleAction;
+			
+			PROCEDURE CreeAction (actions: D.ActSynt; t: ActionTab; ind, nbT: INTEGER);
+				
+				VAR
+					
+					i, n, ancTest, x: INTEGER;
+				
+				BEGIN (*CreeAction*)
+					n := - 1;
+					ancTest := c.nbEtatsSynt + c.nbRegleSynt;
+					FOR i := 0 TO c.nbToksLex - 1 DO
+						CASE t[i].quoiT OF
+							|D.deplaceS:
+								IF t[i].auxT = ind THEN
+									ancTest := ind;
+									x := nbT - 1;
+								ELSE
+									IF t[i].auxT # ancTest THEN
+										ancTest := t[i].auxT;
+										INC(n);
+										actions[n].premTerm := i;
+									END;
+									x := n;
+								END;
+								actions[x].quoi := D.deplaceS;
+								actions[x].derTerm := i;
+								actions[x].aux := t[i].auxT;
+							|D.reduitS:
+								IF c.nbEtatsSynt + t[i].auxT = ind THEN
+									ancTest := ind;
+									x := nbT - 1;
+								ELSE
+									IF c.nbEtatsSynt + t[i].auxT # ancTest THEN
+										ancTest := c.nbEtatsSynt + t[i].auxT;
+										INC(n);
+										actions[n].premTerm := i;
+									END;
+									x := n;
+								END;
+								actions[x].quoi := D.reduitS;
+								actions[x].derTerm := i;
+								actions[x].aux := t[i].auxT;
+							|D.accepteS:
+								IF c.nbEtatsSynt = ind THEN
+									ancTest := ind;
+									x := nbT - 1;
+								ELSE
+									IF c.nbEtatsSynt # ancTest THEN
+										ancTest := c.nbEtatsSynt;
+										INC(n);
+										actions[n].premTerm := i;
+									END;
+									x := n;
+								END;
+								actions[x].quoi := D.accepteS;
+								actions[x].derTerm := i;
+							|D.erreurS:
+								IF ind = - 1 THEN
+									ancTest := ind;
+									x := nbT - 1;
+								ELSE
+									IF ancTest # - 1 THEN
+										ancTest := - 1;
+										INC(n);
+										actions[n].premTerm := i;
+									END;
+									x := n;
+								END;
+								actions[x].quoi := D.erreurS;
+								actions[x].derTerm := i;
+						END;
+					END;
+				END CreeAction;
+			
+			BEGIN (*ParcoursEtats*)
+				l := ls.lRS;
+				FOR i := 0 TO c.nbEtatsSynt - 1 DO
+					FOR j := 0 TO c.nbToksLex - 1 DO
+						t[j].quoiT := D.erreurS;
+					END;
+					m := ls.Closure1(l.set);
+					p := m;
+					WHILE p # NIL DO
+						CreeReduit(l.numSet, p, t);
+						CreeRec(l.numSet, p, rec);
+						p := p.suivant;
+					END;
+					CreeDeplace(l.numSet, l.goto, t);
+					a := c.actionSynt;
+					a[l.numSet].nbT := TailleAction(t, test, j);
+					NEW(a[l.numSet].actions, a[l.numSet].nbT);
+					CreeAction(a[l.numSet].actions, t, j, a[l.numSet].nbT);
+					l := l.suivant;
+				END;
+			END ParcoursEtats;
+		
+		PROCEDURE ParcoursGoto (test: D.Card);
+			
+			VAR
+				
+				i: INTEGER;
+			
+			PROCEDURE CreeAtts (l: ListeNT; VAR gto: D.GotoSynt);
+				
+				VAR
+					
+					i: INTEGER;
+					lNN: ListeNN;
+				
+				BEGIN (*CreeAtts*)
+					gto.nbAtts := 0;
+					lNN := l.lAtt;
+					WHILE lNN # NIL DO
+						INC(gto.nbAtts);
+						lNN := lNN.suivant;
+					END;
+					IF gto.nbAtts # 0 THEN
+						NEW(gto.typsAt, gto.nbAtts);
+					END;
+					lNN := l.lAtt;
+					FOR i := 0 TO gto.nbAtts - 1 DO
+						gto.typsAt[i] := lNN.num;
+						lNN := lNN.suivant;
+					END;
+				END CreeAtts;
+			
+			PROCEDURE CreeGoto (nNT: INTEGER; VAR gto: D.GotoSynt; test: D.Card);
+				
+				VAR
+					
+					i, ind, n, x: INTEGER;
+					l: LRSet;
+					g: LRGoto;
+				
+				BEGIN (*CreeGoto*)
+					FOR i := 0 TO c.nbEtatsSynt - 1 DO
+						test[i] := 0;
+					END;
+					l := ls.lRS;
+					WHILE l # NIL DO
+						g := l.goto;
+						WHILE g # NIL DO
+							IF ~g.tOuNT & (g.tNT = nNT) THEN
+								INC(test[g.trans.numSet]);
+							END;
+							g := g.suivant;
+						END;
+						l := l.suivant;
+					END;
+					ind := - 1; n := 0;
+					FOR i := 0 TO c.nbEtatsSynt - 1 DO
+						IF test[i] > n THEN
+							ind := i;
+							n := test[i];
+						END;
+					END;
+					gto.nbE := 0;
+					FOR i := 0 TO c.nbEtatsSynt - 1 DO
+						IF i = ind THEN
+							INC(gto.nbE);
+						ELSE
+							INC(gto.nbE, test[i]);
+						END;
+					END;
+					IF gto.nbE # 0 THEN
+						NEW(gto.gotos, gto.nbE);
+						DEC(ind);
+						l := ls.lRS; n := 0;
+						WHILE l # NIL DO
+							g := l.goto;
+							WHILE g # NIL DO
+								IF ~g.tOuNT & (g.tNT = nNT) THEN
+									IF g.trans.numSet = ind + 1 THEN
+										x := gto.nbE- 1;
+									ELSE
+										x := n;
+										INC(n);
+									END;
+									gto.gotos[x].depart := l.numSet;
+									gto.gotos[x].arrivee := g.trans.numSet;
+								END;
+								g := g.suivant;
+							END;
+							l := l.suivant;
+						END;
+					END;
+				END CreeGoto;
+			
+			PROCEDURE ParcoursRegles (nNT: INTEGER);
+				
+				VAR
+					
+					r: Regle;
+				
+				PROCEDURE CreeRegle (nNT: INTEGER; r: Regle);
+					
+					VAR
+						
+						d: Gram;
+					
+					BEGIN (*CreeRegle*)
+						d := r.dGram;
+						c.regleSynt[r.nouvNumR].longueur := 0;
+						WHILE d # NIL DO
+							INC(c.regleSynt[r.nouvNumR].longueur);
+							d := d.suivant;
+						END;
+						c.regleSynt[r.nouvNumR].nonTerm := nNT;
+					END CreeRegle;
+				
+				PROCEDURE CreeSem (r: Regle);
+					
+					VAR
+						
+						lA: ListeAction;
+						lAt: ListeAttribs;
+						i, j: INTEGER;
+						s: D.ActionsSem;
+						a: Action;
+					
+					BEGIN (*CreeSem*)
+						c.regleSynt[r.nouvNumR].nbAct := 0;
+						lA := r.actions;
+						WHILE lA # NIL DO
+							INC(c.regleSynt[r.nouvNumR].nbAct);
+							lA := lA.suivant;
+						END;
+						IF c.regleSynt[r.nouvNumR].nbAct # 0 THEN
+							NEW(c.regleSynt[r.nouvNumR].act, c.regleSynt[r.nouvNumR].nbAct);
+						END;
+						lA := r.actions;
+						s := c.regleSynt[r.nouvNumR].act;
+						FOR i := 0 TO c.regleSynt[r.nouvNumR].nbAct - 1 DO
+							a := lA.action;
+							s[i].sOrH := a.softOrHard;
+							IF a.numNT = 0 THEN
+								s[i].profG := 0;
+							ELSE
+								s[i].profG := c.regleSynt[r.nouvNumR].longueur + 1 - a.numNT;
+							END;
+							s[i].attG := a.numAtt;
+							s[i].fonc := a.numFct;
+							s[i].nbPars := 0;
+							lAt := a.params;
+							WHILE lAt # NIL DO
+								INC(s[i].nbPars);
+								lAt := lAt.suivant;
+							END;
+							IF s[i].nbPars > 0 THEN
+								NEW(s[i].pars, s[i].nbPars);
+							END;
+							lAt := a.params;
+							FOR j := 0 TO s[i].nbPars - 1 DO
+								IF lAt.numTNT = 0 THEN
+									s[i].pars[j].profD := 0;
+								ELSE
+									s[i].pars[j].profD := c.regleSynt[r.nouvNumR].longueur + 1 - lAt.numTNT;
+								END;
+								s[i].pars[j].attD := lAt.numAttrib;
+								lAt := lAt.suivant;
+							END;
+							lA := lA.suivant;
+						END;
+					END CreeSem;
+				
+				BEGIN (*ParcoursRegles*)
+					r := ls.dNT[nNT].regles;
+					WHILE r # NIL DO
+						CreeRegle(ls.dNT[nNT].numerNT, r);
+						CreeSem(r);
+						r := r.suivant;
+					END;
+				END ParcoursRegles;
+			
+			BEGIN (*ParcoursGoto*)
+				FOR i := 0 TO ls.nbNT - 1 DO
+					IF ls.dNT[i].utilNT THEN
+						CreeAtts(ls.dNT[i].desc, c.gotoSynt[ls.dNT[i].numerNT]);
+						CreeGoto(i, c.gotoSynt[ls.dNT[i].numerNT], test);
+						ParcoursRegles(i);
+					END;
+				END;
+			END ParcoursGoto;
+		
+		PROCEDURE CreeRec (rec: RecupTab);
+			
+			VAR
+				
+				i, j, k: INTEGER;
+				s: RecupT;
+			
+			PROCEDURE AffRec;
+				
+				VAR
+					
+					i, j, k: INTEGER;
+					b: BOOLEAN;
+				
+				BEGIN (*AffRec*)
+					FOR i := 0 TO ls.nbNT - 1 DO
+						b := TRUE;
+						FOR j := 0 TO c.nbRecTerms - 1 DO
+							k := 0;
+							LOOP
+								IF k >= c.recTerms[j].nbEtats THEN
+									EXIT;
+								END;
+								IF c.recTerms[j].recEtat[k].nTGoto = i THEN
+									IF b THEN
+										b := FALSE;
+										ls.lx.so.String(ls.lx.so.Map("AnRemark", "", "", ""));
+										ls.lx.so.Ln; ls.lx.so.Ln;
+										ls.lx.so.String(ls.lx.so.Map("SResumeAfter", ls.EcrisNonTerm(i), ls.lx.EcrisTerm(c.recTerms[j].numTerm), ""));
+									ELSE
+										ls.lx.so.String(ls.lx.so.Map("SorAfter", ls.lx.EcrisTerm(c.recTerms[j].numTerm), "", ""));
+									END;
+									EXIT;
+								END;
+								INC(k);
+							END;
+						END;
+						IF ~b THEN
+							ls.yAAffichage := TRUE;
+							ls.lx.so.String(".");
+							ls.lx.so.Ln; ls.lx.so.Ln; ls.lx.so.Ln;
+						END;
+					END;
+				END AffRec;
+			
+			BEGIN (*CreeRec*)
+				c.nbRecTerms := 0;
+				FOR i := 0 TO c.nbToksLex - 1 DO
+					IF rec[i] # NIL THEN
+						INC(c.nbRecTerms);
+					END;
+				END;
+				IF c.nbRecTerms # 0 THEN
+					NEW(c.recTerms, c.nbRecTerms);
+					j := - 1;
+					FOR i := 0 TO c.nbToksLex - 1 DO
+						IF rec[i] # NIL THEN
+							INC(j);
+							s := rec[i];
+							c.recTerms[j].numTerm := i;
+							c.recTerms[j].nbEtats := 0;
+							WHILE s # NIL DO
+								INC(c.recTerms[j].nbEtats);
+								s := s.suivant;
+							END;
+							NEW(c.recTerms[j].recEtat, c.recTerms[j].nbEtats);
+							s := rec[i];
+							FOR k := 0 TO c.recTerms[j].nbEtats - 1 DO
+								c.recTerms[j].recEtat[k].etatDep := s.etatDep;
+								c.recTerms[j].recEtat[k].nTGoto := s.nTGoto;
+								s := s.suivant;
+							END;
+						END;
+					END;
+					AffRec;
+					FOR j := 0 TO c.nbRecTerms - 1 DO
+						FOR k := 0 TO c.recTerms[j].nbEtats - 1 DO
+							c.recTerms[j].recEtat[k].nTGoto := ls.dNT[c.recTerms[j].recEtat[k].nTGoto].numerNT;
+						END;
+					END;
+				END;
+			END CreeRec;
+		
+		PROCEDURE Dump;
+			
+			VAR
+				
+				l: LRSet;
+				g: LRGoto;
+				s: ARRAY 5 OF CHAR;
+				i: LRItem;
+				j, n: INTEGER;
+				b1, b2: BOOLEAN;
+			
+			BEGIN (*Dump*)
+				ls.lx.so.String("Automate syntaxique :");
+				ls.lx.so.Ln; ls.lx.so.Ln;
+				l := ls.lRS;
+				WHILE l # NIL DO
+					ls.lx.so.String("Etat ");
+					D.CardToStr(l.numSet, s);
+					ls.lx.so.String(s);
+					ls.lx.so.Ln;
+					EcrisItemPtr(l.set);
+					ls.lx.so.Ln;
+					IF l.goto # NIL THEN
+						g := l.goto;
+						REPEAT
+							IF g.tOuNT THEN
+								ls.lx.so.String(ls.lx.EcrisTerm(g.tNT));
+							ELSE
+								ls.lx.so.String(ls.EcrisNonTerm(g.tNT));
+							END;
+							ls.lx.so.String(' : ');
+							D.CardToStr(g.trans.numSet, s);
+							ls.lx.so.String(s);
+							ls.lx.so.Ln;
+							g := g.suivant;
+						UNTIL g = NIL;
+						ls.lx.so.Ln;
+					END;
+					i := l.set;
+					n := 0; b2 := FALSE;
+					WHILE i # NIL DO
+						INC(n);
+						IF i.posP = NIL THEN
+							b2 := TRUE;
+							D.CardToStr(n, s); ls.lx.so.String(s);
+							ls.lx.so.String(' : ');
+							b1 := FALSE;
+							FOR j := 0 TO c.nbToksLex - 1 DO
+								IF (j MOD taSet) IN i.look[j DIV taSet] THEN
+									IF b1 THEN
+										ls.lx.so.String(', ');
+									ELSE
+										b1 := TRUE;
+									END;
+									ls.lx.so.String(ls.lx.EcrisTerm(j));
+								END;
+							END;
+							ls.lx.so.String('.'); ls.lx.so.Ln;
+						END;
+						i := i.suivant;
+					END;
+					IF b2 THEN
+						ls.lx.so.Ln;
+					END;
+					l := l.suivant;
+				END;
+			END Dump;
+		
+		BEGIN (*CreeSynt*)
+			IF dumping THEN
+				dump := FALSE;
+			END;
+			NumeroteEtats;
+			CreeTables;
+			CreeAux(t, test, rec);
+			ParcoursEtats(t, test, rec);
+			ParcoursGoto(test);
+			CreeRec(rec);
+			IF dumping & dump THEN
+				Dump;
+			END;
+		END CreeSynt;
+	
+	END BabelSyntaxe.

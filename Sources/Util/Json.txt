@@ -1,0 +1,703 @@
+MODULE UtilJson;
+	
+	IMPORT
+		
+		B := BabelCompil, Converters, Files, Stores, Strings, TextMappers, TextModels, TextViews, Views;
+	
+	CONST
+		
+		compDir = "Util/Rsrc"; (* Directory of compiler files *)
+		compName = "Json.tbl"; (* Json compiler *)
+	
+	TYPE
+		
+		Directory = POINTER TO RECORD (B.Directory) (* For compiler internalizing *)
+			r: Stores.Reader;
+		END;
+		
+		Compilation = POINTER TO RECORD (B.Compilation)
+			r: TextModels.Reader;
+			json: Json;
+		END;
+		
+		StringP* = POINTER TO ARRAY OF CHAR;
+		
+		Json* = POINTER TO LIMITED RECORD
+		END;
+		
+		Object* = POINTER TO LIMITED RECORD (Json)
+			fields-: Fields;
+		END;
+		
+		Fields* = POINTER TO ARRAY OF Field;
+		
+		Field* = LIMITED RECORD
+			name-: StringP;
+			value-: Value;
+		END;
+		
+		Array* = POINTER TO LIMITED RECORD (Json)
+			elements-: Values;
+		END;
+		
+		Values* = POINTER TO ARRAY OF Value;
+		
+		Value* = POINTER TO LIMITED RECORD
+		END;
+		
+		String* = POINTER TO LIMITED RECORD (Value)
+			s-: StringP;
+		END;
+		
+		Integer* = POINTER TO LIMITED RECORD (Value)
+			n-: LONGINT;
+		END;
+		
+		Real* = POINTER TO LIMITED RECORD (Value)
+			r-: REAL;
+		END;
+		
+		JsonVal* = POINTER TO LIMITED RECORD (Value)
+			json-: Json;
+		END;
+		
+		Bool* = POINTER TO LIMITED RECORD (Value)
+			bool-: BOOLEAN;
+		END;
+		
+		Null* = POINTER TO LIMITED RECORD (Value)
+		END;
+		
+		Stack = POINTER TO ABSTRACT RECORD
+			next: Stack;
+		END;
+		
+		StartObj = POINTER TO RECORD (Stack)
+		END;
+		
+		StartArr = POINTER TO RECORD (Stack)
+		END;
+		
+		STValue = POINTER TO RECORD (Stack)
+			val: Value;
+		END;
+		
+		STField = POINTER TO RECORD (Stack)
+			name: StringP;
+			value: Value;
+		END;
+	
+	VAR
+		
+		comp: B.Compiler; (* Compiler of json texts *)
+		
+		stack: Stack;
+	
+	(* Implementation of the standard procedures of Babel *)
+	PROCEDURE (d: Directory) ReadInt (OUT i: INTEGER);
+		
+		BEGIN (*ReadInt*)
+			d.r.ReadInt(i);
+		END ReadInt;
+	
+	PROCEDURE (c: Compilation) Read (OUT ch: CHAR);
+		
+		BEGIN (*Read*)
+			c.r.Read;
+			IF c.r.eot THEN
+				ch := B.eOF1;
+			ELSE
+				ch := c.r.char;
+			END;
+		END Read;
+	
+	PROCEDURE (c: Compilation) Pos (): INTEGER;
+		
+		BEGIN (*Pos*)
+			RETURN c.r.Pos();
+		END Pos;
+	
+	PROCEDURE (c: Compilation) SetPos (pos: INTEGER);
+		
+		BEGIN (*SetPos*)
+			IF pos <= c.r.Base().Length() THEN
+				c.r.SetPos(pos);
+			END;
+		END SetPos;
+	
+	PROCEDURE (c: Compilation) Execution (fNum, parsNb: INTEGER; pars: B.ObjectsList; OUT o: B.Object; OUT res: ANYPTR): BOOLEAN;
+		
+		CONST
+			
+			object = 1;
+			array = 2;
+			nil = 3;
+			cons = 4;
+			field = 5;
+			
+			json = 1;
+			string = 2;
+			number = 3;
+			true = 4;
+			false = 5;
+			null = 6;
+		
+		VAR
+			
+			ok: INTEGER;
+			n: Null;
+			b: Bool;
+			s: StringP;
+			int: Integer;
+			real: Real;
+			sp: String;
+			i: LONGINT;
+			r: REAL;
+		
+		PROCEDURE Eval (o: B.Object): Json;
+			
+			VAR
+				
+				ob: Object;
+				a: Array;
+			
+			PROCEDURE EvalVal (o: B.Object): Value;
+				
+				VAR
+					
+					j: JsonVal;
+				
+				BEGIN (*EvalVal*)
+					CASE o.ObjType() OF
+						|B.userObj:
+							RETURN o.ObjUser()(Value);
+						|B.termObj:
+							NEW(j);
+							j.json := Eval(o);
+							RETURN j;
+					END;
+				END EvalVal;
+			
+			PROCEDURE EvalObj (o: B.Object): Fields;
+				
+				VAR
+					
+					oo: B.Object;
+					n, i: INTEGER;
+					f: Fields;
+					s: StringP;
+				
+				BEGIN (*EvalObj*)
+					oo := o; n := 0;
+					WHILE oo.ObjFunc() = cons DO
+						INC(n);
+						oo := oo.ObjTermSon(3);
+					END;
+					ASSERT(oo.ObjFunc() = nil, 100);
+					IF n = 0 THEN
+						RETURN NIL;
+					END;
+					NEW(f, n);
+					FOR i := 0 TO n - 1 DO
+						oo := o.ObjTermSon(1);
+						NEW(s, oo.ObjStringLen() + 1); oo.ObjString(s);
+						NEW(f[i].name, LEN(s) - 2);
+						Strings.Extract(s, 1, LEN(s$) - 2, f[i].name);
+						f[i].value := EvalVal(o.ObjTermSon(2));
+						o := o.ObjTermSon(3);
+					END;
+					RETURN f;
+				END EvalObj;
+			
+			PROCEDURE EvalArr (o: B.Object): Values;
+				
+				VAR
+					
+					oo: B.Object;
+					n, i: INTEGER;
+					v: Values;
+				
+				BEGIN (*EvalArr*)
+					oo := o; n := 0;
+					WHILE oo.ObjFunc() = cons DO
+						INC(n);
+						oo := oo.ObjTermSon(2);
+					END;
+					ASSERT(oo.ObjFunc() = nil, 100);
+					IF n = 0 THEN
+						RETURN NIL;
+					END;
+					NEW(v, n);
+					FOR i := 0 TO n - 1 DO
+						v[i] := EvalVal(o.ObjTermSon(1));
+						o := o.ObjTermSon(2);
+					END;
+					RETURN v;
+				END EvalArr;
+			
+			BEGIN (*Eval*)
+				ASSERT(o.ObjType() = B.termObj, 20);
+				CASE o.ObjFunc() OF
+					|object:
+						NEW(ob);
+						ob.fields := EvalObj(o.ObjTermSon(1));
+						RETURN ob;
+					|array:
+						NEW(a);
+						a.elements := EvalArr(o.ObjTermSon(1));
+						RETURN a;
+				END;
+			END Eval;
+		
+		BEGIN (*Execution*)
+			o := pars[0];
+			CASE fNum OF
+				|json:
+					c.json := Eval(o);
+				|string:
+					NEW(sp);
+					NEW(s, o.ObjStringLen() + 1); o.ObjString(s);
+					NEW(sp.s, LEN(s) -2);
+					Strings.Extract(s, 1, LEN(s$) - 2, sp.s);
+					res := sp;
+				|number:
+					NEW(s, o.ObjStringLen() + 1); o.ObjString(s);
+					Strings.StringToLInt(s, i, ok);
+					IF ok = 0 THEN
+						NEW(int); int.n := i;
+						res := int;
+					ELSE
+						Strings.StringToReal(s, r, ok); ASSERT(ok = 0, 100);
+						NEW(real); real.r := r;
+						res := real;
+					END;
+				|true,
+				 false:
+					NEW(b);
+					b.bool := fNum = true;
+					res := b;
+				|null:
+					NEW(n);
+					res := n;
+			END;
+			RETURN TRUE;
+		END Execution;
+	
+	PROCEDURE Read* (IN path, name: ARRAY OF CHAR ): Json;
+		
+		CONST
+			
+			textConv = "CpcUtf8Conv.ExportUtf8";
+		
+		VAR
+			
+			n: Files.Name;
+			c: Compilation;
+			loc: Files.Locator;
+			conv: Converters.Converter;
+			v: Views.View;
+		
+		BEGIN (*Read*)
+			conv := Converters.list;
+			WHILE (conv # NIL) & (conv.exp # textConv) DO
+				conv := conv.next;
+			END;
+			ASSERT(conv # NIL, 100);
+			loc := Files.dir.This(path); ASSERT(loc.res = 0, 101);
+			n := name$;
+			v := Views.Old(Views.dontAsk, loc, n, conv);
+			IF (v = NIL) OR ~(v IS TextViews.View) THEN
+				RETURN NIL;
+			END;
+			NEW(c);
+			c.r := v(TextViews.View).ThisModel().NewReader(NIL);
+			IF ~c.Compile(comp, TRUE) THEN
+				RETURN NIL;
+			END;
+			RETURN c.json;
+		END Read;
+	
+	PROCEDURE (j:Json) Write* (fo: TextMappers.Formatter), NEW;
+		
+		PROCEDURE Indent (indent: INTEGER);
+			
+			VAR
+				
+				i: INTEGER;
+			
+			BEGIN (*Indent*)
+				FOR i := 1 TO indent DO
+					fo.WriteTab;
+				END;
+			END Indent;
+		
+		PROCEDURE WriteString (IN s: ARRAY OF CHAR);
+			
+			PROCEDURE JsonFilter (IN s: ARRAY OF CHAR): POINTER TO ARRAY OF CHAR;
+				
+				VAR
+					
+					i, j, n, p: INTEGER;
+					ss: POINTER TO ARRAY OF CHAR;
+				
+				BEGIN (*JsonFilter*)
+					n := LEN(s$);
+					p := n;
+					FOR i := 0 TO n - 1 DO
+						CASE s[i] OF
+							'"', '\':
+								INC(p);
+							ELSE
+						END;
+					END;
+					NEW(ss, p + 1);
+					j := 0;
+					FOR i := 0 TO n - 1 DO
+						CASE s[i] OF
+							'"', '\':
+								ss[j] := '\';
+								INC(j);
+							ELSE
+						END;
+						ss[j] := s[i];
+						INC(j);
+					END;
+					ss[j] := 0X;
+					RETURN ss;
+				END JsonFilter;
+			
+			BEGIN (*WriteString*)
+				fo.WriteString('"');
+				fo.WriteString(JsonFilter(s));
+				fo.WriteString('"');
+			END WriteString;
+		
+		PROCEDURE WriteJson (j: Json; indent: INTEGER);
+			
+			VAR
+				
+				i: INTEGER;
+			
+			PROCEDURE WriteVal (v: Value; indent: INTEGER);
+				
+				VAR
+					
+					i: INTEGER;
+				
+				BEGIN (*WriteVal*)
+					IF ~(v IS JsonVal) THEN
+						FOR i := 1 TO indent DO
+							fo.WriteTab;
+						END;
+					END;
+					WITH
+						|v: String DO
+							WriteString(v.s);
+						|v: Integer DO
+							fo.WriteInt(v.n);
+						|v: Real DO
+							fo.WriteReal(v.r);
+						|v: JsonVal DO
+							WriteJson(v.json, indent);
+						|v: Bool DO
+							IF v.bool THEN
+								fo.WriteString('true');
+							ELSE
+								fo.WriteString('false');
+							END;
+						|v: Null DO
+							fo.WriteString('null');
+					END;
+				END WriteVal;
+			
+			PROCEDURE WriteObj (f: Fields; indent: INTEGER);
+				
+				VAR
+					
+					i: INTEGER;
+				
+				PROCEDURE WriteField (IN f: Field; indent: INTEGER);
+					
+					BEGIN (*WriteField*)
+						Indent(indent);
+						WriteString(f.name);
+						fo.WriteString(':');
+						fo.WriteLn;
+						WriteVal(f.value, indent + 1);
+					END WriteField;
+				
+				BEGIN (*WriteObj*)
+					IF f # NIL THEN
+						WriteField(f[0], indent);
+						FOR i := 1 TO LEN(f) - 1 DO
+							fo.WriteString(',');
+							fo.WriteLn;
+							WriteField(f[i], indent);
+						END;
+						fo.WriteLn;
+					END;
+				END WriteObj;
+			
+			PROCEDURE WriteArr (v: Values; indent: INTEGER);
+				
+				BEGIN (*WriteArr*)
+					IF v # NIL THEN
+						WriteVal(v[0], indent);
+						FOR i := 1 TO LEN(v) - 1 DO
+							fo.WriteString(',');
+							fo.WriteLn;
+							WriteVal(v[i], indent);
+						END;
+						fo.WriteLn;
+					END;
+				END WriteArr;
+			
+			BEGIN (*WriteJson*)
+				WITH
+					|j: Object DO
+						Indent(indent);
+						fo.WriteString('{');
+						fo.WriteLn;
+						WriteObj(j.fields, indent + 1);
+						Indent(indent);
+						fo.WriteString('}');
+					|j: Array DO
+						Indent(indent);
+						fo.WriteString('[');
+						fo.WriteLn;
+						WriteArr(j.elements, indent + 1);
+						Indent(indent);
+						fo.WriteString(']');
+				END;
+			END WriteJson;
+		
+		BEGIN (*Write*)
+			WriteJson(j, 0);
+		END Write;
+	
+	PROCEDURE Push (s: Stack);
+		
+		BEGIN (*Push*)
+			s.next := stack;
+			stack := s;
+		END Push;
+	
+	PROCEDURE Pull (): Stack;
+		
+		VAR
+			
+			s: Stack;
+		
+		BEGIN (*Pull*)
+			ASSERT(stack # NIL, 20);
+			s := stack;
+			stack := s.next;
+			RETURN s;
+		END Pull;
+	
+	PROCEDURE StartObject*;
+		
+		VAR
+			
+			so: StartObj;
+		
+		BEGIN (*StartObject*)
+			NEW(so);
+			Push(so);
+		END StartObject;
+	
+	PROCEDURE StartArray*;
+		
+		VAR
+			
+			sa: StartArr;
+		
+		BEGIN (*StartArray*)
+			NEW(sa);
+			Push(sa);
+		END StartArray;
+	
+	PROCEDURE PushString* (IN s: ARRAY OF CHAR);
+		
+		VAR
+			
+			sv: STValue;
+			st: String;
+		
+		BEGIN (*PushString*)
+			NEW(st); NEW(st.s, LEN(s$) + 1); st.s^ := s$;
+			NEW(sv); sv.val := st;
+			Push(sv);
+		END PushString;
+	
+	PROCEDURE PushInteger* (n: LONGINT);
+		
+		VAR
+			
+			sv: STValue;
+			i: Integer;
+		
+		BEGIN (*PushInteger*)
+			NEW(i); i.n := n;
+			NEW(sv); sv.val := i;
+			Push(sv);
+		END PushInteger;
+	
+	PROCEDURE PushReal* (r: REAL);
+		
+		VAR
+			
+			sv: STValue;
+			re: Real;
+		
+		BEGIN (*PushReal*)
+			NEW(re); re.r := r;
+			NEW(sv); sv.val := re;
+			Push(sv);
+		END PushReal;
+	
+	PROCEDURE PushBoolean* (b: BOOLEAN);
+		
+		VAR
+			
+			sv: STValue;
+			bo: Bool;
+		
+		BEGIN (*PushBoolean*)
+			NEW(bo); bo.bool := b;
+			NEW(sv); sv.val := bo;
+			Push(sv);
+		END PushBoolean;
+	
+	PROCEDURE PushNull*;
+		
+		VAR
+			
+			sv: STValue;
+			n: Null;
+		
+		BEGIN (*PushNull*)
+			NEW(n); 
+			NEW(sv); sv.val := n;
+			Push(sv);
+		END PushNull;
+	
+	PROCEDURE BuildField* (IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			s: Stack;
+			sf: STField;
+		
+		BEGIN (*BuildField*)
+			s := Pull();
+			ASSERT(s IS STValue, 100);
+			NEW(sf);
+			NEW(sf.name, LEN(name$) + 1); sf.name^ := name$;
+			sf.value := s(STValue).val;
+			Push(sf);
+		END BuildField;
+	
+	PROCEDURE BuildObject*;
+		
+		VAR
+			
+			s: Stack;
+			n, i: INTEGER;
+			sf: STField;
+			f: Fields;
+			o: Object;
+			j: JsonVal;
+			sv: STValue;
+		
+		BEGIN (*BuildObject*)
+			s := stack; n := 0;
+			WHILE (s # NIL) & (s IS STField) DO
+				INC(n); s := s.next;
+			END;
+			ASSERT((s # NIL) & (s IS StartObj), 100);
+			IF n = 0 THEN
+				f := NIL;
+			ELSE
+				NEW(f, n);
+				FOR i := n - 1 TO 0 BY -1 DO
+					sf := Pull()(STField);
+					f[i].name := sf.name; f[i].value := sf.value;
+				END;
+			END;
+			s := Pull();
+			NEW(o); o.fields := f;
+			NEW(j); j.json := o;
+			NEW(sv); sv.val := j;
+			Push(sv);
+		END BuildObject;
+	
+	PROCEDURE BuildArray*;
+		
+		VAR
+			
+			s: Stack;
+			n, i: INTEGER;
+			vals: Values;
+			sv: STValue;
+			a: Array;
+			j: JsonVal;
+		
+		BEGIN (*BuildArray*)
+			s := stack; n := 0;
+			WHILE (s # NIL) & (s IS STValue) DO
+				INC(n); s := s.next;
+			END;
+			ASSERT((s # NIL) & (s IS StartArr), 100);
+			IF n = 0 THEN
+				vals := NIL;
+			ELSE
+				NEW(vals, n);
+				FOR i := n - 1 TO 0 BY -1 DO
+					sv := Pull()(STValue);
+					vals[i] := sv.val;
+				END;
+			END;
+			s := Pull();
+			NEW(a); a.elements := vals;
+			NEW(j); j.json := a;
+			NEW(sv); sv.val := j;
+			Push(sv);
+		END BuildArray;
+	
+	PROCEDURE GetJson* (): Json;
+		
+		VAR
+			
+			j: Json;
+		
+		BEGIN (*GetJson*)
+			ASSERT((stack # NIL) & (stack IS STValue) & (stack(STValue).val IS JsonVal), 20);
+			j := stack(STValue).val(JsonVal).json;
+			stack := NIL;
+			RETURN j;
+		END GetJson;
+	
+	PROCEDURE Init;
+		
+		VAR
+			
+			loc: Files.Locator;
+			d: Directory;
+			f: Files.File;
+		
+		BEGIN (*Init*)
+			(* Compilers reading *)
+			NEW(d);
+			loc := Files.dir.This(compDir);
+			ASSERT(loc.res = 0, 100);
+			f := Files.dir.Old(loc, compName, Files.shared);
+			ASSERT(f # NIL, 101);
+			d.r.ConnectTo(f);
+			comp := d.ReadCompiler();
+			stack := NIL;
+		END Init;
+	
+	BEGIN (*UtilJson*)
+		Init;
+	END UtilJson.

@@ -1,0 +1,63 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE DuniterLog;
+	
+	
+	
+	(* Simple Log *)
+	
+	IMPORT
+		
+		F := BasicsFiles;
+	
+	CONST
+		
+		logDir = "Duniter/Rsrc";
+		logName = "Log.txt";
+	
+	TYPE
+		
+		Log* = LIMITED RECORD
+			f: F.File;
+		END;
+	
+	VAR
+		
+		log*: Log;
+	
+	PROCEDURE (VAR log: Log) Msg* (IN m: ARRAY OF CHAR), NEW;
+		
+		BEGIN (*Msg*)
+			log.f.WriteString(SHORT(m), 0, LEN(m$));
+			log.f.WriteLn;
+			log.f.Flush;
+		END Msg;
+	
+	PROCEDURE Init;
+		
+		VAR
+			
+			res: INTEGER;
+		
+		BEGIN (*Init*)
+			IF F.Exists(logDir, logName) THEN
+				F.Delete(logDir, logName, res); ASSERT(res = 0, 100);
+			END;
+			F.OpenNew(logDir, logName, log.f, res); ASSERT(res = 0, 101);
+		END Init;
+	
+	BEGIN (*DuniterLog*)
+		Init;
+	CLOSE
+		log.f.Close;
+	END DuniterLog.

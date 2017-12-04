@@ -1,0 +1,15 @@
+BabelBinText
+
+DEFINITION BabelBinText;
+
+	PROCEDURE Do;
+
+END BabelBinText.
+
+
+This modules writes a Babel compiler (.tbl file) into an ARRAY OF INTEGER, named a. You can use this array to initialize a Babel compiler. See Babel/Mod/Init.odc and Babel/Mod/Init0.odc as an example.
+
+BabelBinText.Do;
+
+PROCEDURE Do
+Asks for a .tbl file and writes it into a new text.

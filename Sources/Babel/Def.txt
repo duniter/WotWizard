@@ -1,0 +1,289 @@
+(* 
+Babel: a compiler compiler.
+
+Copyright (C) 2001 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*)
+
+MODULE BabelDef;
+	
+	
+	
+	(* The module BabelDef is part of the Babel subsystem, a compiler compiler. BabelDef holds general definitions and methods. *)
+	
+	CONST
+		
+		eOS* = 0X; (* End of string *)
+
+		eOF1* = 0X;
+		eOF2* = 1AX; (* End of file = eOF1 or eOF2 *)
+
+		eOL1* = 0DX;
+		eOL2* = 0EX; (* End of line = eOL1, or eOL2, or eOL1 followed by eOL2 *)
+		
+		inf* = -1; ega* = 0; sup* = + 1; (* less than, equal, more than *)
+	
+	TYPE
+		
+		(* The following definitions are the same than those found in BabelCompil. See BabelCompil for further explanations *)
+		
+		String* = POINTER TO ARRAY OF CHAR;
+		
+		TokLex* = RECORD (* A token *)
+			nom*: String;
+			utile*,
+			valUt*: BOOLEAN;
+		END;
+		
+		ToksLex* = POINTER TO ARRAY OF TokLex;
+		
+		GotoLex* = POINTER TO ABSTRACT RECORD
+			goto*: INTEGER;
+		END;
+		
+		GotoLexC* = POINTER TO RECORD (GotoLex)
+			premCar*,
+			derCar*: CHAR;
+		END;
+		
+		GotoLexT* = POINTER TO RECORD (GotoLex)
+			transit*: INTEGER;
+		END;
+		
+		TransLex* = POINTER TO ARRAY OF GotoLex;
+		
+		Card* = POINTER TO ARRAY OF INTEGER;
+		
+		EtatLex* = RECORD
+			recon*,
+			nbTrans*,
+			nbEps*: INTEGER;
+			transL*: TransLex;
+		END;
+		
+		EtatsLex* = POINTER TO ARRAY OF EtatLex;
+	
+	CONST
+		
+		deplaceS* = 0;
+		reduitS* = 1;
+		accepteS* = 2;
+		erreurS* = 3;
+	
+	TYPE
+		
+		ActionS* = RECORD
+			quoi*: BYTE; (* deplaceS, reduitS, accepteS ou erreurS *)
+			premTerm*,
+			derTerm*,
+			aux*: INTEGER;
+		END;
+		
+		ActSynt* = POINTER TO ARRAY OF ActionS;
+		
+		ActionSynt* = RECORD
+			 nbT*: INTEGER;
+			 actions*: ActSynt;
+		 END;
+		
+		ActionsSynt* = POINTER TO ARRAY OF ActionSynt;
+		
+		GtS* = RECORD
+			depart*,
+			arrivee*: INTEGER;
+		END;
+		
+		GotoS* = POINTER TO ARRAY OF GtS;
+		
+		GotoSynt* = RECORD
+			 nbAtts*: INTEGER;
+			 typsAt*: Card;
+			 nbE*: INTEGER;
+			 gotos*: GotoS;
+		 END;
+		
+		GotosSynt* = POINTER TO ARRAY OF GotoSynt;
+		
+		Param* = RECORD
+			profD*,
+			attD*: INTEGER;
+		END;
+		
+		Params* = POINTER TO ARRAY OF Param;
+		
+		ActionSem* = RECORD
+			sOrH*: BOOLEAN;
+			profG*,
+			attG*,
+			fonc*,
+			nbPars*: INTEGER;
+			pars*: Params;
+		END;
+		
+		ActionsSem* = POINTER TO ARRAY OF ActionSem;
+		
+		RegleSynt* = RECORD
+			longueur*,
+			nonTerm*,
+			nbAct*: INTEGER;
+			act*: ActionsSem;
+		END;
+		
+		ReglesSynt* = POINTER TO ARRAY OF RegleSynt;
+		
+		RecEtat* = RECORD
+			etatDep*,
+			nTGoto*: INTEGER;
+		END;
+		
+		RecEtats* = POINTER TO ARRAY OF RecEtat;
+		
+		RecTerm* = RECORD
+			numTerm*,
+			nbEtats*: INTEGER;
+			recEtat*: RecEtats;
+		END;
+		
+		RecTerms* = POINTER TO ARRAY OF RecTerm;
+		
+		Compiler* = POINTER TO RECORD
+			nbToksLex*: INTEGER;
+			toksLex*: ToksLex;
+			nbEtatsLex*,
+			profEtatsL*: INTEGER;
+			etatsLex*: EtatsLex;
+			nbEtatsCom*,
+			profEtatsC*: INTEGER;
+			etatsCom*: EtatsLex;
+			nbEtatsSynt*: INTEGER;
+			actionSynt*: ActionsSynt;
+			nbNonTSynt*: INTEGER;
+			gotoSynt*: GotosSynt;
+			nbRegleSynt*: INTEGER;
+			regleSynt*: ReglesSynt;
+			nbRecTerms*: INTEGER;
+			recTerms*: RecTerms;
+		END;
+		
+		Sorties* = POINTER TO ABSTRACT RECORD
+		END;
+			
+			(* A collection of inout user defined methods. *)
+	
+	PROCEDURE (so: Sorties) String* (IN s: ARRAY OF CHAR), NEW, ABSTRACT;
+		
+		(* Writes a string *)
+	
+	PROCEDURE (so: Sorties) Ln*, NEW, ABSTRACT;
+		
+		(* Writes a carriage return. *)
+	
+	PROCEDURE (so: Sorties) Map* (IN index, p0, p1, p2: ARRAY OF CHAR): String, NEW, ABSTRACT;
+		
+		(* Maps an index text to a more lengthy one. p0, p1, p2 replaces, without mapping, instances of , respectively, ^0, ^1 and ^2 appearing in the replacement text. *)
+	
+	PROCEDURE CompStr* (s1, s2: String): BYTE;
+		
+		(* Compares alphabetically s1 and s2. Returns inf (s1< s2), ega or sup. *)
+		
+		BEGIN (*CompStr*)
+			IF s1$ < s2$ THEN
+				RETURN inf;
+			ELSIF s1$ > s2$ THEN
+				RETURN sup;
+			ELSE
+				RETURN ega;
+			END;
+		END CompStr;
+	
+	PROCEDURE Slice* (OUT sB: ARRAY OF CHAR; IN sS: ARRAY OF CHAR; p, l: INTEGER);
+		
+		(* Returns in sB a slice of sS, beginning at p and of lenth l. *)
+		
+		VAR
+			
+			i, m: INTEGER;
+		
+		BEGIN (*Slice*)
+			ASSERT(p >= 0);
+			l := MIN(l, LEN(sB) - 1);
+			m := LEN(sS$);
+			i := 0;
+			WHILE (i < l) & (p < m) DO
+				sB[i] := sS[p];
+				INC(i); INC(p);
+			END;
+			sB[i] := eOS;
+		END Slice;
+	
+	PROCEDURE CardToStr* (n: INTEGER; OUT s: ARRAY OF CHAR);
+		
+		(* Writes the integer n into the string s. *)
+		
+		VAR
+			
+			i, m: INTEGER;
+			c: CHAR;
+		
+		BEGIN (*CardToStr*)
+			ASSERT(n >= 0);
+			m := LEN(s) - 1;
+			i := 0;
+			WHILE (n > 0) & (i < m) DO
+				s[i] := CHR(n MOD 10 + ORD('0'));
+				n := n DIV 10;
+				INC(i);
+			END;
+			IF (i = 0) & (0 < m) THEN
+				s[0] := '0';
+				i := 1;
+			END;
+			s[i] := eOS;
+			DEC(i); n := 0;
+			WHILE i > n DO
+				c := s[i];
+				s[i] := s[n];
+				s[n] := c;
+				INC(n); DEC(i);
+			END;
+		END CardToStr;
+	
+	PROCEDURE StrToCard* (IN s: ARRAY OF CHAR; OUT n: INTEGER): BOOLEAN;
+		
+		(* Returns in n the value of the integer read from s. Result= TRUE if all is ok. *)
+		
+		VAR
+			
+			i, m: INTEGER;
+			cont: BOOLEAN;
+		
+		BEGIN (*StrToCard*)
+			m := LEN(s) - 1;
+			i := 0; n := 0;
+			IF s[m - 1] = 'H' THEN
+				cont := TRUE;
+				WHILE (i < m) & cont DO
+					IF (s[i] >= '0') & (s[i] <= '9') & (n <= (MAX(INTEGER) - ORD(s[i]) + ORD('0')) DIV 10H) THEN
+						n := n * 10H + (ORD(s[i]) - ORD('0'));
+					ELSIF (s[i] >= 'A') & (s[i] <= 'F') & (n <= (MAX(INTEGER) - ORD(s[i]) - 0AH + ORD('A')) DIV 10H) THEN
+						n := n * 10H + (ORD(s[i]) - ORD('A') + 0AH);
+					ELSE
+						cont := FALSE;
+					END;
+					INC(i);
+				END;
+			ELSE
+				WHILE (i < m) & (s[i] >= '0') & (s[i] <= '9') & (n <= (MAX(INTEGER) - ORD(s[i]) + ORD('0')) DIV 10) DO
+					n := n * 10 + (ORD(s[i]) - ORD('0'));
+					INC(i);
+				END;
+			END;
+			RETURN i = m;
+		END StrToCard;
+	
+	END BabelDef.

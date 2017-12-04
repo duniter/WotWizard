@@ -1,0 +1,57 @@
+Making of WotWizard
+WotWizard Client
+
+First, carry out the instructions in the file "MakingOfWWServer.odc".
+
+Then open this file itself in the BlackBox framework (Blackbox/Duniter/Docu/MakingOfWWViews.odc) and execute the commands below.
+
+ DevCompiler.CompileThis 
+UtilExternal DuniterWWViews 
+
+ DevDebug.UnloadThis 
+DuniterWWViews UtilExternal 
+
+ DevLinker.Link WotWizard.exe := 
+Kernel$+ Files HostFiles HostPackedFiles StdLoader
+1 Applogo.ico 2 Doclogo.ico 3 SFLogo.ico 4 CFLogo.ico 5 DtyLogo.ico
+6 folderimg.ico 7 openimg.ico 8 leafimg.ico
+1 Move.cur 2 Copy.cur 3 Link.cur 4 Pick.cur 5 Stop.cur 6 Hand.cur 7 Table.cur
+
+ DevPacker.PackThis WotWizard.exe :=
+Babel/Code/Compil.ocf Dev/Code/Search.ocf Duniter/Code/Basic.ocf Duniter/Code/WWViews.ocf Host/Code/CFrames.ocf Host/Code/Clipboard.ocf Host/Code/Cmds.ocf Host/Code/Dialog.ocf Host/Code/Files.ocf Host/Code/Fonts.ocf Host/Code/Mechanisms.ocf Host/Code/Menus.ocf Host/Code/Ports.ocf Host/Code/Printers.ocf Host/Code/Registry.ocf Host/Code/Windows.ocf Ole/Code/Data.ocf Std/Code/Api.ocf Std/Code/CFrames.ocf Std/Code/Cmds.ocf Std/Code/Dialog.ocf Std/Code/Interpreter.ocf Std/Code/Links.ocf Std/Code/Loader.ocf Std/Code/Log.ocf Std/Code/MenuTool.ocf System/Code/Containers.ocf System/Code/Controllers.ocf System/Code/Controls.ocf System/Code/Converters.ocf System/Code/Dates.ocf System/Code/Dialog.ocf System/Code/Documents.ocf System/Code/Files.ocf System/Code/Fonts.ocf System/Code/Init.ocf System/Code/Kernel.ocf System/Code/Log.ocf System/Code/Math.ocf System/Code/Mechanisms.ocf System/Code/Meta.ocf System/Code/Models.ocf System/Code/Ports.ocf System/Code/Printers.ocf System/Code/Printing.ocf System/Code/Properties.ocf System/Code/Sequencers.ocf System/Code/Services.ocf System/Code/Stores.ocf System/Code/Strings.ocf System/Code/Views.ocf System/Code/Windows.ocf Text/Code/Cmds.ocf Text/Code/Controllers.ocf Text/Code/Mappers.ocf Text/Code/Models.ocf Text/Code/Rulers.ocf Text/Code/Setters.ocf Text/Code/Views.ocf Unicode/Code/Case_Mapping.ocf Unicode/Code/Letter_Mapping.ocf Util/Code/AvlTree.ocf Util/Code/External.ocf Util/Code/Json.ocf
+
+Cpc/Code/Utf8Conv.ocf
+Dev/Code/Browser.ocf
+Dev/Code/Commanders.ocf
+Dev/Code/Debug.ocf
+Dev/Rsrc/Strings.odc
+Dev/Rsrc/fr/Strings.odc
+Duniter/Code/SAWWV-Config.ocf => System/Code/Config.ocf
+Duniter/Docu/Manual.odc
+Duniter/Docu/fr/Manual.odc
+Duniter/Rsrc/about.odc
+Duniter/Rsrc/SAWWV-Menus.odc => System/Rsrc/Menus.odc
+Duniter/Rsrc/Strings.odc
+Duniter/Rsrc/fr/Strings.odc
+Form/Code/Controllers.ocf
+Form/Code/Models.ocf
+Form/Code/Views.ocf
+Host/Code/Bitmaps.ocf
+Host/Code/Pictures.ocf
+Host/Code/TextConv.ocf
+Ole/Code/Client.ocf
+Ole/Code/Server.ocf
+Ole/Code/Storage.ocf
+Std/Code/Folds.ocf
+Std/Code/Headers.ocf
+Std/Code/Stamps.ocf
+System/Rsrc/Strings.odc
+System/Rsrc/fr/Strings.odc
+Text/Rsrc/Cmds.odc
+Text/Rsrc/Strings.odc
+Text/Rsrc/fr/Strings.odc
+Util/Rsrc/Json.tbl
+Xhtml/Code/Exporter.ocf
+
+Copy "BlackBox/WotWizard.exe" in the same directory as WWServer.exe.
+It's done.

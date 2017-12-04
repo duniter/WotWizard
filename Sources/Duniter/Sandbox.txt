@@ -1,7 +1,7 @@
 (* 
 Duniter: WotWizard.
 
-Copyright (C) 2017 Gérard Meunier
+Copyright (C) 2017 GérardMeunier
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
 
@@ -12,9 +12,9 @@ You should have received a copy of the GNU General Public License along with thi
 
 MODULE DuniterSandbox;
 	
+	
+	
 	(* Put the Duniter sandbox in AVL trees to access quickly sandbox data *)
-	
-	
 
 	IMPORT
 		
@@ -22,11 +22,11 @@ MODULE DuniterSandbox;
 		StdLog,
 		*)
 		
-		A := UtilAvlTree, B := DuniterBlockchain, S := SqlDB, Strings;
+		A := UtilAvlTree, B := DuniterBlockchain, BA := DuniterBasic, L := DuniterLog, Services, S := SqlDB, Strings;
 	
 	CONST
 		
-		driver = B.driver;
+		driver = B.driver; (* Driver SQLite *)
 		
 		hashLen* = 64;
 	
@@ -46,17 +46,18 @@ MODULE DuniterSandbox;
 			expires_on: LONGINT;
 		END;
 		
+		(* Elements of A.Tree for identities *)
 		IdE = POINTER TO ABSTRACT RECORD (A.Elem)
 			ref: Identity;
 		END;
 		
-		IdUidE = POINTER TO RECORD (IdE)
+		IdUidE = POINTER TO RECORD (IdE) (* Sorted by uid *)
 		END;
 		
-		IdPubE = POINTER TO RECORD (IdE)
+		IdPubE = POINTER TO RECORD (IdE) (* Sorted by pubkey *)
 		END;
 		
-		IdHashE = POINTER TO RECORD (IdE)
+		IdHashE = POINTER TO RECORD (IdE) (* Sorted by hash *)
 		END;
 		
 		(* SQLite record for "SELECT hash, pubkey, uid, buid, revocation_sig, expires_on FROM idty WHERE NOT written" *)
@@ -83,20 +84,21 @@ MODULE DuniterSandbox;
 			expires_on: LONGINT;
 		END;
 		
+		(* Elements of A.Tree for certifications *)
 		CertE = POINTER TO ABSTRACT RECORD (A.Elem)
 			ref: Certification;
-			list: A.Tree;
+			list: A.Tree; (* Subtree, sorted otherwise *)
 		END;
 		
-		CertFromE = POINTER TO RECORD (CertE)
+		CertFromE = POINTER TO RECORD (CertE) (* Sorted by ref.from *)
 		END;
 		
-		CertToE = POINTER TO RECORD (CertE)
+		CertToE = POINTER TO RECORD (CertE) (* Sorted by ref.to *)
 		END;
 		
-		CertPos* = RECORD
-			posT: A.Tree;
-			posCur: A.Elem;
+		CertPos* = RECORD (* Position in a certification subtree *)
+			posT: A.Tree; (* The subtree *)
+			posCur: A.Elem; (* The last seen element in the subtree *)
 		END;
 		
 		(* SQLite record for "SELECT [from], [to], target, expires_on FROM cert WHERE NOT written" *)
@@ -129,13 +131,7 @@ MODULE DuniterSandbox;
 		
 		BEGIN (*Compare*)
 			WITH i2: IdUidE DO
-				IF i1.ref.uid$ < i2.ref.uid$ THEN
-					RETURN A.lt;
-				END;
-				IF i1.ref.uid$ > i2.ref.uid$ THEN
-					RETURN A.gt;
-				END;
-				RETURN A.eq;
+				RETURN BA.CompP(i1.ref.uid, i2.ref.uid);
 			END;
 		END Compare;
 	
@@ -196,7 +192,7 @@ MODULE DuniterSandbox;
 		END Compare;
 	
 	(* uid -> Identity *)
-	PROCEDURE IdUid* (IN uid: ARRAY OF CHAR; OUT pubkey: Pubkey; OUT expires_on: LONGINT): BOOLEAN;
+	PROCEDURE IdUid* (IN uid: ARRAY OF CHAR; OUT hash: Hash): BOOLEAN;
 		
 		VAR
 			
@@ -212,8 +208,7 @@ MODULE DuniterSandbox;
 			e := uP;
 			IF idUidT.Search(e, n) THEN
 				WITH e: IdE DO
-					pubkey := e.ref.pubkey$;
-					expires_on := e.ref.expires_on;
+					hash := e.ref.hash$;
 				END;
 				RETURN TRUE;
 			END;
@@ -221,7 +216,7 @@ MODULE DuniterSandbox;
 		END IdUid;
 	
 	(* pubkey -> Identity *)
-	PROCEDURE IdPub* (IN pubkey: Pubkey; OUT uid: String; OUT expires_on: LONGINT): BOOLEAN;
+	PROCEDURE IdPub* (IN pubkey: Pubkey; OUT hash: Hash): BOOLEAN;
 		
 		VAR
 			
@@ -237,8 +232,7 @@ MODULE DuniterSandbox;
 			e := pU;
 			IF idPubT.Search(e, n) THEN
 				WITH e: IdE DO
-					NEW(uid, LEN(e.ref.uid$) + 1); uid^ := e.ref.uid$;
-					expires_on := e.ref.expires_on;
+					hash := e.ref.hash$;
 				END;
 				RETURN TRUE;
 			END;
@@ -278,6 +272,26 @@ MODULE DuniterSandbox;
 			RETURN idHashT.NumberOfElems();
 		END IdLen;
 	
+	(* Position next Identity's uid for IdNextUid *)
+	PROCEDURE IdPosUid* (IN uid: ARRAY OF CHAR);
+		
+		VAR
+			
+			id: Identity;
+			uP: IdUidE;
+			e: A.Elem;
+			n: INTEGER;
+			b: BOOLEAN;
+		
+		BEGIN (*IdPosUid*)
+			NEW(id);
+			NEW(id.uid, LEN(uid$) + 1); id.uid^ := uid$;
+			NEW(uP); uP.ref := id;
+			e := uP;
+			b := idUidT.SearchNext(e, n);
+			idUidCur := idUidT.Previous(e);
+		END IdPosUid;
+	
 	(* Browse all Identity's uid(s) lexicographically step by step *)
 	PROCEDURE IdNextUid* (first: BOOLEAN; OUT uid: String): BOOLEAN;
 		
@@ -295,6 +309,26 @@ MODULE DuniterSandbox;
 			RETURN TRUE;
 		END IdNextUid;
 	
+	(* Position next Identity's pubkey for IdNextPubkey *)
+	PROCEDURE IdPosPubkey* (IN pubkey: Pubkey);
+		
+		VAR
+			
+			id: Identity;
+			pU: IdPubE;
+			e: A.Elem;
+			n: INTEGER;
+			b: BOOLEAN;
+		
+		BEGIN (*IdPosPubkey*)
+			NEW(id);
+			id.pubkey := pubkey$;
+			NEW(pU); pU.ref := id;
+			e := pU;
+			b := idPubT.SearchNext(e, n);
+			idPubkeyCur := idPubT.Previous(e);
+		END IdPosPubkey;
+	
 	(* Browse all Identity's pubkey(s)  step by step *)
 	PROCEDURE IdNextPubkey* (first: BOOLEAN; OUT pubkey: Pubkey): BOOLEAN;
 		
@@ -311,6 +345,26 @@ MODULE DuniterSandbox;
 			END;
 			RETURN TRUE;
 		END IdNextPubkey;
+	
+	(* Position next Identity's hash for IdNextHash *)
+	PROCEDURE IdPosHash* (IN hash: Hash);
+		
+		VAR
+			
+			id: Identity;
+			hE: IdHashE;
+			e: A.Elem;
+			n: INTEGER;
+			b: BOOLEAN;
+		
+		BEGIN (*IdPosHash*)
+			NEW(id);
+			id.hash := hash$;
+			NEW(hE); hE.ref := id;
+			e := hE;
+			b := idHashT.SearchNext(e, n);
+			idHashCur := idHashT.Previous(e);
+		END IdPosHash;
 	
 	(* Browse all Identity's hash(es)  step by step *)
 	PROCEDURE IdNextHash* (first: BOOLEAN; OUT hash: Hash): BOOLEAN;
@@ -362,7 +416,7 @@ MODULE DuniterSandbox;
 			RETURN FALSE;
 		END Cert;
 	
-	(* Pubkey -> head of sub-tree *)
+	(* Pubkey -> head of subtree *)
 	PROCEDURE CertFrom* (IN from: Pubkey; OUT pos: CertPos): BOOLEAN;
 		
 		VAR
@@ -387,7 +441,7 @@ MODULE DuniterSandbox;
 			RETURN FALSE;
 		END CertFrom;
 	
-	(* Hash -> head of sub-tree *)
+	(* Hash -> head of subtree *)
 	PROCEDURE CertTo* (IN toHash: Hash; OUT pos: CertPos): BOOLEAN;
 		
 		VAR
@@ -412,14 +466,14 @@ MODULE DuniterSandbox;
 			RETURN FALSE;
 		END CertTo;
 	
-	(* Number of elements in sub-tree *)
+	(* Number of elements in subtree *)
 	PROCEDURE (IN pos: CertPos) CertPosLen* (): INTEGER, NEW;
 		
 		BEGIN (*CertPosLen*)
 			RETURN pos.posT.NumberOfElems();
 		END CertPosLen;
 	
-	(* Browse all Certification(s) in a sub-tree step by step *)
+	(* Browse all Certification(s) in a subtree step by step *)
 	PROCEDURE (VAR pos: CertPos) CertNextPos* (OUT from, to: Pubkey; OUT toHash: Hash; OUT expires_on: LONGINT): BOOLEAN, NEW;
 		
 		VAR
@@ -448,7 +502,7 @@ MODULE DuniterSandbox;
 			RETURN certFromT.NumberOfElems();
 		END CertFromLen;
 	
-	(* Browse all sub-trees for all from Pubkey step by step *)
+	(* Browse all subtrees for all from Pubkey step by step *)
 	PROCEDURE CertNextFrom* (first: BOOLEAN; OUT pos: CertPos): BOOLEAN;
 		
 		BEGIN (*CertNextFrom*)
@@ -473,7 +527,7 @@ MODULE DuniterSandbox;
 			RETURN certToT.NumberOfElems();
 		END CertToLen;
 	
-	(* Browse all sub-trees for all toHash Hash step by step *)
+	(* Browse all subtrees for all toHash Hash step by step *)
 	PROCEDURE CertNextTo* (first: BOOLEAN; OUT pos: CertPos): BOOLEAN;
 		
 		BEGIN (*CertNextFrom*)
@@ -667,25 +721,31 @@ MODULE DuniterSandbox;
 			END;
 		END Certifications;
 	
+	(* Scan the sandbox in the Duniter database *)
 	PROCEDURE Scan;
 		
 		VAR
 			
 			d: S.Database;
 			res: INTEGER;
+			t: LONGINT;
+			s: BA.TimeString;
 		
 		BEGIN (*Scan*)
+			L.log.Msg("Loading sandbox");
+			t := Services.Ticks();
 			S.OpenDatabase(driver, "", "", B.duniBase, S.sync, S.hideErrors, d, res); ASSERT(res = 0, 100);
 			Identities(d);
 			Memberships(d);
 			Certifications(d);
+			BA.TimeToString(Services.Ticks() - t, s);
+			L.log.Msg("End loading sandbox. Time spent: " + s);
 		END Scan;
 	
 	PROCEDURE Init;
 		
 		BEGIN (*Init*)
 			B.AddUpdateProc(Scan);
-			Scan;
 		END Init;
 	
 	BEGIN (*DuniterSandbox*)

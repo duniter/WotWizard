@@ -1,0 +1,1434 @@
+(* 
+Babel: a compiler compiler.
+
+Copyright (C) 2001 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*)
+
+MODULE BabelLexique;
+	
+	
+	
+	(* The module BabelLexique is part of the Babel subsystem, a compiler compiler. BabelLexique translates regular expressions given in a definition document into automata. *)
+	
+	IMPORT
+		
+		(*Debug*)
+		
+		C := BabelCars, D := BabelDef;
+	
+	CONST
+		
+		eOS = D.eOS;
+		
+		eOF1 = D.eOF1;
+		eOF2 = D.eOF2;
+		
+		eOL1 = D.eOL1;
+		eOL2 = D.eOL2;
+		
+		nomEOFC = "LEOF"; (* "end of file" name *)
+	
+	TYPE
+		
+		LexExp* = POINTER TO ABSTRACT RECORD
+			nullable: BOOLEAN;
+			firstPos,
+			lastPos,
+			followPos: ListLexExp;
+			numPos: INTEGER;
+		END;
+			
+			(* A lexical regular expression. *)
+		
+		LexExpOrL = POINTER TO RECORD (LexExp)
+			exp1,
+			exp2: LexExp;
+		END;
+		
+		LexExpCatL = POINTER TO RECORD (LexExp)
+			exp1,
+			exp2: LexExp;
+		END;
+		
+		LexExpStarL = POINTER TO RECORD (LexExp)
+			exp: LexExp;
+		END;
+		
+		LexExpSlashL = POINTER TO RECORD (LexExp)
+			exp: LexExp;
+		END;
+		
+		LexExpEpsL = POINTER TO RECORD (LexExp)
+		END;
+		
+		LexExpCarL = POINTER TO RECORD (LexExp)
+			cars: C.CarEns;
+		END;
+		
+		LexExpEndL = POINTER TO RECORD (LexExp)
+			numTok: INTEGER;
+		END;
+		
+		ListLexExp = POINTER TO RECORD
+			suivant: ListLexExp;
+			lExp: LexExp;
+		END;
+		
+		LDef = POINTER TO RECORD
+			suivant: LDef;
+			lNom: D.String;
+			lExp: LexExp;
+			prec: INTEGER;
+			assoc,
+			utilise: BOOLEAN;
+		END;
+		
+		ListLLE = POINTER TO RECORD
+			 suivant: ListLLE;
+			 num,
+			 numA: INTEGER;
+			 etat: ListLexExp;
+			 trans: ListTrans;
+		 END;
+		
+		ListTrans = POINTER TO ABSTRACT RECORD
+			 suivant: ListTrans;
+			 etatSuiv: ListLLE;
+		 END;
+		
+		ListTransReg = POINTER TO RECORD (ListTrans)
+			eC: C.CarEns;
+		 END;
+		
+		ListTransEps = POINTER TO RECORD (ListTrans)
+			etatEps: ListLLE;
+		 END;
+		
+		Lexical* = POINTER TO RECORD
+			so*: D.Sorties;
+			listeDef,
+			listeTerm: LDef;
+			listeTok,
+			listeCom: LexExp;
+			listeEtats,
+			listeECom: ListLLE;
+			numeroT,
+			profLex,
+			profCom: INTEGER;
+		END;
+	
+	VAR
+		
+		affichable: C.CarEns; (* Set of displayable characters *)
+		nomEOF: D.String;
+	
+	(*Debug*)
+	
+	PROCEDURE InitAffichable;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*InitAffichable*)
+			C.NewCarEns(affichable);
+			FOR i := 20H TO 7EH DO
+				affichable.Incl(i);
+			END;
+			FOR i := 0A0H TO 0FFH DO
+				affichable.Incl(i);
+			END;
+			affichable.Incl(8BH);
+			affichable.Incl(8FH);
+			affichable.Incl(90H);
+			affichable.Incl(91H);
+		END InitAffichable;
+	
+	PROCEDURE CreeOrL* (e1, e2: LexExp): LexExp;
+		
+		VAR
+			
+			ex: LexExpOrL;
+		
+		BEGIN (*CreeOrL*)
+			NEW(ex);
+			ex.exp1 := e1;
+			ex.exp2 := e2;
+			RETURN ex;
+		END CreeOrL;
+	
+	PROCEDURE CreeCatL* (e1, e2: LexExp): LexExp;
+		
+		VAR
+			
+			ex: LexExpCatL;
+		
+		BEGIN (*CreeCatL*)
+			NEW(ex);
+			ex.exp1 := e1;
+			ex.exp2 := e2;
+			RETURN ex;
+		END CreeCatL;
+	
+	PROCEDURE CreeStarL* (e: LexExp): LexExp;
+		
+		VAR
+			
+			ex: LexExpStarL;
+		
+		BEGIN (*CreeStarL*)
+			NEW(ex);
+			ex.exp := e;
+			RETURN ex;
+		END CreeStarL;
+	
+	PROCEDURE CreeEpsL* (): LexExp;
+		
+		VAR
+			
+			ex: LexExpEpsL;
+		
+		BEGIN (*CreeEpsL*)
+			NEW(ex);
+			RETURN ex;
+		END CreeEpsL;
+	
+	PROCEDURE CreeCarL* (c: C.CarEns): LexExp;
+		
+		VAR
+			
+			ex: LexExpCarL;
+		
+		BEGIN (*CreeCarL*)
+			NEW(ex);
+			ex.cars := c;
+			RETURN ex;
+		END CreeCarL;
+	
+	PROCEDURE CreeSlashL (e: LexExp): LexExp;
+		
+		VAR
+			
+			ex: LexExpSlashL;
+		
+		BEGIN (*CreeSlashL*)
+			NEW(ex);
+			ex.exp := e;
+			RETURN ex;
+		END CreeSlashL;
+	
+	PROCEDURE CreeEndL (n: INTEGER): LexExp;
+		
+		VAR
+			
+			ex: LexExpEndL;
+		
+		BEGIN (*CreeEndL*)
+			NEW(ex);
+			ex.numTok := n;
+			RETURN ex;
+		END CreeEndL;
+	
+	PROCEDURE CreeEOLL* (): LexExp;
+		
+		VAR
+			
+			c1, c2: C.CarEns;
+		
+		BEGIN (*CreeEOLL*)
+			C.NewCarEns(c1); c1.Incl(ORD(eOL1));
+			C.NewCarEns(c2); c2.Incl(ORD(eOL2));
+			RETURN CreeOrL(CreeCatL(CreeCarL(c1), CreeOrL(CreeCarL(c2), CreeEpsL())), CreeCatL(CreeOrL(CreeCarL(c1), CreeEpsL()), CreeCarL(c2)));
+		END CreeEOLL;
+	
+	PROCEDURE CreeSuiviL* (e1, e2: LexExp): LexExp;
+		
+		BEGIN (*CreeSuiviL*)
+			RETURN CreeCatL(e1, CreeSlashL(CreeCatL(e2, CreeEndL(0))));
+		END CreeSuiviL;
+	
+	PROCEDURE CopieListLexExp (l: ListLexExp): ListLexExp;
+		
+		VAR
+			
+			m, p: ListLexExp;
+		
+		BEGIN (*CopieListLexExp*)
+			NEW(m);
+			p := m;
+			WHILE l # NIL DO
+				NEW(p.suivant);
+				p := p.suivant;
+				p.lExp := l.lExp;
+				l := l.suivant;
+			END;
+			RETURN m.suivant;
+		END CopieListLexExp;
+	
+	PROCEDURE CopieLexExp* (e: LexExp): LexExp;
+		
+		VAR
+			
+			f: LexExp;
+		
+		BEGIN (*CopieLexExp*)
+			IF e = NIL THEN
+				RETURN NIL;
+			ELSE
+				WITH 
+					|e: LexExpOrL DO
+						 f := CreeOrL(CopieLexExp(e.exp1), CopieLexExp(e.exp2));
+					|e: LexExpCatL DO
+						 f := CreeCatL(CopieLexExp(e.exp1), CopieLexExp(e.exp2));
+					|e: LexExpStarL DO
+						 f := CreeStarL(CopieLexExp(e.exp));
+					|e: LexExpSlashL DO
+						 f := CreeSlashL(CopieLexExp(e.exp));
+					|e: LexExpEpsL DO
+						 f := CreeEpsL();
+					|e: LexExpCarL DO
+						 f := CreeCarL(e.cars);
+					|e: LexExpEndL DO
+						 f := CreeEndL(e.numTok);
+				END;
+				f.nullable := e.nullable;
+				f.firstPos := CopieListLexExp(e.firstPos);
+				f.lastPos := CopieListLexExp(e.lastPos);
+				f.followPos := CopieListLexExp(e.followPos);
+				f.numPos := e.numPos;
+				RETURN f;
+			END;
+		END CopieLexExp;
+	
+	PROCEDURE InsereListL (VAR liste: LDef; nom: D.String; pr: INTEGER; ass: BOOLEAN; expL: LexExp): BOOLEAN;
+		
+		VAR
+			
+			l, m: LDef;
+		
+		BEGIN (*InsereListL*)
+			l := liste;
+			LOOP
+				IF l = NIL THEN
+					EXIT;
+				END;
+				CASE D.CompStr(l.lNom, nom) OF
+					|D.inf:
+						m := l;
+						l := l.suivant;
+					|D.ega:
+						RETURN FALSE;
+					|D.sup:
+						EXIT;
+				END;
+			END;
+			NEW(l);
+			l.lNom := nom;
+			l.lExp := expL;
+			l.prec := pr;
+			l.assoc := ass;
+			l.utilise := FALSE;
+			IF m = NIL THEN
+				l.suivant := liste;
+				liste := l;
+			ELSE
+				l.suivant := m.suivant;
+				m.suivant := l;
+			END;
+			RETURN TRUE;
+		END InsereListL;
+	
+	PROCEDURE (lx: Lexical) InsereDefL* (nom: D.String; expL: LexExp): BOOLEAN, NEW;
+		
+		BEGIN (*InsereDefL*)
+			RETURN InsereListL(lx.listeDef, nom, 0, FALSE, expL);
+		END InsereDefL;
+	
+	PROCEDURE (lx: Lexical) DefComment* (debCom, finCom: LexExp), NEW;
+		
+		VAR
+		
+			e: LexExp;
+		
+		BEGIN (*DefComment*)
+			e := CreeOrL(CreeCatL(debCom, CreeEndL(1)), CreeCatL(finCom, CreeEndL(2)));
+			lx.listeTok := CreeOrL(lx.listeTok, CopieLexExp(e));
+			lx.listeCom := CreeOrL(lx.listeCom, e);
+		END DefComment;
+	
+	PROCEDURE ChercheListL (liste: LDef; nom: D.String; OUT lExpL: LDef): BOOLEAN;
+		
+		BEGIN (*ChercheListL*)
+			lExpL := liste;
+			LOOP
+				IF lExpL = NIL THEN
+					RETURN FALSE;
+				END;
+				CASE D.CompStr(lExpL.lNom, nom) OF
+					|D.inf:
+						lExpL := lExpL.suivant;
+					|D.ega:
+						RETURN TRUE;
+					|D.sup:
+						RETURN FALSE;
+				END;
+			END;
+		END ChercheListL;
+	
+	PROCEDURE (lx: Lexical) InsereTokL* (nom: D.String; pr: INTEGER; ass: BOOLEAN; expL: LexExp): BOOLEAN, NEW;
+		
+		VAR
+			
+			l: LDef;
+		
+		BEGIN (*InsereTokL*)
+			expL := CreeCatL(expL, CreeEndL(lx.numeroT));
+			INC(lx.numeroT);
+			IF ~ChercheListL(lx.listeDef, nom, l) & InsereListL(lx.listeTerm, nom, pr, ass, expL) THEN
+				IF lx.listeTok = NIL THEN
+					lx.listeTok := CopieLexExp(expL);
+				ELSE
+					lx.listeTok := CreeOrL(lx.listeTok, CopieLexExp(expL));
+				END;
+				RETURN TRUE;
+			ELSE
+				RETURN FALSE;
+			END;
+		END InsereTokL;
+	
+	PROCEDURE (lx: Lexical) InitTokL*, NEW;
+		
+		VAR
+			
+			s: D.String;
+			b: BOOLEAN;
+			c: C.CarEns;
+		
+		BEGIN (*InitTokL*)
+			nomEOF := lx.so.Map(nomEOFC, "", "", "");
+			lx.numeroT := 0;
+			NEW(s, 1); s[0] := eOS;
+			C.NewCarEns(c); c.Incl(ORD(eOF1)); c.Incl(ORD(eOF2));
+			b := lx.InsereTokL(s, 0, FALSE, CreeCarL(c));
+			lx.listeCom := CreeCatL(CreeCarL(c), CreeEndL(0));
+			lx.listeTerm.utilise := TRUE;
+			lx.numeroT := 3;
+		END InitTokL;
+	
+	PROCEDURE (lx: Lexical) ChercheTokL* (nom: D.String; OUT expL: LexExp): BOOLEAN, NEW;
+		
+		VAR
+			
+			l: LDef;
+		
+		BEGIN (*ChercheTokL*)
+			IF ChercheListL(lx.listeDef, nom, l) THEN
+				expL := l.lExp;
+				RETURN TRUE;
+			ELSIF ChercheListL(lx.listeTerm, nom, l) THEN
+				expL := l.lExp(LexExpCatL).exp1;
+				RETURN TRUE;
+			ELSE
+				RETURN FALSE;
+			END;
+		END ChercheTokL;
+	
+	PROCEDURE InsereLLE (VAR l: ListLexExp; e: LexExp);
+		
+		VAR
+			
+			m, p: ListLexExp;
+		
+		BEGIN (*InsereLLE*)
+			p := l;
+			WHILE (p # NIL) & (p.lExp.numPos < e.numPos) DO
+				m := p;
+				p := p.suivant;
+			END;
+			NEW(p);
+			p.lExp := e;
+			IF m = NIL THEN
+				p.suivant := l;
+				l := p;
+			ELSE
+				p.suivant := m.suivant;
+				m.suivant := p;
+			END;
+		END InsereLLE;
+	
+	PROCEDURE UnionLLE (l1, l2: ListLexExp): ListLexExp;
+		
+		VAR
+			
+			l, m: ListLexExp;
+		
+		BEGIN (*UnionLLE*)
+			NEW(l);
+			m := l;
+			WHILE (l1 # NIL) OR (l2 # NIL) DO
+				NEW(l.suivant); l := l.suivant;
+				IF l1 = NIL THEN
+					l.lExp := l2.lExp;
+					l2 := l2.suivant;
+				ELSIF l2 = NIL THEN
+					l.lExp := l1.lExp;
+					l1 := l1.suivant;
+				ELSIF l1.lExp.numPos < l2.lExp.numPos THEN
+					l.lExp := l1.lExp;
+					l1 := l1.suivant;
+				ELSIF l1.lExp.numPos > l2.lExp.numPos THEN
+					l.lExp := l2.lExp;
+					l2 := l2.suivant;
+				ELSE
+					l.lExp := l1.lExp;
+					l1 := l1.suivant;
+					l2 := l2.suivant;
+				END;
+			END;
+			RETURN m.suivant;
+		END UnionLLE;
+	
+	PROCEDURE EgLLE (l1, l2: ListLexExp): BOOLEAN;
+		
+		BEGIN (*EgLLE*)
+			WHILE (l1 # NIL) & (l2 # NIL) & (l1.lExp = l2.lExp) DO
+				l1 := l1.suivant;
+				l2 := l2.suivant;
+			END;
+			RETURN l1 = l2;
+		END EgLLE;
+	
+	PROCEDURE CherchInsListLLE (VAR l: ListLLE; e: ListLexExp; VAR n: INTEGER; nA: INTEGER): ListLLE;
+		
+		VAR
+			
+			m, p: ListLLE;
+		
+		BEGIN (*CherchInsListLLE*)
+			p := l;
+			WHILE (p # NIL) & ~EgLLE(p.etat, e) DO
+				m := p;
+				p := p.suivant;
+			END;
+			IF p = NIL THEN
+				NEW(p);
+				p.num := n;
+				p.numA := nA;
+				p.etat := e;
+				INC(n);
+				IF m = NIL THEN
+					p.suivant := l;
+					l := p;
+				ELSE
+					p.suivant := m.suivant;
+					m.suivant := p;
+				END;
+			END;
+			RETURN p;
+		END CherchInsListLLE;
+	
+	PROCEDURE InsereTrans (VAR l: ListTrans; eC: C.CarEns; e: ListLLE);
+		
+		VAR
+			
+			p, m: ListTrans;
+			q: ListTransReg;
+		
+		BEGIN (*InsereTrans*)
+			p := l;
+			WHILE (p # NIL) & (p.etatSuiv # e) DO
+				m := p;
+				p := p.suivant;
+			END;
+			IF p = NIL THEN
+				NEW(q);
+				C.NewCarEns(q.eC);
+				q.etatSuiv := e;
+				IF m = NIL THEN
+					q.suivant := l;
+					l := q;
+				ELSE
+					q.suivant := m.suivant;
+					m.suivant := q;
+				END;
+			ELSE
+				q := p(ListTransReg);
+			END;
+			q.eC.Union(q.eC, eC);
+		END InsereTrans;
+	
+	PROCEDURE InsereTransEps (VAR l: ListTrans; epsT, e: ListLLE);
+		
+		VAR
+			
+			p: ListTransEps;
+		
+		BEGIN (*InsereTransEps*)
+			NEW(p);
+			p.etatEps := epsT;
+			p.etatSuiv := e;
+			p.suivant := l;
+			l := p;
+		END InsereTransEps;
+	
+	PROCEDURE (lx: Lexical)EffaceDef*, NEW;
+		
+		BEGIN (*EffaceDef*)
+			lx.listeDef := NIL;
+		END EffaceDef;
+	
+	PROCEDURE (lx: Lexical) FabriqueLex*, NEW;
+		
+		VAR
+			
+			n, prof, profMax: INTEGER;
+		
+		PROCEDURE Calcul (e: LexExp);
+			
+			PROCEDURE FaitFollow (l1, l2: ListLexExp);
+				
+				VAR
+					
+					e: LexExp;
+				
+				BEGIN (*FaitFollow*)
+					WHILE l1 # NIL DO
+						e := l1.lExp;
+						e.followPos := UnionLLE(e.followPos, l2);
+						l1 := l1.suivant;
+					END;
+				END FaitFollow;
+			
+			BEGIN (*Calcul*)
+				WITH
+					|e: LexExpOrL DO
+						Calcul(e.exp1);
+						Calcul(e.exp2);
+						e.nullable := e.exp1.nullable OR e.exp2.nullable;
+						e.firstPos := UnionLLE(e.exp1.firstPos, e.exp2.firstPos);
+						e.lastPos := UnionLLE(e.exp1.lastPos, e.exp2.lastPos);
+					|e: LexExpCatL DO
+						Calcul(e.exp1);
+						Calcul(e.exp2);
+						e.nullable := e.exp1.nullable & e.exp2.nullable;
+						IF e.exp1.nullable THEN
+							e.firstPos := UnionLLE(e.exp1.firstPos, e.exp2.firstPos);
+						ELSE
+							e.firstPos := CopieListLexExp(e.exp1.firstPos);
+						END;
+						IF e.exp2.nullable THEN
+							e.lastPos := UnionLLE(e.exp1.lastPos, e.exp2.lastPos);
+						ELSE
+							e.lastPos := CopieListLexExp(e.exp2.lastPos);
+						END;
+						FaitFollow(e.exp1.lastPos, e.exp2.firstPos);
+					|e: LexExpStarL DO
+						Calcul(e.exp);
+						e.nullable := TRUE;
+						e.firstPos := CopieListLexExp(e.exp.firstPos);
+						e.lastPos := CopieListLexExp(e.exp.lastPos);
+						FaitFollow(e.lastPos, e.firstPos);
+					|e: LexExpEpsL DO
+						e.nullable := TRUE;
+					|e: LexExpSlashL DO
+						INC(prof);
+						profMax := MAX(prof, profMax);
+						Calcul(e.exp);
+						DEC(prof);
+						e.numPos := n;
+						INC(n);
+						e.nullable := FALSE;
+						InsereLLE(e.firstPos, e);
+						InsereLLE(e.lastPos, e);
+					|e: LexExpCarL DO
+						e.numPos := n;
+						INC(n);
+						e.nullable := e.cars.IsEmpty();
+						InsereLLE(e.firstPos, e);
+						InsereLLE(e.lastPos, e);
+					|e: LexExpEndL DO
+						e.numPos := n;
+						INC(n);
+						e.nullable := FALSE;
+						InsereLLE(e.firstPos, e);
+						InsereLLE(e.lastPos, e);
+				END;
+			END Calcul;
+		
+		PROCEDURE Etats (lT: LexExp; VAR lE: ListLLE);
+			
+			TYPE
+				
+				ListePos = POINTER TO RECORD
+					suivant: ListePos;
+					pos: ListLexExp;
+					eC: C.CarEns;
+				END;
+			
+			VAR
+				
+				l, p: ListLLE;
+				m, u: ListLexExp;
+				e: LexExp;
+				n, q, nA: INTEGER;
+				lP: ListePos;
+			
+			PROCEDURE Reduit (VAR lE: ListLLE; nbA: INTEGER);
+				
+				TYPE
+					
+					Auto = POINTER TO RECORD
+						suivant,
+						precedent: Auto;
+						lllE: ListLLE;
+					END;
+					
+					EnsAuto = POINTER TO RECORD
+						suivant: EnsAuto;
+						auto: Auto;
+						rec: INTEGER;
+					 END;
+					
+					AutoTab = POINTER TO ARRAY OF EnsAuto;
+				
+				VAR
+					
+					aT: AutoTab;
+					
+					l: ListLLE;
+					n, i: INTEGER;
+				
+				PROCEDURE Red (VAR lE: ListLLE; nA: INTEGER);
+					
+					VAR
+						
+						eA: EnsAuto;
+					
+					PROCEDURE InitEns (lE: ListLLE; nA: INTEGER; OUT eA: EnsAuto);
+						
+						VAR
+							
+							a, b, c: Auto;
+							n: INTEGER;
+							p: ListLexExp;
+							e: EnsAuto;
+							le: LexExp;
+							
+						BEGIN (*InitEns*)
+							WHILE lE # NIL DO
+								IF lE.numA = nA THEN
+									NEW(b);
+									b.suivant := a;
+									b.lllE := lE;
+									a := b;
+								END;
+								lE := lE.suivant;
+							END;
+							eA := NIL;
+							WHILE a # NIL DO
+								b := a.suivant;
+								n := MAX(INTEGER);
+								p := a.lllE.etat;
+								WHILE p # NIL DO
+									le := p.lExp;
+									IF (le IS LexExpEndL) & (le(LexExpEndL).numTok < n) THEN
+										n := le(LexExpEndL).numTok;
+									END;
+									p := p.suivant;
+								END;
+								e := eA;
+								WHILE (e # NIL) & (e.rec # n) DO
+									e := e.suivant;
+								END;
+								IF e = NIL THEN
+									NEW(e);
+									e.suivant := eA;
+									NEW(c);
+									e.auto := c;
+									c.suivant := c;
+									c.precedent := c;
+									e.rec := n;
+									eA := e;
+								END;
+								a.precedent := e.auto;
+								a.suivant := e.auto.suivant;
+								aT[a.lllE.num] := e;
+								e.auto.suivant.precedent := a;
+								e.auto.suivant := a;
+								a := b;
+							END;
+						END InitEns;
+
+					PROCEDURE Partitionne (VAR eA: EnsAuto);
+						
+						TYPE
+							
+							TransAuto = POINTER TO ABSTRACT RECORD
+								suivant: TransAuto;
+								eS: INTEGER;
+							END;
+							
+							TransAutoReg = POINTER TO RECORD (TransAuto)
+								ensC: C.CarEns;
+							END;
+							
+							TransAutoEps = POINTER TO RECORD (TransAuto)
+								eps: INTEGER;
+							END;
+						
+						VAR
+								
+							e, f, eF: EnsAuto;
+							n: INTEGER;
+							a, b, c, d: Auto;
+							tB, tC: TransAuto;
+						
+						PROCEDURE ConsTransA (l: ListTrans): TransAuto;
+							
+							VAR
+								
+								t, tt, ttt: TransAuto;
+								tR: TransAutoReg;
+								tE: TransAutoEps;
+								nS, nE, n: INTEGER;
+								b, lE: BOOLEAN;
+							
+							PROCEDURE CompTransA (eS1, eS2, eE1, eE2: INTEGER; tE1, tE2: BOOLEAN): BYTE;
+
+								BEGIN (*CompTransA*)
+									IF tE1 THEN
+										IF tE2 THEN
+											IF eS1 < eS2 THEN
+												RETURN D.inf;
+											ELSIF eS1 > eS2 THEN
+												RETURN D.sup;
+											ELSIF eE1 < eE2 THEN
+												RETURN D.inf;
+											ELSIF eE1 > eE2 THEN
+												RETURN D.sup;
+											ELSE
+												RETURN D.ega;
+											END;
+										ELSE
+											RETURN D.inf;
+										END;
+									ELSIF tE2 THEN
+										RETURN D.sup;
+									ELSIF eS1 < eS2 THEN
+										RETURN D.inf;
+									ELSIF eS1 > eS2 THEN
+										RETURN D.sup;
+									ELSE
+										RETURN D.ega;
+									END;
+								END CompTransA;
+							
+							BEGIN (*ConsTransA*)
+								WHILE l # NIL DO
+									nS := aT[l.etatSuiv.num].rec;
+									lE := l IS ListTransEps;
+									IF lE THEN
+										nE := l(ListTransEps).etatEps.num;
+									END;
+									tt := t; ttt := NIL;
+									LOOP
+										IF tt = NIL THEN
+											EXIT;
+										END;
+										b := tt IS TransAutoEps;
+										IF b THEN
+											n := tt(TransAutoEps).eps;
+										END;
+										IF CompTransA(tt.eS, nS, n, nE, b, lE) # D.inf THEN
+											EXIT;
+										END;
+										ttt := tt;
+										tt := ttt.suivant;
+									END;
+									IF (tt = NIL) OR (CompTransA(tt.eS, nS, n, nE, b, lE) = D.sup) THEN
+										IF lE THEN
+											NEW(tE);
+											tE.eps := nE;
+											tt := tE;
+										ELSE
+											NEW(tR);
+											C.NewCarEns(tR.ensC);
+											tt := tR;
+										END; 
+										tt.eS := nS;
+										IF ttt = NIL THEN
+											tt.suivant := t;
+											t := tt;
+										ELSE
+											tt.suivant := ttt.suivant;
+											ttt.suivant := tt;
+										END;
+									END;
+									IF ~lE THEN
+										tt(TransAutoReg).ensC.Union(tt(TransAutoReg).ensC, l(ListTransReg).eC);
+									END;
+									l := l.suivant;
+								END;
+								RETURN t;
+							END ConsTransA;
+
+						PROCEDURE EgalTransA (t1, t2: TransAuto): BOOLEAN;
+
+							BEGIN (*EgalTransA*)
+								WHILE (t1 # NIL) & (t2 # NIL) & (t1.eS = t2.eS) & ((t1 IS TransAutoEps) = (t2 IS TransAutoEps)) & ((t1 IS TransAutoEps) & (t1(TransAutoEps).eps = t2(TransAutoEps).eps) OR (t1 IS TransAutoReg) & t1(TransAutoReg).ensC.Equal(t2(TransAutoReg).ensC)) DO
+									t1 := t1.suivant; t2 := t2.suivant;
+								END;
+								RETURN t1 = t2;
+							END EgalTransA;
+						
+						BEGIN (*Partitionne*)
+							n := 0; e := eA;
+							WHILE e # NIL DO
+								e.rec := n; INC(n);
+								f := e;
+								e := f.suivant;
+							END;
+							LOOP
+								eF := f;
+								e := eA;
+								LOOP
+									b := e.auto.suivant;
+									c := b.suivant;
+									IF c # e.auto THEN
+										NEW(a);
+										a.suivant := a;
+										a.precedent := a;
+										tB := ConsTransA(b.lllE.trans);
+										REPEAT
+											d := c.suivant;
+											tC := ConsTransA(c.lllE.trans);
+											IF ~EgalTransA(tB, tC) THEN
+												c.suivant.precedent := c.precedent;
+												c.precedent.suivant := c.suivant;
+												c.suivant := a;
+												c.precedent := a.precedent;
+												a.precedent.suivant := c;
+												a.precedent := c;
+											END;
+											c := d;
+										UNTIL c = e.auto;
+										IF a.suivant # a THEN
+											NEW(f.suivant); f := f.suivant;
+											f.auto := a;
+											f.rec := n;
+											INC(n);
+										END;
+									END;
+									IF e = f THEN
+										EXIT;
+									END;
+									e := e.suivant;
+								END;
+								IF f = eF THEN
+									EXIT;
+								END;
+								e := eF;
+								REPEAT
+									e := e.suivant;
+									a := e.auto.suivant;
+									REPEAT
+										aT[a.lllE.num] := e;
+										a := a.suivant;
+									UNTIL a = e.auto;
+								UNTIL e = f;
+							END;
+						END Partitionne;
+					
+					PROCEDURE Elimine (VAR eA: EnsAuto);
+						
+						VAR
+							
+							a: Auto;
+							l, ll: ListLLE;
+							tr, t1, t2, t3: ListTrans;
+							e: EnsAuto;
+						
+						BEGIN (*Elimine*)
+							e := eA;
+							WHILE e # NIL DO
+								a := e.auto.suivant;
+								l := a.lllE;
+								tr := l.trans;
+								t1 := tr; t2 := NIL;
+								WHILE t1 # NIL DO
+									t1.etatSuiv := aT[t1.etatSuiv.num].auto.suivant.lllE;
+									IF (t1 IS ListTransEps) & (t1.etatSuiv = l) THEN
+										t1 := t1.suivant;
+										IF t2 = NIL THEN
+											tr := t1; l.trans := t1;
+										ELSE
+											t2.suivant := t1;
+										END;
+									ELSE
+										t3 := tr;
+										WHILE (t3 # t1) & ((t3.etatSuiv # t1.etatSuiv) OR ((t3 IS ListTransEps) OR (t1 IS ListTransEps)) & (~((t3 IS ListTransEps) & (t1 IS ListTransEps)) OR (t3(ListTransEps).etatEps # t1(ListTransEps).etatEps))) DO
+											t3 := t3.suivant;
+										END;
+										IF t3 = t1 THEN
+											t2 := t1;
+											t1 := t2.suivant;
+										ELSE
+											IF t3 IS ListTransReg THEN
+												t3(ListTransReg).eC.Union(t3(ListTransReg).eC, t1(ListTransReg).eC);
+											END;
+											t1 := t1.suivant;
+											t2.suivant := t1;
+										END;
+									END;
+								END;
+								e := e.suivant;
+							END;
+							WHILE eA # NIL DO
+								a := eA.auto.suivant;
+								l := a.lllE;
+								eA.auto.precedent.suivant := NIL;
+								a := a.suivant;
+								eA := eA.suivant;
+								WHILE a # NIL DO
+									WHILE l # a.lllE DO
+										ll := l;
+										l := ll.suivant;
+									END;
+									ll.suivant := l.suivant;
+									l := ll.suivant;
+									a := a.suivant;
+								END;
+							END;
+						END Elimine;
+					
+					BEGIN (*Red*)
+						InitEns(lE, nA, eA);
+						Partitionne(eA);
+						Elimine(eA);
+					END Red;
+				
+				PROCEDURE Numerote (lE: ListLLE);
+					
+					BEGIN (*Numerote*)
+						n := 0;
+						WHILE lE # NIL DO
+							lE.num := n;
+							INC(n);
+							lE := lE.suivant;
+						END;
+					END Numerote;
+				
+				BEGIN (*Reduit*)
+					n := 0; l := lE;
+					WHILE l # NIL DO
+						INC(n); l := l.suivant;
+					END;
+					NEW(aT, n);
+					FOR i := 0 TO nbA - 1 DO
+						Red(lE, i);
+					END;
+					Numerote(lE);
+				END Reduit;
+			
+			PROCEDURE AjouteListePos (VAR lP: ListePos; e: LexExpCarL);
+				
+				VAR
+					
+					eC1, eC2: C.CarEns;
+					l, ll: ListePos;
+					m: ListLexExp;
+				
+				BEGIN (*AjouteListePos*)
+					C.NewCarEns(eC1);
+					C.NewCarEns(eC2);
+					eC1.Copy(e.cars);
+					l := lP;
+					WHILE (l # NIL) & ~eC1.IsEmpty() DO
+						eC2.Inter(l.eC, eC1);
+						IF ~eC2.IsEmpty() THEN
+							NEW(m);
+							m.suivant := l.pos;
+							m.lExp := e;
+							IF eC2.Equal(l.eC) THEN
+								l.pos := m;
+							ELSE
+								l.eC.Diff(l.eC, eC2);
+								NEW(ll);
+								ll.suivant := lP;
+								ll.pos := m;
+								C.NewCarEns(ll.eC);
+								ll.eC.Copy(eC2);
+								lP := ll;
+							END;
+							eC1.Diff(eC1, eC2);
+						END;
+						l := l.suivant;
+					END;
+					IF ~eC1.IsEmpty() THEN
+						NEW(m);
+						m.lExp := e;
+						NEW(ll);
+						ll.suivant := lP;
+						ll.pos := m;
+						ll.eC := eC1;
+						lP := ll;
+					END;
+				END AjouteListePos;
+			
+			BEGIN (*Etats*)
+				n := 0;
+				u := UnionLLE(u, lT.firstPos);
+				l := CherchInsListLLE(lE, u, n, 0);
+				nA := 1;
+				WHILE l # NIL DO
+					lP := NIL;
+					m := l.etat;
+					WHILE m # NIL DO
+						e := m.lExp;
+						IF e IS LexExpCarL THEN
+							AjouteListePos(lP, e(LexExpCarL));
+						END;
+						m := m.suivant;
+					END;
+					WHILE lP # NIL DO
+						u := NIL;
+						m := lP.pos;
+						WHILE m # NIL DO
+							u := UnionLLE(u, m.lExp.followPos);
+							m := m.suivant;
+						END;
+						IF u # NIL THEN
+							InsereTrans(l.trans, lP.eC, CherchInsListLLE(lE, u, n, l.numA));
+						END;
+						lP := lP.suivant;
+					END;
+					m := l.etat;
+					WHILE m # NIL DO
+						e := m.lExp;
+						IF e IS LexExpSlashL THEN
+							u := NIL;
+							u := UnionLLE(u, e.followPos);
+							p := CherchInsListLLE(lE, u, n, l.numA);
+							IF p # l THEN
+								u := NIL;
+								u := UnionLLE(u, e(LexExpSlashL).exp.firstPos);
+								q := n;
+								InsereTransEps(l.trans, CherchInsListLLE(lE, u, n, nA), p);
+								IF n > q THEN
+									INC(nA);
+								END;
+							END;
+						END;
+						m := m.suivant;
+					END;
+					l := l.suivant;
+				END;
+				Reduit(lE, nA);
+			END Etats;
+		
+		BEGIN (*FabriqueLex*)
+			n := 0;
+			prof := 1; profMax := 1;
+			Calcul(lx.listeTok);
+			lx.profLex := profMax;
+			Etats(lx.listeTok, lx.listeEtats);
+			n := 0;
+			prof := 1; profMax := 1;
+			Calcul(lx.listeCom);
+			lx.profCom := profMax;
+			Etats(lx.listeCom, lx.listeECom);
+		END FabriqueLex;
+	
+	PROCEDURE (lx: Lexical) ChercheTerm* (term: D.String; OUT numT: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			l: LDef;
+		
+		BEGIN (*ChercheTerm*)
+			IF ChercheListL(lx.listeTerm, term, l) THEN
+				numT := l.lExp(LexExpCatL).exp2(LexExpEndL).numTok;
+				l.utilise := TRUE;
+				RETURN TRUE;
+			ELSE
+				RETURN FALSE;
+			END;
+		END ChercheTerm;
+	
+	PROCEDURE (lx: Lexical) CherchePrec* (term: D.String; OUT pr: INTEGER; OUT ass: BOOLEAN): BOOLEAN, NEW;
+		
+		VAR
+			
+			l: LDef;
+		
+		BEGIN (*CherchePrec*)
+			IF ChercheListL(lx.listeTerm, term, l) THEN
+				pr := l.prec;
+				ass := l.assoc;
+				RETURN TRUE;
+			ELSE
+				RETURN FALSE;
+			END;
+		END CherchePrec;
+	
+	PROCEDURE (lx: Lexical) Precedence* (numT: INTEGER; OUT pr: INTEGER; OUT ass: BOOLEAN), NEW;
+		
+		VAR
+			
+			l: LDef;
+		
+		BEGIN (*Precedence*)
+			l := lx.listeTerm;
+			WHILE l.lExp(LexExpCatL).exp2(LexExpEndL).numTok # numT DO
+				l := l.suivant;
+			END;
+			pr := l.prec;
+			ass := l.assoc;
+		END Precedence;
+	
+	PROCEDURE (lx: Lexical) NbTerm* (): INTEGER, NEW;
+		
+		BEGIN (*NbTerm*)
+			RETURN lx.numeroT;
+		END NbTerm;
+	
+	PROCEDURE (lx: Lexical) CreeLex* (): D.Compiler, NEW;
+		
+		CONST
+			
+			nbToksCom = 3;
+		
+		VAR
+			
+			c: D.Compiler;
+			l: LDef;
+			i: INTEGER;
+			e: LexExp;
+		
+		PROCEDURE FaitNom (e: LexExp; OUT nom: D.String): BOOLEAN;
+			
+			VAR
+				
+				n: INTEGER;
+			
+			PROCEDURE Unique (e: LexExp): BOOLEAN;
+				
+				VAR
+					
+					c: INTEGER;
+					b: BOOLEAN;
+								
+				BEGIN (*Unique*)
+					WITH
+						|e: LexExpCatL DO
+							RETURN Unique(e.exp1) & Unique(e.exp2);
+						|e: LexExpCarL DO
+							IF e.cars.In(ORD(D.eOS)) THEN
+								RETURN FALSE;
+							END;
+							INC(n);
+							IF e.cars.nbCars # 1 THEN
+								RETURN FALSE;
+							END;
+							c := ORD(MIN(CHAR)) - 1;
+							b := e.cars.NextChar(c);
+							ASSERT(b);
+							RETURN affichable.In(c);
+						ELSE
+							RETURN FALSE;
+					END;
+				END Unique;
+
+			PROCEDURE CopieNom (e: LexExp);
+
+				VAR
+
+					c: INTEGER;
+					b: BOOLEAN;
+
+				BEGIN (*CopieNom*)
+					WITH
+						|e: LexExpCatL DO
+							CopieNom(e.exp1);
+							CopieNom(e.exp2);
+						|e: LexExpCarL DO
+							c := ORD(MIN(CHAR)) - 1;
+							b := e.cars.NextChar(c);
+							ASSERT(b);
+							nom[n] := CHR(c);
+							INC(n);
+					END;
+				END CopieNom;
+
+			BEGIN (*FaitNom*)
+				n := 2;
+				IF Unique(e) THEN
+					NEW(nom, n + 1);
+					nom[0] := '"';
+					nom[n - 1] := '"';
+					nom[n] := D.eOS;
+					n := 1;
+					CopieNom(e);
+					RETURN TRUE;
+				ELSE
+					RETURN FALSE;
+				END;
+			END FaitNom;
+
+		PROCEDURE CreeAuto (maxT: INTEGER; lE: ListLLE; OUT nE: INTEGER; OUT eL: D.EtatsLex);
+
+			VAR
+
+				m: ListLLE;
+				i, j, k, l: INTEGER;
+				p: ListLexExp;
+				q: ListTrans;
+				e: LexExp;
+				gC: D.GotoLexC;
+				gT: D.GotoLexT;
+				g: D.GotoLex;
+
+			BEGIN (*CreeAuto*)
+				nE := 0;
+				m := lE;
+				WHILE m # NIL DO
+					INC(nE);
+					m := m.suivant;
+				END;
+				NEW(eL, nE);
+				m := lE;
+				FOR i := 0 TO nE- 1 DO
+					p := m.etat;
+					eL[m.num].recon := maxT;
+					WHILE p # NIL DO
+						e := p.lExp;
+						IF (e IS LexExpEndL) & (e(LexExpEndL).numTok < eL[m.num].recon) THEN
+							eL[m.num].recon := e(LexExpEndL).numTok;
+						END;
+						p := p.suivant;
+					END;
+					q := m.trans;
+					eL[m.num].nbTrans := 0;
+					eL[m.num].nbEps := 0;
+					WHILE (q # NIL) & (q IS ListTransEps) DO
+						INC(eL[m.num].nbEps);
+						INC(eL[m.num].nbTrans);
+						q := q.suivant;
+					END;
+					WHILE q # NIL DO
+						IF q(ListTransReg).eC.First(j, k) THEN
+							REPEAT
+								INC(eL[m.num].nbTrans);
+							UNTIL ~q(ListTransReg).eC.Next(j, k);
+						END;
+						q := q.suivant;
+					END;
+					IF eL[m.num].nbTrans # 0 THEN
+						NEW(eL[m.num].transL, eL[m.num].nbTrans);
+						j := 0;
+						q := m.trans;
+						WHILE (q # NIL) & (q IS ListTransEps) DO
+							NEW(gT);
+							gT.goto := q.etatSuiv.num;
+							gT.transit := q(ListTransEps).etatEps.num;
+							eL[m.num].transL[j] := gT;
+							INC(j);
+							q := q.suivant;
+						END;
+						WHILE q # NIL DO
+							IF q(ListTransReg).eC.First(k, l) THEN
+								REPEAT
+									NEW(gC);
+									gC.premCar := CHR(k);
+									gC.derCar := CHR(l);
+									ASSERT(gC.premCar <= gC.derCar);
+									gC.goto := q.etatSuiv.num;
+									eL[m.num].transL[j] := gC;
+									INC(j);
+								UNTIL ~q(ListTransReg).eC.Next(k, l);
+							END;
+							q := q.suivant;
+						END;
+						FOR j := eL[m.num].nbEps + 1 TO eL[m.num].nbTrans - 1 DO
+							g := eL[m.num].transL[j];
+							k := j;
+							WHILE (k > eL[m.num].nbEps) & (eL[m.num].transL[k - 1](D.GotoLexC).premCar > g(D.GotoLexC).derCar) DO
+								eL[m.num].transL[k] := eL[m.num].transL[k - 1];
+								DEC(k);
+							END;
+							eL[m.num].transL[k] := g;
+						END;
+					END;
+					m := m.suivant;
+				END;
+			END CreeAuto;
+
+		BEGIN (*CreeLex*)
+			NEW(c);
+			c.nbToksLex := lx.numeroT;
+			NEW(c.toksLex, c.nbToksLex);
+			FOR i := 1 TO 2 DO
+				c.toksLex[i].utile := FALSE;
+				c.toksLex[i].valUt := FALSE;
+			END;
+			l := lx.listeTerm;
+			WHILE l # NIL DO
+				e := l.lExp;
+				IF e(LexExpCatL).exp2(LexExpEndL).numTok = 0 THEN
+					NEW(c.toksLex[e(LexExpCatL).exp2(LexExpEndL).numTok].nom, LEN(nomEOF$) + 1);
+					c.toksLex[e(LexExpCatL).exp2(LexExpEndL).numTok].nom^ := nomEOF$;
+				ELSIF l.utilise THEN
+					IF ~FaitNom(e(LexExpCatL).exp1, c.toksLex[e(LexExpCatL).exp2(LexExpEndL).numTok].nom) THEN
+						NEW(c.toksLex[e(LexExpCatL).exp2(LexExpEndL).numTok].nom, LEN(l.lNom$) + 1);
+						c.toksLex[e(LexExpCatL).exp2(LexExpEndL).numTok].nom^ := l.lNom$;
+					END;
+				END;
+				c.toksLex[e(LexExpCatL).exp2(LexExpEndL).numTok].utile := l.utilise;
+				c.toksLex[e(LexExpCatL).exp2(LexExpEndL).numTok].valUt := FALSE;
+				l := l.suivant;
+			END;
+			c.profEtatsL := lx.profLex;
+			CreeAuto(lx.numeroT, lx.listeEtats, c.nbEtatsLex, c.etatsLex);
+			c.profEtatsC := lx.profCom;
+			CreeAuto(nbToksCom, lx.listeECom, c.nbEtatsCom, c.etatsCom);
+			RETURN c;
+		END CreeLex;
+
+	PROCEDURE (lx: Lexical) EcrisTerm* (term: INTEGER): D.String, NEW;
+
+		VAR
+
+			l: LDef;
+			c: D.String;
+
+		BEGIN (*EcrisTerm*)
+			IF term = 0 THEN
+				NEW(c, LEN(nomEOF$) + 1);
+				c^ := nomEOF$;
+				RETURN c;
+			ELSE
+				l := lx.listeTerm;
+				WHILE l.lExp(LexExpCatL).exp2(LexExpEndL).numTok # term DO
+					l := l.suivant;
+				END;
+				NEW(c, LEN(l.lNom$) + 1);
+				c^ := l.lNom$;
+				RETURN c;
+			END;
+		END EcrisTerm;
+	
+	BEGIN (*BabelLexique*)
+		InitAffichable;
+	END BabelLexique.
+
+ DevCompiler.CompileThis 
+BabelCompil BabelInit BabelInit0 BabelCars BabelDef BabelLexique BabelSyntaxe BabelAnaSem BabelInterface BabelAvl BabelBabel BabelTestgram 
+
+ DevDebug.UnloadThis 
+BabelTestgram BabelBabel BabelAvl BabelInterface BabelAnaSem BabelSyntaxe BabelLexique BabelDef BabelCars BabelInit0 BabelInit BabelCompil 
