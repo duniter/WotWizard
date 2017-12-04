@@ -45,6 +45,8 @@ MODULE UtilBTree;
 	
 	TYPE
 		
+		Bytes* = POINTER TO ARRAY OF BYTE;
+		
 		Factory* = POINTER TO ABSTRACT RECORD (* Factory for files and databases. *)
 		END;
 		
@@ -213,7 +215,7 @@ MODULE UtilBTree;
 		PageIFac = POINTER TO RECORD (DataFac) (* Factory of PageI *)
 		END;
 		
-		Key = POINTER TO ARRAY OF BYTE; (* Key in indexes *)
+		Key = Bytes; (* Key in indexes *)
 		
 		KeyCont = POINTER TO RECORD (Data) (* Key as Data *)
 			c: Key;
@@ -255,7 +257,7 @@ MODULE UtilBTree;
 			len-, (* Length of the input stream of the reader. *)
 			pos-: INTEGER; (* Position of the reader in the input stream. *)
 			ref: File; (* Used for real <-> bytes translations. *)
-			s: POINTER TO ARRAY OF BYTE; (* Contain the input stream. *)
+			s: Bytes; (* Contain the input stream. *)
 		END;
 		
 		Writer* = LIMITED RECORD (* Writer on a byte stream. *)
@@ -398,13 +400,13 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 	PROCEDURE (ref: File) BytesToSReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): SHORTREAL, NEW, ABSTRACT;
 	
 	(* Return a pointer to an array of byte coding for the real r. *)
-	PROCEDURE (ref: File) RealToBytes- (r: REAL): POINTER TO ARRAY OF BYTE, NEW, ABSTRACT;
+	PROCEDURE (ref: File) RealToBytes- (r: REAL): Bytes, NEW, ABSTRACT;
 	
 	(* Return a pointer to an array of byte coding for the shortreal r. *)
-	PROCEDURE (ref: File) SRealToBytes- (r: SHORTREAL): POINTER TO ARRAY OF BYTE, NEW, ABSTRACT;
+	PROCEDURE (ref: File) SRealToBytes- (r: SHORTREAL): Bytes, NEW, ABSTRACT;
 	
 	(* Initalize a reader *)
-	PROCEDURE (VAR r: Reader) InitReader (ref: File; a: POINTER TO ARRAY OF BYTE; pos: INTEGER), NEW;
+	PROCEDURE (VAR r: Reader) InitReader (ref: File; a: Bytes; pos: INTEGER), NEW;
 		
 		BEGIN (*InitReader*)
 			r.ref := ref;
@@ -481,6 +483,30 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			RETURN SHORT(CHR(n));
 		END InSChar;
 	
+	(* Return the length (in SHORTCHARs) of  the following array of shortchars to be read from the input stream. The length doesn't include the possible terminal 0X. *)
+	PROCEDURE (VAR r: Reader) InSCharsLen* (): INTEGER, NEW;
+		
+		VAR
+			
+			pos, i, n: INTEGER;
+			c: SHORTCHAR;
+		
+		BEGIN (*InSCharsLen*)
+			pos := r.pos; i := 0; n := r.len;
+			LOOP
+				IF r.pos = n THEN
+					EXIT;
+				END;
+				c := r.InSChar();
+				IF c = 0X THEN
+					EXIT;
+				END;
+				INC(i);
+			END;
+			r.pos := pos;
+			RETURN i;
+		END InSCharsLen;
+	
 	(* Read an array of shortchars from the input stream. Reading stops when a 0X has been read, or when LEN(c) - 1 shortchars have been read, or when the end of the input stream has been reached. In any case the string returned in c is 0X terminated. *)
 	PROCEDURE (VAR r: Reader) InSChars* (OUT c: ARRAY OF SHORTCHAR), NEW;
 		
@@ -527,6 +553,30 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			INC(r.pos, CHS);
 			RETURN CHR(n);
 		END InChar;
+	
+	(* Return the length (in CHARs) of  the following array of chars to be read from the input stream. The length doesn't include the possible terminal 0X. *)
+	PROCEDURE (VAR r: Reader) InCharsLen* (): INTEGER, NEW;
+		
+		VAR
+			
+			pos, i, n: INTEGER;
+			c: CHAR;
+		
+		BEGIN (*InCharsLen*)
+			pos := r.pos; i := 0; n := r.len;
+			LOOP
+				IF r.pos = n THEN
+					EXIT;
+				END;
+				c := r.InChar();
+				IF c = 0X THEN
+					EXIT;
+				END;
+				INC(i);
+			END;
+			r.pos := pos;
+			RETURN i;
+		END InCharsLen;
 	
 	(* Read an array of chars from the input stream. Reading stops when a 0X has been read, or when LEN(c) - 1 chars have been read, or when the end of the input stream has been reached. In any case the string returned in c is 0X terminated. *)
 	PROCEDURE (VAR r: Reader) InChars* (OUT c: ARRAY OF CHAR), NEW;
@@ -670,11 +720,11 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END InitWriter;
 	
 	(* Return the content of w.s (output stream of the writer) as an array of bytes *)
-	PROCEDURE (IN w: Writer) Write (): POINTER TO ARRAY OF BYTE, NEW;
+	PROCEDURE (IN w: Writer) Write (): Bytes, NEW;
 		
 		VAR
 			
-			a: POINTER TO ARRAY OF BYTE;
+			a: Bytes;
 			e: A.Elem;
 			i, n: INTEGER;
 		
@@ -873,7 +923,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		
 		VAR
 			
-			a: POINTER TO ARRAY OF BYTE;
+			a: Bytes;
 			r: Reader;
 		
 		BEGIN (*ReadInt*)
@@ -1170,7 +1220,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			n, i: INTEGER;
 			w: Writer;
 			a: ARRAY 1 OF BYTE;
-			aP: POINTER TO ARRAY OF BYTE;
+			aP: Bytes;
 		
 		BEGIN (*CreatePage*)
 			IF base.pages.NumberOfElems() < base.pageNb THEN (* Allocate a new buffer page *)
@@ -1296,7 +1346,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		VAR
 			
 			p: Page;
-			a: POINTER TO ARRAY OF BYTE;
+			a: Bytes;
 			r: Reader;
 		
 		BEGIN (*ReadSysPage*)
@@ -1326,7 +1376,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			p.dirty := TRUE;
 		END WritePage;
 	
-	(* Return if the header at position pos is free or not; return in cont this header *)
+	(* Return whether the header at position pos is free or not; return in cont this header *)
 	PROCEDURE (base: Database) FreeHead (pos: INTEGER; OUT cont: ClusterHead): BOOLEAN, NEW;
 		
 		VAR
@@ -1350,7 +1400,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			END;
 		END FreeHead;
 	
-	(* Return if the tail at position pos is free or not; return in cont this tail *)
+	(* Return whether the tail at position pos is free or not; return in cont this tail *)
 	PROCEDURE (base: Database) FreeTail (pos: INTEGER; OUT cont: ClusterTail): BOOLEAN, NEW;
 		
 		VAR
@@ -1382,7 +1432,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			i, n: INTEGER;
 			w: Writer;
 			a: ARRAY 1 OF BYTE;
-			aP: POINTER TO ARRAY OF BYTE;
+			aP: Bytes;
 		
 		BEGIN (*Do*)
 			WITH base: Database DO
@@ -1942,7 +1992,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		VAR
 			
 			p: Page;
-			a: POINTER TO ARRAY OF BYTE;
+			a: Bytes;
 			r: Reader;
 		
 		BEGIN (*ReadPage*)
@@ -1964,7 +2014,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			
 			r: Reader;
 			w: Writer;
-			a: POINTER TO ARRAY OF BYTE;
+			a: Bytes;
 			pa: Data;
 		
 		BEGIN (*ReadData*)
@@ -1979,20 +2029,47 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			RETURN pa;
 		END ReadData;
 	
-	(* Allocate a cluster of size size (bytes), for the data managed by d, in its database, and returns its position. size must be the size of the production of the method Data.Write of the data managed by d. *)
-	PROCEDURE (d: DataMan) AllocateData* (size: INTEGER): INTEGER, NEW;
+	(* Consider using WriteAllocateData instead.Allocate a cluster for data, managed by d, in the database of d, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size. *)
+	PROCEDURE (d: DataMan) AllocateData* (data: Data): INTEGER, NEW;
 		
 		VAR
 			
+			w: Writer;
 			pos: INTEGER;
 			pa: Data;
 		
 		BEGIN (*AllocateData*)
 			ASSERT(d.base.ref # NIL, 20);
-			ASSERT(size > 0, 21);
-			pa := d.base.NewDiskPage(size, d.fac, pos);
+			ASSERT(data # NIL, 21);
+			w.InitWriter(d.base.ref);
+			data.Write(w);
+			pa := d.base.NewDiskPage(w.s.NumberOfElems(), d.fac, pos);
 			RETURN pos;
 		END AllocateData;
+	
+	(* Allocate a cluster for data, managed by d, in the database of d, and write data into it; return the position of the allocated cluster. *)
+	PROCEDURE (d: DataMan) WriteAllocateData* (data: Data): INTEGER, NEW;
+		
+		VAR
+			
+			r: Reader;
+			w: Writer;
+			a: Bytes;
+			ptr: INTEGER;
+			pa: Data;
+		
+		BEGIN (*WriteAllocateData*)
+			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(data # NIL, 21);
+			w.InitWriter(d.base.ref);
+			data.Write(w);
+			a := w.Write();
+			pa := d.base.NewDiskPage(LEN(a), d.fac, ptr);
+			r.InitReader(d.base.ref, a, 0);
+			d.base.ReadPage(ptr, d.fac).Read(r);
+			d.base.WritePage(ptr);
+			RETURN ptr;
+		END WriteAllocateData;
 	
 	(* Write data, managed by d, at the position ptr in the database of d. *)
 	PROCEDURE (d: DataMan) WriteData* (ptr: INTEGER; data: Data), NEW;
@@ -2001,6 +2078,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			
 			r: Reader;
 			w: Writer;
+			a: Bytes;
 		
 		BEGIN (*WriteData*)
 			ASSERT(d.base.ref # NIL, 20);
@@ -2730,8 +2808,8 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			RETURN comp = eq;
 		END Search;
 	
-	(* Erase from index ind the key key. If key does not belong to the index, ind.Erase does nothing. Modify the current position of the index only if the key was found; in this case, the current position is reset. *)
-	PROCEDURE (ind: Index) Erase* (key: Data), NEW;
+	(* Erase from index ind the key key. If key does not belong to the index, ind.Erase does nothing and returns FALSE, otherwise ir returns TRUE. If the current position of the index was on the erased key, it is reset. *)
+	PROCEDURE (ind: Index) Erase* (key: Data): BOOLEAN, NEW;
 		
 		VAR
 			
@@ -2982,7 +3060,6 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			Era(ind.rootI, bNil, 0, ind.height);
 			IF minus1 THEN
 				DEC(ind.size);
-				ind.UpdateRoot;
 			END;
 			IF dec THEN (* Subtree has been erased... *)
 				pa := ind.baseI.ReadPage(ind.rootI, pif)(PageI);
@@ -2992,9 +3069,12 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 					ind.rootI := pa.elems[0].ptr;
 					ind.baseI.EraseDiskPage(pa.keys);
 					ind.baseI.EraseDiskPage(followP);
-					ind.UpdateRoot;
 				END;
 			END;
+			IF minus1 OR dec THEN
+				ind.UpdateRoot;
+			END;
+			RETURN minus1;
 		END Erase;
 	
 	(* Return the number of different keys in ind *)

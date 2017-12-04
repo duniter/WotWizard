@@ -19,6 +19,8 @@ DEFINITION UtilBTree;
 		gt = 1;
 
 	TYPE
+		Bytes = POINTER TO ARRAY OF BYTE;
+
 		Factory = POINTER TO ABSTRACT RECORD 
 			(fac: Factory) Create- (IN nF: ARRAY OF CHAR): BOOLEAN, NEW, ABSTRACT;
 			(fac: Factory) Open- (IN nF: ARRAY OF CHAR): File, NEW, ABSTRACT;
@@ -39,8 +41,8 @@ DEFINITION UtilBTree;
 			(ref: File) Close-, NEW, ABSTRACT;
 			(ref: File) BytesToReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): REAL, NEW, ABSTRACT;
 			(ref: File) BytesToSReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): SHORTREAL, NEW, ABSTRACT;
-			(ref: File) RealToBytes- (r: REAL): POINTER TO ARRAY OF BYTE, NEW, ABSTRACT;
-			(ref: File) SRealToBytes- (r: SHORTREAL): POINTER TO ARRAY OF BYTE, NEW, ABSTRACT
+			(ref: File) RealToBytes- (r: REAL): Bytes, NEW, ABSTRACT;
+			(ref: File) SRealToBytes- (r: SHORTREAL): Bytes, NEW, ABSTRACT
 		END;
 
 		Database = POINTER TO LIMITED RECORD 
@@ -76,7 +78,8 @@ DEFINITION UtilBTree;
 
 		DataMan = POINTER TO LIMITED RECORD 
 			(d: DataMan) ReadData (ptr: INTEGER): Data, NEW;
-			(d: DataMan) AllocateData (size: INTEGER): INTEGER, NEW;
+			(d: DataMan) AllocateData (data: Data): INTEGER, NEW;
+			(d: DataMan) WriteAllocateData (data: Data): INTEGER, NEW;
 			(d: DataMan) WriteData (ptr: INTEGER; data: Data), NEW;
 			(d: DataMan) EraseData (ptr: INTEGER), NEW
 		END;
@@ -86,7 +89,7 @@ DEFINITION UtilBTree;
 		Index = POINTER TO LIMITED RECORD 
 			(ind: Index) SearchIns (key: Data): BOOLEAN, NEW;
 			(ind: Index) Search (key: Data): BOOLEAN, NEW;
-			(ind: Index) Erase (key: Data), NEW;
+			(ind: Index) Erase (key: Data): BOOLEAN, NEW;
 			(ind: Index) NumberOfKeys (): INTEGER, NEW;
 			(ind: Index) ResetPos, NEW;
 			(ind: Index) GetCurrPos (): IndexPos, NEW;
@@ -116,8 +119,10 @@ DEFINITION UtilBTree;
 			(VAR r: Reader) InByte (): BYTE, NEW;
 			(VAR r: Reader) InBytes (OUT b: ARRAY OF BYTE), NEW;
 			(VAR r: Reader) InSChar (): SHORTCHAR, NEW;
+			(VAR r: Reader) InSCharsLen (): INTEGER, NEW;
 			(VAR r: Reader) InSChars (OUT c: ARRAY OF SHORTCHAR), NEW;
 			(VAR r: Reader) InChar (): CHAR, NEW;
+			(VAR r: Reader) InCharsLen (): INTEGER, NEW;
 			(VAR r: Reader) InChars (OUT c: ARRAY OF CHAR), NEW;
 			(VAR r: Reader) InSInt (): SHORTINT, NEW;
 			(VAR r: Reader) InInt (): INTEGER, NEW;
@@ -190,6 +195,9 @@ Result of a comparaison. Equal.
 
 CONST gt
 Result of a comparaison. Greater than.
+
+TYPE Bytes
+POINTER TO ARRAY OF BYTES.
 
 TYPE Factory
 ABSTRACT
@@ -270,11 +278,11 @@ PROCEDURE (ref: File) BytesToSReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): SHO
 NEW, ABSTRACT
 Read and return a shortreal from the array a at position pos; put pos at the position following the shortreal.
 
-PROCEDURE (ref: File) RealToBytes- (r: REAL): POINTER TO ARRAY OF BYTE
+PROCEDURE (ref: File) RealToBytes- (r: REAL): Bytes
 NEW, ABSTRACT
 Return a pointer to an array of byte coding for the real r.
 
-PROCEDURE (ref: File) SRealToBytes- (r: SHORTREAL): POINTER TO ARRAY OF BYTE
+PROCEDURE (ref: File) SRealToBytes- (r: SHORTREAL): Bytes
 NEW, ABSTRACT
 Return a pointer to an array of byte coding for the shortreal r.
 
@@ -409,13 +417,22 @@ Pre
 The database of d is open	20
 ptr # bNil	21
 
-PROCEDURE (d: DataMan) AllocateData (size: INTEGER): INTEGER
+PROCEDURE (d: DataMan) AllocateData (data: Data): INTEGER
 NEW
-Allocate a cluster of size size (bytes), for the data managed by d, in its database, and returns its position. size must be the size of the production of the method Data.Write of the data managed by d.
+Consider using WriteAllocateData instead.Allocate a cluster for data, managed by d, in the database of d, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size.
 
 Pre
 The database of d is open	20
 size > 0	21
+
+PROCEDURE (d: DataMan) WriteAllocateData (data: Data): INTEGER
+NEW
+Allocate a cluster for data, managed by d, in the database of d, and write data into it; return the position of the allocated cluster.
+
+Pre
+The database of d is open	20
+data # NIL	21
+ptr # bNil	22
 
 PROCEDURE (d: DataMan) WriteData (ptr: INTEGER; data: Data)
 NEW
@@ -458,9 +475,9 @@ Pre
 ind is open	20
 key # NIL	21
 
-PROCEDURE (ind: Index) Erase (key: Data)
+PROCEDURE (ind: Index) Erase (key: Data): BOOLEAN
 NEW
-Erase from index ind the key key. If the key key does not belong to the index, ind.Erase does nothing. If the current position of the index was on the erased key, it is reset.
+Erase from index ind the key key. If key does not belong to the index, ind.Erase does nothing and returns FALSE, otherwise ir returns TRUE. If the current position of the index was on the erased key, it is reset.
 
 Pre
 ind is open	20
@@ -616,6 +633,10 @@ Read a shortchar from the input stream.
 Pre
 r.pos + SIZE(SHORTCHAR) <= r.len	20
 
+PROCEDURE (VAR r: Reader) InSCharsLen (): INTEGER
+NEW
+Return the length of  the following array of shortchars to be read from the input stream. The length doesn't include the possible terminal 0X
+
 PROCEDURE (VAR r: Reader) InSChars (OUT c: ARRAY OF SHORTCHAR)
 NEW
 Read an array of shortchars from the input stream. Reading stops when a 0X has been read, or when LEN(c) - 1 shortchars have been read, or when the end of the input stream has been reached. In any case the string returned in c is 0X terminated.
@@ -626,6 +647,10 @@ Read a char from the input stream.
 
 Pre
 r.pos + SIZE(SHORTCHAR) <= r.len	20
+
+PROCEDURE (VAR r: Reader) InCharsLen (): INTEGER
+NEW
+Return the length of  the following array of chars to be read from the input stream. The length doesn't include the possible terminal 0X
 
 PROCEDURE (VAR r: Reader) InChars (OUT c: ARRAY OF CHAR)
 NEW
