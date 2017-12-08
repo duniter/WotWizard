@@ -416,7 +416,7 @@ MODULE DuniterWotWizard;
 		VAR
 			
 			cd: CertOrDoss;
-			j, m, nc, n1, n2: INTEGER;
+			j, k, m, nc, n1, n2: INTEGER;
 			newDate: LONGINT;
 			g: File;
 		
@@ -466,26 +466,31 @@ MODULE DuniterWotWizard;
 				|cd: Certif DO
 					IncDates(cd.from, newDate, step + 1);
 				|cd: Dossier DO
-					FOR j := 0 TO B.pars.sigQty - 1 DO
+					j := 0;
+					(* All certifs with the same date as cd must lead to updates *)
+					WHILE (j < B.pars.sigQty) OR (j < LEN(cd.certifs)) & (cd.certifs[j].date = cd.date) DO
 						IncDates(cd.certifs[j](Certif).from, newDate, step + 1);
-					END;
-					nc := LEN(cd.certifs) - B.pars.sigQty;
-					n1 := LEN(f); n2 := n1 + nc;
-					NEW(g, n2);
-					FOR m := 0 TO n1 - 1 DO
-						g[m] := f[m];
-					END;
-					j := B.pars.sigQty;
-					FOR m := n1 TO n2 - 1 DO
-						g[m] := cd.certifs[j];
 						INC(j);
 					END;
-					f := g;
-					NEW(g, B.pars.sigQty);
-					FOR m := 0 TO B.pars.sigQty - 1 DO
-						g[m] := cd.certifs[m];
+					nc := LEN(cd.certifs) - j;
+					IF nc > 0 THEN
+						n1 := LEN(f); n2 := n1 + nc;
+						NEW(g, n2);
+						FOR m := 0 TO n1 - 1 DO
+							g[m] := f[m];
+						END;
+						k := j;
+						FOR m := n1 TO n2 - 1 DO
+							g[m] := cd.certifs[k];
+							INC(k);
+						END;
+						f := g;
+						NEW(g, j);
+						FOR m := 0 TO j - 1 DO
+							g[m] := cd.certifs[m];
+						END;
+						cd.certifs := g;
 					END;
-					cd.certifs := g;
 			END;
 			SortFile(f, step + 1);
 			IF debug # NIL THEN

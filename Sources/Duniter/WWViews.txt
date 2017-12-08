@@ -926,21 +926,28 @@ MODULE DuniterWWViews;
 	
 	PROCEDURE (c: NewCalculus) Do;
 		
-		VAR
+		PROCEDURE MarkRunning;
 			
-			loc: Files.Locator;
-			f: Files.File;
-			res: INTEGER;
+			VAR
+				
+				loc: Files.Locator;
+				f: Files.File;
+				res: INTEGER;
+			
+			BEGIN (*MarkRunning*)
+				loc := Files.dir.This(rsrcDir); ASSERT(loc.res = 0, 100);
+				f := Files.dir.New(loc, Files.dontAsk); ASSERT(loc.res = 0, 101);
+				f.Register(runningName, "", Files.dontAsk, res); ASSERT(res = 0, 102);
+				running := TRUE;
+			END MarkRunning;
 		
 		BEGIN (*Do*)
 			IF running THEN
 				Services.DoLater(c, Services.Ticks() + verifyPeriod); (* Risque de blocage ; à voir *)
 			ELSE
 				Services.DoLater(c, Services.Ticks() + calculusPeriod);
-				loc := Files.dir.This(rsrcDir); ASSERT(loc.res = 0, 100);
-				f := Files.dir.New(loc, Files.dontAsk); ASSERT(loc.res = 0, 101);
-				f.Register(runningName, "", Files.dontAsk, res); ASSERT(res = 0, 102);
-				running := TRUE;
+				MarkRunning;
+				BA.Collect; (* Free the File in MarkRunning *)
 				UtilExternal.Start("WWServer.exe");
 				Services.DoLater(vC, Services.Ticks() + verifyPeriod);
 			END;
