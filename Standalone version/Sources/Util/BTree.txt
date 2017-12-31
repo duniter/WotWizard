@@ -1,0 +1,3213 @@
+(*
+Util: Utility tools.
+
+Copyright (C) 2001…2006 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE UtilBTree;
+	
+	
+	
+	(* Version 2 *)
+	
+	(* Manages a disk file like a heap, allocating and freeing it easily, with the possibility of indexing by BTrees. *)
+	
+	IMPORT
+		
+		(* Debug *)
+		
+		A := UtilAvlTree;
+	
+	CONST
+		
+		minPageNb = 256; (* Minimal number of allocated pages. *)
+		
+		bNil* = 0; (* Nil pointer in a database. *)
+		
+		valOct = 100H;
+		
+		BOS* = SIZE(BOOLEAN);
+		SCS* = SIZE(SHORTCHAR);
+		CHS* = SIZE(CHAR);
+		BYS* = SIZE(BYTE);
+		SIS* = SIZE(SHORTINT);
+		INS* = SIZE(INTEGER);
+		LIS* = SIZE(LONGINT);
+		SRS* = SIZE(SHORTREAL);
+		RES* = SIZE(REAL);
+		SES* = SIZE(SET);
+	
+	TYPE
+		
+		Bytes* = POINTER TO ARRAY OF BYTE;
+		
+		Factory* = POINTER TO ABSTRACT RECORD (* Factory for files and databases. *)
+		END;
+		
+		File* = POINTER TO ABSTRACT RECORD
+		END;
+		
+		Database* = POINTER TO LIMITED RECORD
+			ref: File; (* File containing the database. *)
+			root, (* Root of the leftist tree of free clusters. *)
+			end-, (* Length of file, or at least its used part. *)
+			writtenLim, (* Position following the last cluster actually written on disk *)
+			max, (* Size of the largest free cluster. *)
+			placeNb-, (* Number of fixed places in database. *)
+			pageNb: INTEGER; (* Number of allocated pages. *)
+			pages: A.Tree; (* Buffer structured as a balanced tree of pages. *)
+			pagesRing: Page; (* Buffer structured as a ring of pages. *)
+			indRing: Index; (* Ring of the indexes of the database. *)
+		END;
+		
+		KeyManager* = POINTER TO ABSTRACT RECORD
+			f: DataFac; (* Factory of keys *)
+		END;
+		
+		String* = POINTER TO EXTENSIBLE RECORD (Data) (* String, a kind of data. *)
+			c*: POINTER TO ARRAY OF CHAR;
+		END;
+		
+		StringFac* = POINTER TO EXTENSIBLE RECORD (DataFac) (* Factory of String *)
+		END;
+		
+		StringKeyManager* = POINTER TO EXTENSIBLE RECORD (KeyManager) (* Key manager for String. *)
+		END;
+		
+		IndexPos* = POINTER TO LIMITED RECORD (* Store a position in an index *)
+			posI: INTEGER;
+		END;
+		
+		Index* = POINTER TO LIMITED RECORD (* Index, structured as a btree. *)
+			nextI, prevI: Index; (* Ring (Database.indRing) of indexes *)
+			baseI: Database; (* Database owning the index *)
+			manager: KeyManager; (* Key manager of index *)
+			refI, (* Reference of the index in its database *)
+			rootI, (* Root of btree *)
+			stringI, (* Doubly linked ring of keys and associated datas (see StringI) *)
+			posI, (* Current position in index *)
+			keySize, (* Size of a key *)
+			keysSize, (* Size reserved for the concatenation of all key prefixes in btree pages *)
+			height, (* Height of btree *)
+			size: INTEGER; (* Number of keys *)
+		END;
+	
+	CONST
+		
+		(* Result of a comparaison. *)
+		lt* = -1; (* Less than. *)
+		eq* = 0; (* Equal. *)
+		gt* = + 1; (* Greater than. *)
+		
+		guard1 = 1548793025; (* "Proofs" of base and index *)
+		guard2 = 2015876309;
+	
+	TYPE
+		
+		ClusterHead = POINTER TO ABSTRACT RECORD (Data) (* Header of a cluster. *)
+			size: INTEGER; (* Size of the used part for reserved clusters, total size for free ones *)
+		END;
+		
+		RClusterHead = POINTER TO RECORD (ClusterHead) (* Header of a reserved cluster. *)
+		END;
+		
+		RClusterHeadFac = POINTER TO RECORD (DataFac) (* Factory of RClusterHead *)
+		END;
+		
+		FClusterHead = POINTER TO RECORD (ClusterHead) (* Header of a free cluster. *)
+			(* Structure of leftist tree. Cf. Knuth, The art of computer programming, vol. 3, ch. 5.2.3 and exercises 32 & 35. *)
+			(* For any p: FClusterHead,
+				p.size >= p.left.size, p.size >= p.right.size (priority queue: the root has the biggest size),
+				p.rDist = 1 + p.right.rDist (rDist is the distance to the leaf (+ 1) when going right),
+				p.left.rDist >= p.right.rDist (hence the name "leftist tree"),
+				p.lDist = 1 + p.left.rDist (useful)
+				p.father = bNil (root) or p = p.father.left or p = p.father.right *)
+			father,
+			left,
+			right: INTEGER;
+			lDist,
+			rDist: BYTE;
+		END;
+		
+		FClusterHeadFac = POINTER TO RECORD (DataFac) (* Factory of FClusterHead *)
+		END;
+		
+		ClusterTail = POINTER TO ABSTRACT RECORD (Data) (* Tail of a cluster. Pointers to ClusterTail on disk point to its last field, i.e. the free / reserved boolean *)
+		END;
+		
+		RClusterTail = POINTER TO RECORD (ClusterTail) (* Tail of a reserved cluster. *)
+		END;
+		
+		RClusterTailFac = POINTER TO RECORD (DataFac) (* Factory of RClusterTail *)
+		END;
+		
+		FClusterTail = POINTER TO RECORD (ClusterTail) (* Tail of a free cluster. *)
+			 size: INTEGER; (* Total size of the cluster. *)
+		 END;
+		
+		FClusterTailFac = POINTER TO RECORD (DataFac) (* Factory of FClusterTail *)
+		END;
+	
+	CONST
+		
+		(* Sizes of structures on disk *)
+		RClusterHeadSize = BOS + INS;
+		RClusterTailSize = BOS;
+		FClusterHeadSize = BOS + 4 * INS + 2 * BYS;
+		FClusterTailSize = INS + BOS;
+		baseHead = 4 * INS + 2 * BOS; (* Size of the fixed part (without places) of a database, as written in Factory.CreateBase *)
+	
+	TYPE
+		
+		Data* = POINTER TO ABSTRACT RECORD (* Content of a page, used to store data or key. *)
+		END;
+		
+		DataFac* = POINTER TO ABSTRACT RECORD (* Factory of Data. *)
+		END;
+		
+		DataMan* = POINTER TO LIMITED RECORD (* Manager of Data *)
+			base: Database; (* Database *)
+			fac: DataFac; (* Factory of Data *)
+		END;
+		
+		Page = POINTER TO RECORD (A.Elem) (* Page of buffered data *)
+			nextP, prevP: Page; (* Ring of pages *)
+			pageP: Data; (* Buffered data *)
+			posP, (* Position of the page in the file *)
+			sizeP: INTEGER; (* Size of the page *)
+			dirty: BOOLEAN; (* Dirty data; must be written to the file *)
+		END;
+	
+	CONST
+		
+		sectSize = 200H; (* 512: Standard size of sets of variable length keys *)
+	
+	TYPE
+		
+		Element = RECORD (* Element of a btree page *)
+			ptr, (* Pointer to the son page *)
+			endK: INTEGER; (* Position of the last byte of the key (or  its prefix) in the field keys of the page *)
+		END;
+	
+	CONST
+		
+		ElemSize = 2 * INS; (* Size of Element *)
+		
+		minEl = (sectSize - INS) DIV (ElemSize) - 1; (* Minimal number of elements in a btree page *)
+	
+	TYPE
+		
+		PageI = POINTER TO RECORD (Data) (* Btree page of an index *)
+			keys, (* Pointer to the concatenation of all key prefixes in the page *)
+			elNb: INTEGER; (* Number of elements *)
+			elems: ARRAY 2 * (minEl + 1) OF Element; (* Elements of the page *)
+			(* p.elems[0].endK = 0,
+				p.elems[0].ptr -> (PageI or StringI) corresponding to keys < the first key (or prefix) of p (i.e. p.keys[p.elems[0].endK .. p.elems[1].endK]),
+				p.elems[i].ptr (i > 0) -> (PageI or StringI) corresponding to keys >= the ith key (or prefix) of p (i.e. p.keys[p.elems[i - 1].endK .. p.elems[i].endK]) and < the (i + 1)th prefix, if present *)
+		END;
+		
+		PageIFac = POINTER TO RECORD (DataFac) (* Factory of PageI *)
+		END;
+		
+		Key = Bytes; (* Key in indexes *)
+		
+		KeyCont = POINTER TO RECORD (Data) (* Key as Data *)
+			c: Key;
+		END;
+		
+		KeyFac = POINTER TO RECORD (DataFac) (* Factory of KeyCont *)
+		END;
+		
+		StringI = POINTER TO RECORD (Data) (* Doubly linked ring of keys and associated datas in indexes *)
+			next, (* Next item *)
+			prev, (* Previous item *)
+			dataPos: INTEGER; (* Pointer to associated data *)
+			key: Key; (* Key *)
+		END;
+		
+		StringIFac = POINTER TO RECORD (DataFac) (* Factory of StringI *)
+		END;
+		
+		Info = POINTER TO RECORD (Data) (* Root data, on disk, of an index *)
+			iRoot, (* Root of btree *)
+			iString, (* Start item of the ring of keys *)
+			iKSize, (* Size of keys, or 0 for variable length keys *)
+			iH, (* Height of btree *)
+			iSize: INTEGER; (* Number of keys *)
+		END;
+		
+		InfoFac = POINTER TO RECORD (DataFac) (* Factory of Info *)
+		END;
+	
+	CONST
+		
+		pageIS = 2 * INS + 2 * (minEl + 1) * ElemSize; (* Size of PageI on disk *)
+		stringIS = 3 * INS; (* Size of the fixed part of StringI (without key) on disk. *)
+		infoS = 7 * INS; (* Size of Info on disk. *)
+	
+	TYPE
+		
+		Reader* = LIMITED RECORD (* Reader of a byte stream. *)
+			len-, (* Length of the input stream of the reader. *)
+			pos-: INTEGER; (* Position of the reader in the input stream. *)
+			ref: File; (* Used for real <-> bytes translations. *)
+			s: Bytes; (* Contain the input stream. *)
+		END;
+		
+		Writer* = LIMITED RECORD (* Writer on a byte stream. *)
+			ref: File; (* Used for real <-> bytes translations. *)
+			s: A.Tree; (* Output stream. *)
+		END;
+		
+		Char = POINTER TO RECORD (A.Elem) (* Element of Writer.s *)
+			c: BYTE; (* Written byte *)
+		END;
+		
+		BaseList = POINTER TO RECORD (* List of open databases; used to close bases left open *)
+			nextB: BaseList; (* Next open database *)
+			name: POINTER TO ARRAY OF CHAR; (* Name of the base file *)
+			ref: File; (* The base file *)
+		END;
+	
+	(* Debug *)
+	
+	VAR
+		
+		fCH: FClusterHeadFac;
+		rCH: RClusterHeadFac;
+		fCT: FClusterTailFac;
+		rCT: RClusterTailFac;
+		
+		pif: PageIFac;
+		kf: KeyFac;
+		sif: StringIFac;
+		inff: InfoFac;
+		
+		bL: BaseList; (* List of open databases *)
+	
+	(* Comparison method. s1 and s2 are the keys to be compared. The result can be lt (s1 < s2), eq (s1 = s2) or gt (s1 > s2). KeyManager.CompP must induce a total order on the set of keys. *)
+	PROCEDURE (man: KeyManager) CompP- (s1, s2: Data): BYTE, NEW, ABSTRACT;
+	
+	(* Create a prefix of a key. On input key1 and key2 are two keys, with key1 < key2. On output, key2 may be modified, but cannot be enlarged, so that it becomes a prefix of its previous value. A prefix Pref(key1, key2) of  the key key2 in relation to the key key1 is defined by:
+		1) Pref(key1, key2) is a key, which can be compared to other keys by the mean of the method KeyManager.CompP;
+		2) Pref(key1, key2) is the shortest key with key1 < Pref(key1, key2) <= key2;
+		3) key1 may have a null length and, in this case, mut be considered less than any other key.
+Prefixes are useful if keys are long or if their lengths vary much. In this case, if KeyManager.PrefP is instantiated, database is shorter and searches are faster. *)
+	PROCEDURE (man: KeyManager) PrefP- (key1: Data; VAR key2: Data), NEW, EMPTY;
+	
+	(* Comparison method of two Strings. Use the lexical order. *)
+	PROCEDURE (man: StringKeyManager) CompP- (key1, key2: Data): BYTE, EXTENSIBLE;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*CompP*)
+			ASSERT((key1 # NIL) & (key2 # NIL), 20);
+			WITH key1: String DO
+				WITH key2: String DO
+					IF key1.c = NIL THEN
+						IF key2.c = NIL THEN
+							RETURN eq;
+						END;
+						RETURN lt;
+					END;
+					IF key2.c = NIL THEN
+						RETURN gt;
+					END;
+					i := 0;
+					WHILE (key1.c[i] = key2.c[i]) & (key1.c[i] # 0X) DO
+						INC(i);
+					END;
+					IF key1.c[i] < key2.c[i] THEN
+						RETURN lt;
+					ELSIF key1.c[i] > key2.c[i] THEN
+						RETURN gt;
+					ELSE
+						RETURN eq;
+					END;
+				END;
+			END;
+		END CompP;
+	
+	(* Calculate the shortest prefix of a String, in the proper sense. *)
+	PROCEDURE (man: StringKeyManager) PrefP- (key1: Data; VAR key2: Data);
+		
+		VAR
+			
+			l, l2: INTEGER;
+			key: String;
+		
+		BEGIN (*PrefP*)
+			ASSERT((key1 # NIL) & (key2 # NIL), 20);
+			ASSERT(man.CompP(key1, key2) = lt, 21);
+			WITH key1: String DO
+				WITH key2: String DO
+					l2 := LEN(key2.c$);
+					NEW(key); NEW(key.c, l2 + 1);
+					l := 0;
+					key.c[l] := 0X;
+					WHILE (l <= l2) & ~((man.CompP(key1, key) = lt) & (man.CompP(key, key2) <= eq)) DO
+						key.c[l] := key2.c[l];
+						INC(l);
+						key.c[l] := 0X;
+					END;
+				END;
+			END;
+			key2 := key;
+		END PrefP;
+	
+	(* Create a file with name nF, with the help of fac. Don't open this file. *)
+	PROCEDURE (fac: Factory) Create- (IN nF: ARRAY OF CHAR): BOOLEAN, NEW, ABSTRACT;
+	
+	(* Open a file with name nF, with the help of fac, and return this file. Return NIL if the file does not exist. *)
+	PROCEDURE (fac: Factory) Open- (IN nF: ARRAY OF CHAR): File, NEW, ABSTRACT;
+	
+	(* Close the file ref. *)
+	PROCEDURE (ref: File) Close-, NEW, ABSTRACT;
+	
+	(* Flush the file ref on disk. *)
+	PROCEDURE (ref: File) Flush-, NEW, EMPTY;
+	
+	(* Set the reading position of the file ref to pos; the firt position is 0. *)
+	PROCEDURE (ref: File) PosReader- (pos: INTEGER), NEW, ABSTRACT;
+	
+	(* Read the array a from the file ref at reading position. *)
+	PROCEDURE (ref: File) Read- (OUT a: ARRAY OF BYTE), NEW, ABSTRACT;
+	
+	(* Set the writing position of the file ref to pos; the first position is 0. *)
+	PROCEDURE (ref: File) PosWriter- (pos: INTEGER), NEW, ABSTRACT;
+	
+	(* Write the array a to the file ref at writing position. *)
+	PROCEDURE (ref: File) Write- (IN a: ARRAY OF BYTE), NEW, ABSTRACT;
+	
+	(* Return in end the length of the file ref. *)
+	PROCEDURE (ref: File) End- (OUT end: INTEGER), NEW, ABSTRACT;
+	
+	(* Truncate the file ref at the length end. *)
+	PROCEDURE (ref: File) Truncate- (end: INTEGER), NEW, ABSTRACT;
+	
+	(* Read and return a real from the array a at position pos; put pos at the position following the real. *)
+	PROCEDURE (ref: File) BytesToReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): REAL, NEW, ABSTRACT;
+	
+	(* Read and return a shortreal from the array a at position pos; put pos at the position following the shortreal. *)
+	PROCEDURE (ref: File) BytesToSReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): SHORTREAL, NEW, ABSTRACT;
+	
+	(* Return a pointer to an array of byte coding for the real r. *)
+	PROCEDURE (ref: File) RealToBytes- (r: REAL): Bytes, NEW, ABSTRACT;
+	
+	(* Return a pointer to an array of byte coding for the shortreal r. *)
+	PROCEDURE (ref: File) SRealToBytes- (r: SHORTREAL): Bytes, NEW, ABSTRACT;
+	
+	(* Initalize a reader *)
+	PROCEDURE (VAR r: Reader) InitReader (ref: File; a: Bytes; pos: INTEGER), NEW;
+		
+		BEGIN (*InitReader*)
+			r.ref := ref;
+			r.s := a;
+			r.pos := pos;
+			IF a = NIL THEN
+				r.len := 0;
+			ELSE
+				r.len := LEN(a);
+			END;
+		END InitReader;
+	
+	(* Read a byte from the input stream. *)
+	PROCEDURE (VAR r: Reader) InByte* (): BYTE, NEW;
+		
+		VAR
+			
+			c: BYTE;
+		
+		BEGIN (*InByte*)
+			ASSERT(r.pos + BYS <= r.len, 20);
+			c := r.s[r.pos];
+			INC(r.pos);
+			RETURN c;
+		END InByte;
+	
+	(* Read an array of bytes from the input stream. *)
+	PROCEDURE (VAR r: Reader) InBytes* (OUT b: ARRAY OF BYTE), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*InBytes*)
+			ASSERT(r.len - r.pos >= LEN(b) * BYS, 20);
+			FOR i := 0 TO LEN(b) * BYS - 1 DO
+				b[i] := r.s[r.pos];
+				INC(r.pos);
+			END;
+		END InBytes;
+	
+	(* Read a boolean from the input stream. *)
+	PROCEDURE (VAR r: Reader) InBool* (): BOOLEAN, NEW;
+		
+		VAR
+			
+			b: BOOLEAN;
+		
+		BEGIN (*InBool*)
+			ASSERT(r.pos + BOS <= r.len, 20);
+			b := r.s[r.pos] # 0;
+			INC(r.pos);
+			RETURN b;
+		END InBool;
+	
+	(* Read a shortchar from the input stream. *)
+	PROCEDURE (VAR r: Reader) InSChar* (): SHORTCHAR, NEW;
+		
+		VAR
+			
+			i, n, c: INTEGER;
+		
+		BEGIN (*InSChar*)
+			ASSERT(r.pos + SCS <= r.len, 20);
+			n := 0;
+			FOR i := r.pos + SCS - 1 TO r.pos BY - 1 DO
+				c := r.s[i];
+				IF c < 0 THEN
+					INC(c, valOct);
+				END;
+				n := n * valOct + c;
+			END;
+			INC(r.pos, SCS);
+			RETURN SHORT(CHR(n));
+		END InSChar;
+	
+	(* Return the length (in SHORTCHARs) of  the following array of shortchars to be read from the input stream. The length doesn't include the possible terminal 0X. *)
+	PROCEDURE (VAR r: Reader) InSCharsLen* (): INTEGER, NEW;
+		
+		VAR
+			
+			pos, i, n: INTEGER;
+			c: SHORTCHAR;
+		
+		BEGIN (*InSCharsLen*)
+			pos := r.pos; i := 0; n := r.len;
+			LOOP
+				IF r.pos = n THEN
+					EXIT;
+				END;
+				c := r.InSChar();
+				IF c = 0X THEN
+					EXIT;
+				END;
+				INC(i);
+			END;
+			r.pos := pos;
+			RETURN i;
+		END InSCharsLen;
+	
+	(* Read an array of shortchars from the input stream. Reading stops when a 0X has been read, or when LEN(c) - 1 shortchars have been read, or when the end of the input stream has been reached. In any case the string returned in c is 0X terminated. *)
+	PROCEDURE (VAR r: Reader) InSChars* (OUT c: ARRAY OF SHORTCHAR), NEW;
+		
+		VAR
+			
+			i, n, m: INTEGER;
+		
+		BEGIN (*InSChars*)
+			i := 0; n := r.len; m := LEN(c) - 1;
+			LOOP
+				IF r.pos = n THEN
+					c[i] := 0X;
+					EXIT;
+				END;
+				c[i] := r.InSChar();
+				IF i = m THEN
+					c[i] := 0X;
+					EXIT;
+				END;
+				IF c[i] = 0X THEN
+					EXIT;
+				END;
+				INC(i);
+			END;
+		END InSChars;
+	
+	(* Read a char from the input stream. *)
+	PROCEDURE (VAR r: Reader) InChar* (): CHAR, NEW;
+		
+		VAR
+			
+			i, n, c: INTEGER;
+		
+		BEGIN (*InChar*)
+			ASSERT(r.pos + CHS <= r.len, 20);
+			n := 0;
+			FOR i := r.pos + CHS - 1 TO r.pos BY - 1 DO
+				c := r.s[i];
+				IF c < 0 THEN
+					INC(c, valOct);
+				END;
+				n := n * valOct + c;
+			END;
+			INC(r.pos, CHS);
+			RETURN CHR(n);
+		END InChar;
+	
+	(* Return the length (in CHARs) of  the following array of chars to be read from the input stream. The length doesn't include the possible terminal 0X. *)
+	PROCEDURE (VAR r: Reader) InCharsLen* (): INTEGER, NEW;
+		
+		VAR
+			
+			pos, i, n: INTEGER;
+			c: CHAR;
+		
+		BEGIN (*InCharsLen*)
+			pos := r.pos; i := 0; n := r.len;
+			LOOP
+				IF r.pos = n THEN
+					EXIT;
+				END;
+				c := r.InChar();
+				IF c = 0X THEN
+					EXIT;
+				END;
+				INC(i);
+			END;
+			r.pos := pos;
+			RETURN i;
+		END InCharsLen;
+	
+	(* Read an array of chars from the input stream. Reading stops when a 0X has been read, or when LEN(c) - 1 chars have been read, or when the end of the input stream has been reached. In any case the string returned in c is 0X terminated. *)
+	PROCEDURE (VAR r: Reader) InChars* (OUT c: ARRAY OF CHAR), NEW;
+		
+		VAR
+			
+			i, n, m: INTEGER;
+		
+		BEGIN (*InChars*)
+			i := 0; n := r.len; m := LEN(c) - 1;
+			LOOP
+				IF r.pos = n THEN
+					c[i] := 0X;
+					EXIT;
+				END;
+				c[i] := r.InChar();
+				IF i = m THEN
+					c[i] := 0X;
+					EXIT;
+				END;
+				IF c[i] = 0X THEN
+					EXIT;
+				END;
+				INC(i);
+			END;
+		END InChars;
+	
+	(* Read a shortint from the input stream. *)
+	PROCEDURE (VAR r: Reader) InSInt* (): SHORTINT, NEW;
+		
+		VAR
+			
+			i: INTEGER;
+			n, c: SHORTINT;
+		
+		BEGIN (*InSInt*)
+			ASSERT(r.pos + SIS <= r.len, 20);
+			n := 0;
+			FOR i := r.pos + SIS - 1 TO r.pos BY - 1 DO
+				c := r.s[i];
+				IF c < 0 THEN
+					INC(c, valOct);
+				END;
+				n := SHORT(n * valOct + c);
+			END;
+			INC(r.pos, SIS);
+			RETURN n;
+		END InSInt;
+	
+	(* Read an integer from the input stream. *)
+	PROCEDURE (VAR r: Reader) InInt* (): INTEGER, NEW;
+		
+		VAR
+			
+			i, n, c: INTEGER;
+		
+		BEGIN (*InInt*)
+			ASSERT(r.pos + INS <= r.len, 20);
+			n := 0;
+			FOR i := r.pos + INS - 1 TO r.pos BY - 1 DO
+				c := r.s[i];
+				IF c < 0 THEN
+					INC(c, valOct);
+				END;
+				n := n * valOct + c;
+			END;
+			INC(r.pos, INS);
+			RETURN n;
+		END InInt;
+	
+	(* Read a longint from the input stream. *)
+	PROCEDURE (VAR r: Reader) InLInt* (): LONGINT, NEW;
+		
+		VAR
+			
+			i: INTEGER;
+			n, c: LONGINT;
+		
+		BEGIN (*InLInt*)
+			ASSERT(r.pos + LIS <= r.len, 20);
+			n := 0;
+			FOR i := r.pos + LIS - 1 TO r.pos BY - 1 DO
+				c := r.s[i];
+				IF c < 0 THEN
+					INC(c, valOct);
+				END;
+				n := n * valOct + c;
+			END;
+			INC(r.pos, LIS);
+			RETURN n;
+		END InLInt;
+	
+	(* Read a shortreal from the input stream. Use File.BytesToSReal. *)
+	PROCEDURE (VAR r: Reader) InSReal* (): SHORTREAL, NEW;
+		
+		BEGIN (*InSReal*)
+			RETURN r.ref.BytesToSReal(r.s, r.pos);
+		END InSReal;
+	
+	(* Read a real from the input stream. Use File.BytesToReal. *)
+	PROCEDURE (VAR r: Reader) InReal* (): REAL, NEW;
+		
+		BEGIN (*InReal*)
+			RETURN r.ref.BytesToReal(r.s, r.pos);
+		END InReal;
+	
+	(* Read a set from the input stream. *)
+	PROCEDURE (VAR r: Reader) InSet* (): SET, NEW;
+		
+		VAR
+			
+			s: SET;
+			i, j, k, c: INTEGER;
+		
+		BEGIN (*InSet*)
+			ASSERT(r.pos + SES <= r.len, 20);
+			s := {}; k := 0;
+			FOR i := r.pos TO r.pos + SES - 1 DO
+				c := r.s[i];
+				IF c < 0 THEN
+					INC(c, valOct);
+				END;
+				FOR j := 1 TO 8 * BYS DO
+					IF ODD(c) THEN
+						INCL(s, k);
+					END;
+					c := c DIV 2;
+					INC(k);
+				END;
+			END;
+			INC(r.pos, SES);
+			RETURN s;
+		END InSet;
+	
+	(* Initialize a writer *)
+	PROCEDURE (VAR w: Writer) InitWriter (ref: File), NEW;
+		
+		BEGIN (*InitWriter*)
+			w.ref := ref;
+			A.New(w.s);
+		END InitWriter;
+	
+	(* Return the content of w.s (output stream of the writer) as an array of bytes *)
+	PROCEDURE (IN w: Writer) Write (): Bytes, NEW;
+		
+		VAR
+			
+			a: Bytes;
+			e: A.Elem;
+			i, n: INTEGER;
+		
+		BEGIN (*Write*)
+			n := w.s.NumberOfElems();
+			IF n = 0 THEN
+				a := NIL;
+			ELSE
+				NEW(a, n);
+				e := w.s.Next(NIL);
+				i := 0;
+				WHILE e # NIL DO
+					a[i] := e(Char).c;
+					e := w.s.Next(e);
+					INC(i);
+				END;
+			END;
+			RETURN a;
+		END Write;
+	
+	(* Write a byte to the output stream. *)
+	PROCEDURE (VAR w: Writer) OutByte* (c: BYTE), NEW;
+		
+		VAR
+			
+			ch: Char;
+		
+		BEGIN (*OutByte*)
+			NEW(ch);
+			w.s.Append(ch);
+			ch.c := c;
+		END OutByte;
+	
+	(* Write an array of bytes to the output stream. *)
+	PROCEDURE (VAR w: Writer) OutBytes* (IN b: ARRAY OF BYTE), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*OutBytes*)
+			FOR i := 0 TO LEN(b) - 1 DO
+				w.OutByte(b[i]);
+			END;
+		END OutBytes;
+	
+	(* Write a boolean to the output stream. *)
+	PROCEDURE (VAR w: Writer) OutBool* (b: BOOLEAN), NEW;
+		
+		BEGIN (*OutBool*)
+			IF b THEN
+				w.OutByte(1);
+			ELSE
+				w.OutByte(0);
+			END;
+		END OutBool;
+	
+	(* Write a shortchar to the output stream. *)
+	PROCEDURE (VAR w: Writer) OutSChar* (c: SHORTCHAR), NEW;
+		
+		VAR
+			
+			i, n: INTEGER;
+		
+		BEGIN (*OutSChar*)
+			n := ORD(c);
+			FOR i := 1 TO SCS DO
+				w.OutByte(SHORT(SHORT(n MOD valOct)));
+				n := n DIV valOct;
+			END;
+		END OutSChar;
+	
+	(* Write an array of shortchars to the output stream, up to, and including, the first 0X shortchar. Warning: LEN(c$) + 1 characters are written. *)
+	PROCEDURE (VAR w: Writer) OutSChars* (IN c: ARRAY OF SHORTCHAR), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*OutSChars*)
+			i := - 1;
+			REPEAT
+				INC(i);
+				w.OutSChar(c[i]);
+			UNTIL c[i] = 0X;
+		END OutSChars;
+	
+	(* Write a char to the output stream. *)
+	PROCEDURE (VAR w: Writer) OutChar* (c: CHAR), NEW;
+		
+		VAR
+			
+			i, n: INTEGER;
+		
+		BEGIN (*OutChar*)
+			n := ORD(c);
+			FOR i := 1 TO CHS DO
+				w.OutByte(SHORT(SHORT(n MOD valOct)));
+				n := n DIV valOct;
+			END;
+		END OutChar;
+	
+	(* Write an array of chars to the output stream, up to, and including, the first 0X char. Warning: LEN(c$) + 1 characters are written. *)
+	PROCEDURE (VAR w: Writer) OutChars* (IN c: ARRAY OF CHAR), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*OutChars*)
+			i := - 1;
+			REPEAT
+				INC(i);
+				w.OutChar(c[i]);
+			UNTIL c[i] = 0X;
+		END OutChars;
+	
+	(* Write a shortint to the output stream. *)
+	PROCEDURE (VAR w: Writer) OutSInt* (n: SHORTINT), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*OutSInt*)
+			FOR i := 1 TO SIS DO
+				w.OutByte(SHORT(SHORT(n MOD valOct)));
+				n := SHORT(n DIV valOct);
+			END;
+		END OutSInt;
+	
+	(* Write an integer to the output stream. *)
+	PROCEDURE (VAR w: Writer) OutInt* (n: INTEGER), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*OutInt*)
+			FOR i := 1 TO INS DO
+				w.OutByte(SHORT(SHORT(n MOD valOct)));
+				n := n DIV valOct;
+			END;
+		END OutInt;
+	
+	(* Write a longint to the output stream. *)
+	PROCEDURE (VAR w: Writer) OutLInt* (n: LONGINT), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*OutLInt*)
+			FOR i := 1 TO LIS DO
+				w.OutByte(SHORT(SHORT(SHORT(n MOD valOct))));
+				n := n DIV valOct;
+			END;
+		END OutLInt;
+	
+	(* Write a shortreal to the output stream. Use File.SRealToBytes. *)
+	PROCEDURE (VAR w: Writer) OutSReal* (r: SHORTREAL), NEW;
+		
+		BEGIN (*OutSReal*)
+			w.OutBytes(w.ref.SRealToBytes(r));
+		END OutSReal;
+	
+	(* Write a real to the output stream. Use File.RealToBytes. *)
+	PROCEDURE (VAR w: Writer) OutReal* (r: REAL), NEW;
+		
+		BEGIN (*OutReal*)
+			w.OutBytes(w.ref.RealToBytes(r));
+		END OutReal;
+	
+	(* Write a set to the output stream. *)
+	PROCEDURE (VAR w: Writer) OutSet* (s: SET), NEW;
+		
+		VAR
+			
+			i, j, n: INTEGER;
+		
+		BEGIN (*OutSet*)
+			FOR i := 0 TO 8 * (SES - 1) BY 8 DO
+				n := 0;
+				FOR j := 7 TO 0 BY - 1 DO
+					n := 2 * n;
+					IF i + j IN s THEN
+						INC(n);
+					END;
+				END;
+				w.OutByte(SHORT(SHORT(n)));
+			END;
+		END OutSet;
+	
+	(* Read an integer on disk at the current reading position *)
+	PROCEDURE (ref: File) ReadInt (): INTEGER, NEW;
+		
+		VAR
+			
+			a: Bytes;
+			r: Reader;
+		
+		BEGIN (*ReadInt*)
+			NEW(a, INS);
+			ref.Read(a);
+			r.InitReader(ref, a, 0);
+			RETURN r.InInt();
+		END ReadInt;
+	
+	(* Read a boolean on disk at the current reading position *)
+	PROCEDURE (ref: File) ReadBool (): BOOLEAN, NEW;
+		
+		VAR
+			
+			a: ARRAY BYS OF BYTE;
+		
+		BEGIN (*ReadBool*)
+			ref.Read(a);
+			RETURN a[0] # 0;
+		END ReadBool;
+	
+	(* Write an integer to disk at the current writing position *)
+	PROCEDURE (ref: File) WriteInt (n: INTEGER), NEW;
+		
+		VAR
+			
+			w: Writer;
+		
+		BEGIN (*WriteInt*)
+			w.InitWriter(ref);
+			w.OutInt(n);
+			ref.Write(w.Write());
+		END WriteInt;
+	
+	(* Write a boolean to disk at the current writing position *)
+	PROCEDURE (ref: File) WriteBool (b: BOOLEAN), NEW;
+		
+		VAR
+			
+			a: ARRAY 1 OF BYTE;
+		
+		BEGIN (*WriteBool*)
+			IF b THEN
+				a[0] := 1;
+			ELSE
+				a[0] := 0;
+			END;
+			ref.Write(a);
+		END WriteBool;
+	
+	(* Create data, of length size (bytes) on disk, with the help of f. *)
+	PROCEDURE (f: DataFac) New- (size: INTEGER): Data, NEW, ABSTRACT;
+	
+	(* Write data d with the help of the writer w. *)
+	PROCEDURE (d: Data) Write- (VAR w: Writer), NEW, ABSTRACT;
+	
+	(* Read data d with the help of the reader r. *)
+	PROCEDURE (d: Data) Read- (VAR r: Reader), NEW, ABSTRACT;
+	
+	(* Create data containing an array of char of length l (chars) and of size sz = l * CHS (bytes), with the help of f. *)
+	PROCEDURE (f: StringFac) New- (sz: INTEGER): String;
+		
+		VAR
+			
+			s: String;
+		
+		BEGIN (*New*)
+			ASSERT(sz >= 0, 20);
+			ASSERT(sz MOD CHS = 0, 21);
+			NEW(s);
+			IF sz = 0 THEN
+				s.c := NIL;
+			ELSE
+				NEW(s.c, sz DIV CHS);
+			END;
+			RETURN s;
+		END New;
+	
+	(* Write s.c with the help of the writer w. The length of the production is 2 * (LEN(s.c$)+ 1). *)
+	PROCEDURE (s: String) Write - (VAR w: Writer);
+		
+		BEGIN (*Write*)
+			IF s.c # NIL THEN
+				w.OutChars(s.c);
+			END;
+		END Write;
+	
+	(* Read s.c with the help of the reader r. *)
+	PROCEDURE (s: String) Read - (VAR r: Reader);
+		
+		BEGIN (*Read*)
+			IF s.c # NIL THEN
+				r.InChars(s.c);
+			END;
+		END Read;
+	
+	(* Create and return a new manager of the data created by fac in the database base. *)
+	PROCEDURE (base: Database) CreateDataMan* (fac: DataFac): DataMan, NEW;
+		
+		VAR
+			
+			man: DataMan;
+		
+		BEGIN (*CreateDataMan*)
+			ASSERT(fac # NIL, 20);
+			NEW(man);
+			man.base := base;
+			man.fac := fac;
+			RETURN man;
+		END CreateDataMan;
+	
+	PROCEDURE (f: FClusterHeadFac) New (sz: INTEGER): FClusterHead;
+		
+		VAR
+			
+			p: FClusterHead;
+		
+		BEGIN (*New*)
+			ASSERT(sz = FClusterHeadSize, 101);
+			NEW(p);
+			RETURN p;
+		END New;
+	
+	PROCEDURE (h: FClusterHead) Write (VAR w: Writer);
+		
+		BEGIN (*Write*)
+			w.OutBool(TRUE);
+			w.OutInt(h.size);
+			w.OutInt(h.father);
+			w.OutInt(h.left);
+			w.OutInt(h.right);
+			w.OutByte(h.lDist);
+			w.OutByte(h.rDist);
+		END Write;
+	
+	PROCEDURE (h: FClusterHead) Read (VAR r: Reader);
+		
+		BEGIN (*Read*)
+			ASSERT(r.InBool(), 102);
+			h.size := r.InInt();
+			h.father := r.InInt();
+			h.left := r.InInt();
+			h.right := r.InInt();
+			h.lDist := r.InByte();
+			h.rDist := r.InByte();
+		END Read;
+	
+	PROCEDURE (f: FClusterTailFac) New (sz: INTEGER): FClusterTail;
+		
+		VAR
+			
+			p: FClusterTail;
+		
+		BEGIN (*New*)
+			ASSERT(sz = FClusterTailSize, 103);
+			NEW(p);
+			RETURN p;
+		END New;
+	
+	PROCEDURE (q: FClusterTail) Write (VAR w: Writer);
+		
+		BEGIN (*Write*)
+			w.OutInt(q.size);
+			w.OutBool(TRUE);
+		END Write;
+	
+	PROCEDURE (q: FClusterTail) Read (VAR r: Reader);
+		
+		BEGIN (*Read*)
+			q.size := r.InInt();
+			ASSERT(r.InBool(), 104);
+		END Read;
+	
+	PROCEDURE (f: RClusterHeadFac) New (sz: INTEGER): RClusterHead;
+		
+		VAR
+			
+			p: RClusterHead;
+		
+		BEGIN (*New*)
+			ASSERT(sz = RClusterHeadSize, 105);
+			NEW(p);
+			RETURN p;
+		END New;
+	
+	PROCEDURE (t: RClusterHead) Write (VAR w: Writer);
+		
+		BEGIN (*Write*)
+			w.OutBool(FALSE);
+			w.OutInt(t.size);
+		END Write;
+	
+	PROCEDURE (t: RClusterHead) Read (VAR r: Reader);
+		
+		BEGIN (*Read*)
+			ASSERT(~r.InBool(), 106);
+			t.size := r.InInt();
+		END Read;
+	
+	PROCEDURE (f: RClusterTailFac) New (sz: INTEGER): RClusterTail;
+		
+		VAR
+			
+			p: RClusterTail;
+		
+		BEGIN (*New*)
+			ASSERT(sz = RClusterTailSize, 107);
+			NEW(p);
+			RETURN p;
+		END New;
+	
+	PROCEDURE (t: RClusterTail) Write (VAR w: Writer);
+		
+		BEGIN (*Write*)
+			w.OutBool(FALSE);
+		END Write;
+	
+	PROCEDURE (q: RClusterTail) Read (VAR r: Reader);
+		
+		BEGIN (*Read*)
+			ASSERT(~r.InBool(), 108);
+		END Read;
+	
+	(* Read LEN(a) bytes from position ptr on disk into a *)
+	PROCEDURE (base: Database) ReadBase (ptr: INTEGER; OUT a: ARRAY OF BYTE), NEW;
+		
+		BEGIN (*ReadBase*)
+			base.ref.PosReader(ptr);
+			base.ref.Read(a);
+		END ReadBase;
+	
+	(* Write LEN(a) bytes from a to disk at position ptr *)
+	PROCEDURE (base: Database) WriteBase (ptr: INTEGER; IN a: ARRAY OF BYTE), NEW;
+		
+		BEGIN (*WriteBase*)
+			base.ref.PosWriter(ptr);
+			base.ref.Write(a);
+		END WriteBase;
+	
+	(* Ordering relation of pages in database buffer; order is given by the position of pages on disk *)
+	PROCEDURE (p1: Page) Compare (p2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH p2: Page DO
+				IF p1.posP < p2.posP THEN
+					RETURN A.lt;
+				ELSIF p1.posP > p2.posP THEN
+					RETURN A.gt;
+				ELSE
+					RETURN A.eq;
+				END;
+			END;
+		END Compare;
+	
+	(* Look for the buffer page p at position pos; return true if found *)
+	PROCEDURE (base: Database) FindPage (pos: INTEGER; OUT p: Page): BOOLEAN, NEW;
+		
+		VAR
+			
+			n: INTEGER;
+			q: A.Elem;
+		
+		BEGIN (*FindPage*)
+			NEW(p);
+			p.posP := pos;
+			q := p;
+			IF base.pages.Search(q, n) THEN
+				p := q(Page);
+				RETURN TRUE;
+			END;
+			RETURN FALSE;
+		END FindPage;
+	
+	(* Promote p at the first place in the buffer ring *)
+	PROCEDURE (base: Database) PromotePage (p: Page), NEW;
+		
+		BEGIN (*PromotePage*)
+			p.nextP.prevP := p.prevP;
+			p.prevP.nextP := p.nextP;
+			p.nextP := base.pagesRing.nextP;
+			p.prevP := base.pagesRing;
+			base.pagesRing.nextP.prevP := p;
+			base.pagesRing.nextP := p;
+		END PromotePage;
+	
+	(* Create an empty buffer page in ram for position pos and size pageSize on disk; if buffer is already full, remove the least promoted page *)
+	PROCEDURE (base: Database) CreatePage (pageSize, pos: INTEGER): Page, NEW;
+		
+		VAR
+			
+			p, pp: Page;
+			q: A.Elem;
+			b: BOOLEAN;
+			n, i: INTEGER;
+			w: Writer;
+			a: ARRAY 1 OF BYTE;
+			aP: Bytes;
+		
+		BEGIN (*CreatePage*)
+			IF base.pages.NumberOfElems() < base.pageNb THEN (* Allocate a new buffer page *)
+				NEW(p);
+				p.nextP := base.pagesRing.nextP;
+				p.prevP := base.pagesRing;
+				base.pagesRing.nextP.prevP := p;
+				base.pagesRing.nextP := p
+			ELSE (* No more new page available: recycle an old one, the oldest *)
+				p := base.pagesRing.prevP;
+				base.PromotePage(p);
+				IF p.dirty THEN (* Page not up to date on disk: write it *)
+					IF p.posP >= base.writtenLim THEN (* Not yet written: write all pages with smaller addresses that are not still written (no hole on disk file) *)
+						NEW(pp);
+						pp.posP := base.writtenLim;
+						q := pp;
+						b := base.pages.SearchNext(q, n);
+						WHILE (q # NIL) & (q(Page).posP <= p.posP) DO
+							WITH q: Page DO
+								n := q.posP;
+								IF q.pageP IS ClusterTail THEN
+									DEC(n, q.sizeP - BOS);
+								END;
+								IF q.dirty THEN (* Write it normally *)
+									q.dirty := FALSE;
+									w.InitWriter(base.ref);
+									q.pageP.Write(w);
+									aP := w.Write();
+									IF aP # NIL THEN
+										base.WriteBase(n, aP);
+									END;
+								ELSE (* Write a series of zeroes *)
+									a[0] := 0;
+									base.ref.PosWriter(n);
+									FOR i := 1 TO q.sizeP DO
+										base.ref.Write(a);
+									END;
+								END;
+							END;
+							q := base.pages.Next(q);
+						END;
+						(* Update the limit of written clusters *)
+						IF q = NIL THEN
+							base.writtenLim := base.end;
+						ELSE
+							base.writtenLim := q(Page).posP;
+						END;
+					ELSE (* Write the oldest dirty page *)
+						n := p.posP;
+						IF p.pageP IS ClusterTail THEN
+							DEC(n, p.sizeP - BOS);
+						END;
+						w.InitWriter(base.ref);
+						p.pageP.Write(w);
+						aP := w.Write();
+						IF aP # NIL THEN
+							base.WriteBase(n, aP);
+						END;
+					END;
+				END;
+				b := base.pages.Delete(p);
+				ASSERT(b, 109);
+			END;
+			p.dirty := FALSE;
+			p.posP := pos;
+			p.pageP := NIL;
+			p.sizeP := pageSize;
+			q := p;
+			b := base.pages.SearchIns(q, n);
+			ASSERT(~b, 110);
+			RETURN p;
+		END CreatePage;
+	
+	(* Create a new buffer page in ram for position pos and size pageSize (on disk); create a new empty Data in it with the help of fac and return it *)
+	PROCEDURE (base: Database) NewPage (pageSize: INTEGER; fac: DataFac; pos: INTEGER): Data, NEW;
+		
+		VAR
+			
+			p: Page;
+		
+		BEGIN (*NewPage*)
+			p := base.CreatePage(pageSize, pos);
+			p.pageP := fac.New(pageSize);
+			RETURN p.pageP;
+		END NewPage;
+	
+	(* Erase buffer page with position pos by removing it from base.pagesRing and base.pages *)
+	PROCEDURE (base: Database) ErasePage (pos: INTEGER), NEW;
+		
+		VAR
+			
+			p: Page;
+			b: BOOLEAN;
+		
+		BEGIN (*ErasePage*)
+			IF base.FindPage(pos, p) THEN
+				p.nextP.prevP := p.prevP;
+				p.prevP.nextP := p.nextP;
+				b := base.pages.Delete(p);
+				ASSERT(b, 111);
+			END;
+		END ErasePage;
+	
+	(* Find the buffer page at position pos, or create it empty with size pageSize if not found; promote and return it *)
+	PROCEDURE (base: Database) SelectSysPage (pos, pageSize: INTEGER): Page, NEW;
+		
+		VAR
+			
+			p: Page;
+		
+		BEGIN (*SelectSysPage*)
+			IF base.FindPage(pos, p) THEN
+				base.PromotePage(p);
+			ELSE
+				p := base.CreatePage(pageSize, pos);
+			END;
+			RETURN p;
+		END SelectSysPage;
+	
+	(* Find, or create and fill if not found, the buffer page at position pos; creation, if any, is made with size pageSize and the help of fac *)
+	PROCEDURE (base: Database) ReadSysPage (pos, pageSize: INTEGER; fac: DataFac): Data, NEW;
+		
+		VAR
+			
+			p: Page;
+			a: Bytes;
+			r: Reader;
+		
+		BEGIN (*ReadSysPage*)
+			p := base.SelectSysPage(pos, pageSize);
+			IF p.pageP = NIL THEN
+				NEW(a, p.sizeP); (* p.sizeP = pageSize *)
+				p.pageP := fac.New(p.sizeP);
+				IF p.pageP IS ClusterTail THEN
+					DEC(pos, p.sizeP - BOS);
+				END;
+				base.ReadBase(pos, a);
+				r.InitReader(base.ref, a, 0);
+				p.pageP.Read(r);
+			END;
+			RETURN p.pageP;
+		END ReadSysPage;
+	
+	(* Mark the buffer page at position pos for writing on disk; the page must exist and not be empty *)
+	PROCEDURE (base: Database) WritePage (pos: INTEGER), NEW;
+		
+		VAR
+			
+			p: Page;
+		
+		BEGIN (*WritePage*)
+			ASSERT(base.FindPage(pos, p) & (p.pageP # NIL), 100);
+			p.dirty := TRUE;
+		END WritePage;
+	
+	(* Return whether the header at position pos is free or not; return in cont this header *)
+	PROCEDURE (base: Database) FreeHead (pos: INTEGER; OUT cont: ClusterHead): BOOLEAN, NEW;
+		
+		VAR
+			
+			p: Page;
+			b: BOOLEAN;
+		
+		BEGIN (*FreeHead*)
+			IF base.FindPage(pos, p) THEN
+				cont := p.pageP(ClusterHead);
+				RETURN cont IS FClusterHead;
+			ELSE
+				base.ref.PosReader(pos);
+				b := base.ref.ReadBool();
+				IF b THEN
+					cont := base.ReadSysPage(pos, FClusterHeadSize, fCH)(ClusterHead);
+				ELSE
+					cont := base.ReadSysPage(pos, RClusterHeadSize, rCH)(ClusterHead);
+				END;
+				RETURN b;
+			END;
+		END FreeHead;
+	
+	(* Return whether the tail at position pos is free or not; return in cont this tail *)
+	PROCEDURE (base: Database) FreeTail (pos: INTEGER; OUT cont: ClusterTail): BOOLEAN, NEW;
+		
+		VAR
+			
+			p: Page;
+			b: BOOLEAN;
+		
+		BEGIN (*FreeTail*)
+			IF base.FindPage(pos, p) THEN
+				cont := p.pageP(ClusterTail);
+				RETURN cont IS FClusterTail;
+			ELSE
+				base.ref.PosReader(pos);
+				b := base.ref.ReadBool();
+				IF b THEN
+					cont := base.ReadSysPage(pos, FClusterTailSize, fCT)(ClusterTail);
+				ELSE
+					cont := base.ReadSysPage(pos, RClusterTailSize, rCT)(ClusterTail);
+				END;
+				RETURN b;
+			END;
+		END FreeTail;
+	
+	(* Used by Database.UpdatePages *)
+	PROCEDURE (p: Page) Do (base: ANYPTR);
+		
+		VAR
+			
+			i, n: INTEGER;
+			w: Writer;
+			a: ARRAY 1 OF BYTE;
+			aP: Bytes;
+		
+		BEGIN (*Do*)
+			WITH base: Database DO
+				n := p.posP;
+				IF p.pageP IS ClusterTail THEN
+					DEC(n, p.sizeP - BOS);
+				END;
+				IF p.dirty THEN
+					p.dirty := FALSE;
+					w.InitWriter(base.ref);
+					p.pageP.Write(w);
+					aP := w.Write();
+					IF aP # NIL THEN
+						base.WriteBase(n, aP);
+					END;
+				ELSIF p.posP >= base.writtenLim THEN
+					a[0] := 0;
+					base.ref.PosWriter(n);
+					FOR i := 1 TO p.sizeP DO
+						base.ref.Write(a);
+					END;
+				END;
+			END;
+		END Do;
+	
+	(* Write all buffer pages marked for writing on disk *)
+	PROCEDURE (base: Database) UpdatePages, NEW;
+		
+		BEGIN (*UpdatePages*)
+			base.pages.WalkThrough(base);
+			base.writtenLim := base.end;
+		END UpdatePages;
+	
+	(* Create a new file of name nF, with the help of fac, and a database inside this file, with placeNb fixed places. Don't open this database. Fixed places are locations where can be recorded integers, i.e. data pointers. *)
+	PROCEDURE (fac: Factory) CreateBase* (IN nF: ARRAY OF CHAR; placeNb: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			ref: File;
+			i: INTEGER;
+		
+		BEGIN (*CreateBase*)
+			IF ~fac.Create(nF) THEN
+				RETURN FALSE;
+			END;
+			ref := fac.Open(nF);
+			ref.PosWriter(0);
+			ref.WriteInt(guard1); (* First "proof" *)
+			ref.WriteInt(bNil); (* root *)
+			ref.WriteInt(guard2); (* Second "proof" *)
+			ref.WriteInt(placeNb);
+			FOR i := 1 TO placeNb DO
+				ref.WriteInt(bNil); (* Places are empty *)
+			END;
+			ref.WriteBool(FALSE); (* Closed database *)
+			ref.WriteBool(FALSE); (* Tail of  a reserved cluster *)
+			ref.Close;
+			RETURN TRUE;
+		END CreateBase;
+	
+	(* Open and return, with the help of fac, the database created in the file of name nF. pageNb is the maximal number of allocated buffer pages. Return NIL if the file does not exit or can't be opened. *)
+	PROCEDURE (fac: Factory) OpenBase* (IN nF: ARRAY OF CHAR; pageNb: INTEGER): Database, NEW;
+		
+		VAR
+			
+			base: Database;
+			l: BaseList;
+		
+		BEGIN (*OpenBase*)
+			NEW(base);
+			base.ref := fac.Open(nF);
+			IF base.ref = NIL THEN
+				RETURN NIL;
+			END;
+			NEW(l);
+			l.nextB := bL; bL := l;
+			NEW(l.name, LEN(nF$) + 1); l.name^ := nF$;
+			l.ref := base.ref;
+			base.ref.PosReader(0);
+			ASSERT(base.ref.ReadInt() = guard1, 20);
+			base.root := base.ref.ReadInt();
+			ASSERT(base.ref.ReadInt() = guard2, 20);
+			base.placeNb := base.ref.ReadInt();
+			base.ref.PosReader((base.placeNb + 4) * INS);
+			ASSERT(~base.ref.ReadBool(), 21);
+			base.ref.PosWriter((base.placeNb + 4) * INS);
+			base.ref.WriteBool(TRUE);
+			base.ref.End(base.end);
+			base.writtenLim := base.end;
+			base.pageNb := MAX(pageNb, minPageNb);
+			A.New(base.pages);
+			NEW(base.pagesRing);
+			base.pagesRing.nextP := base.pagesRing;
+			base.pagesRing.prevP := base.pagesRing;
+			NEW(base.indRing);
+			base.indRing.nextI := base.indRing;
+			base.indRing.prevI := base.indRing;
+			IF base.root = bNil THEN
+				base.max := 0;
+			ELSE
+				base.max := base.ReadSysPage(base.root, FClusterHeadSize, fCH)(FClusterHead).size;
+			END;
+			RETURN base;
+		END OpenBase;
+	
+	(* Verify, with the help of fac, if the file nF exists and if it contains a database; return true in this case; the base must be closed. *)
+	PROCEDURE (fac: Factory) TestBase* (IN nF: ARRAY OF CHAR): BOOLEAN, NEW;
+		
+		VAR
+			
+			ref: File;
+			ok: BOOLEAN;
+		
+		BEGIN (*TestBase*)
+			ref := fac.Open(nF);
+			IF ref = NIL THEN
+				RETURN FALSE;
+			END;
+			ref.PosReader(0);
+			ok := ref.ReadInt() = guard1;
+			IF ok THEN
+				ref.PosReader(2 * INS);
+				ok := ref.ReadInt() = guard2;
+			END;
+			ref.Close;
+			RETURN ok;
+		END TestBase;
+	
+	(* Close, with the help of fac, the database created in the file of name nF, if it exists and is open. It is a rescue procedure. Use it only in case of an accidentally kept open database. Normally, use Database.CloseBase. *)
+	PROCEDURE (fac: Factory) CloseBase* (IN nF: ARRAY OF CHAR), NEW;
+		
+		VAR
+			
+			ref: File;
+			placeNb: INTEGER;
+			l, ll: BaseList;
+		
+		BEGIN (*CloseBase*)
+			ll := NIL; l := bL;
+			WHILE (l # NIL) & (l.name$ # nF$) DO
+				ll := l; l := l.nextB;
+			END;
+			IF l # NIL THEN
+				IF ll = NIL THEN
+					bL := l.nextB;
+				ELSE
+					ll.nextB := l.nextB;
+				END;
+				l.ref.Close;
+			END;
+			ref := fac.Open(nF);
+			IF ref # NIL THEN
+				ref.PosReader(0);
+				ASSERT(ref.ReadInt() = guard1, 20);
+				ref.PosReader(2 * INS);
+				ASSERT(ref.ReadInt() = guard2, 20);
+				placeNb := ref.ReadInt();
+				ref.PosWriter((placeNb + 4) * INS);
+				ref.WriteBool(FALSE);
+				ref.Close;
+			END;
+		END CloseBase;
+	
+	(* Update the database base on disk. *)
+	PROCEDURE (base: Database) UpdateBase*, NEW;
+		
+		BEGIN (*UpdateBase*)
+			ASSERT(base.ref # NIL, 20);
+			base.UpdatePages;
+			base.ref.PosWriter(INS);
+			base.ref.WriteInt(base.root);
+			base.ref.Flush;
+		END UpdateBase;
+	
+	(* Close the index ind. *)
+	PROCEDURE (ind: Index) Close*, NEW;
+		
+		BEGIN (*Close*)
+			ASSERT(ind.baseI # NIL, 20);
+			ind.prevI.nextI := ind.nextI;
+			ind.nextI.prevI := ind.prevI;
+			ind.baseI := NIL;
+		END Close;
+	
+	(* Close the database base. *)
+	PROCEDURE (base: Database) CloseBase*, NEW;
+		
+		VAR
+			
+			ind: Index;
+			l, ll: BaseList;
+		
+		BEGIN (*CloseBase*)
+			ASSERT(base.ref # NIL, 20);
+			ll := NIL; l := bL;
+			WHILE (l # NIL) & (l.ref # base.ref) DO
+				ll := l; l := l.nextB;
+			END;
+			ASSERT(l # NIL, 60);
+			IF ll = NIL THEN
+				bL := l.nextB;
+			ELSE
+				ll.nextB := l.nextB;
+			END;
+			base.UpdatePages;
+			base.ref.PosWriter(INS);
+			base.ref.WriteInt(base.root);
+			base.ref.PosWriter((base.placeNb + 4) * INS);
+			base.ref.WriteBool(FALSE);
+			base.ref.Close;
+			base.ref := NIL;
+			base.pages := NIL;
+			base.pagesRing := NIL;
+			ind := base.indRing.nextI;
+			WHILE ind # base.indRing DO
+				ind.Close;
+				ind := ind.nextI;
+			END;
+			base.indRing := NIL;
+		END CloseBase;
+	
+	(* Read on disk, and return, the size of the page at position ptr *)
+	PROCEDURE (base: Database) ReadBaseLength (ptr: INTEGER): INTEGER, NEW;
+		
+		BEGIN (*ReadBaseLength*)
+			base.ref.PosReader(ptr - INS); (* Point to the last field (size) of the preceding RClusterHead *)
+			RETURN base.ref.ReadInt();
+		END ReadBaseLength;
+	
+	(* Join the two leftist trees of roots pointed by root1 and root2, and returns a pointer to the new root in root. base is the database. dad is a pointer to the father of root. cont1 and cont2 are the roots of the two trees. On return, dist contains the field rDist of the new root plus one. *)
+	PROCEDURE (base: Database) Merge (dad, root1, root2: INTEGER; cont1, cont2: FClusterHead; OUT root: INTEGER; OUT dist: BYTE), NEW;
+		
+		VAR
+			
+			cont, oldCont: FClusterHead;
+			tmpA: INTEGER;
+			tmpB: BYTE;
+		
+		BEGIN (*Merge*)
+			IF root1 = bNil THEN
+				root := root2;
+				IF root2 = bNil THEN
+					dist := 1;
+				ELSE
+					dist := cont2.rDist; INC(dist);
+					IF cont2.father # dad THEN
+						cont2.father := dad;
+						base. WritePage(root2);
+					END;
+				END;
+			ELSIF root2 = bNil THEN
+				root := root1;
+				dist := cont1.rDist; INC(dist);
+				IF cont1.father # dad THEN
+					cont1.father := dad;
+					base. WritePage(root1);
+				END;
+			ELSIF (cont1.size > cont2.size) OR (cont1.size = cont2.size) & (root1 < root2) THEN
+				root := root1;
+				NEW(oldCont);
+				oldCont^ := cont1^;
+				cont1.father := dad;
+				IF cont1.right # bNil THEN
+					cont := base.ReadSysPage(cont1.right, FClusterHeadSize, fCH)(FClusterHead);
+				END;
+				base.Merge(root1, cont1.right, root2, cont, cont2, cont1.right, cont1.rDist);
+				IF cont1.lDist < cont1.rDist THEN
+					tmpA := cont1.left; cont1.left := cont1.right; cont1.right := tmpA;
+					tmpB := cont1.lDist; cont1.lDist := cont1.rDist; cont1.rDist := tmpB;
+				END;
+				dist := cont1.rDist; INC(dist);
+				IF (cont1.father # oldCont.father) OR (cont1.left # oldCont.left) OR (cont1.right # oldCont.right) OR (cont1.lDist # oldCont.lDist) OR (cont1.rDist # oldCont.rDist) THEN
+					base. WritePage(root1);
+				END;
+			ELSE
+				root := root2;
+				NEW(oldCont);
+				oldCont^ := cont2^;
+				cont2.father := dad;
+				IF cont2.right # bNil THEN
+					cont := base.ReadSysPage(cont2.right, FClusterHeadSize, fCH)(FClusterHead);
+				END;
+				base.Merge(root2, root1, cont2.right, cont1, cont, cont2.right, cont2.rDist);
+				IF cont2.lDist < cont2.rDist THEN
+					tmpA := cont2.left; cont2.left := cont2.right; cont2.right := tmpA;
+					tmpB := cont2.lDist; cont2.lDist := cont2.rDist; cont2.rDist := tmpB;
+				END;
+				dist := cont2.rDist; INC(dist);
+				IF (cont2.father # oldCont.father) OR (cont2.left # oldCont.left) OR (cont2.right # oldCont.right) OR (cont2.lDist # oldCont.lDist) OR (cont2.rDist # oldCont.rDist) THEN
+					base. WritePage(root2);
+				END;
+			END;
+		END Merge;
+	
+	(* Insert the free header cluster cont, pointed by ptr, in the leftist tree of root pointed by root. If the root is modified, root points to the new one. base is the database. If the size of the greatest cluster is modified, max returns the new value. *)
+	PROCEDURE (base: Database) BaseInsertFree (ptr: INTEGER; cont: FClusterHead; VAR root, max: INTEGER), NEW;
+		
+		VAR
+			
+			oldRoot: INTEGER;
+			dist: BYTE;
+			cont2: FClusterHead;
+		
+		BEGIN (*BaseInsertFree*)
+			cont.father := bNil;
+			cont.left := bNil;
+			cont.right := bNil;
+			cont.lDist := 1;
+			cont.rDist := 1;
+			oldRoot := root;
+			IF root = bNil THEN
+				base.WritePage(ptr);
+			ELSE
+				cont2 := base.ReadSysPage(root, FClusterHeadSize, fCH)(FClusterHead);
+			END;
+			base.Merge(bNil, root, ptr, cont2, cont, root, dist);
+			IF root = ptr THEN
+				max := cont.size;
+			ELSIF root # oldRoot THEN
+				max := base.ReadSysPage(root, FClusterHeadSize, fCH)(FClusterHead).size;
+			END;
+		END BaseInsertFree;
+	
+	(* Remove the free header cluster cont, pointed by ptr, from the leftist tree of root root. If the root is modified, root points to the new one. base is the database. If the size of the greatest cluster is modified, max returns the new value. *)
+	PROCEDURE (base: Database) BaseRemoveFree (ptr: INTEGER; cont: FClusterHead; VAR root, max: INTEGER), NEW;
+		
+		VAR
+			
+			lCont, rCont: FClusterHead;
+			child, nPtr, dad: INTEGER;
+			dist, oldDist, newDist: BYTE;
+		
+		BEGIN (*BaseRemoveFree*)
+			IF cont.left # bNil THEN
+				lCont := base.ReadSysPage(cont.left, FClusterHeadSize, fCH)(FClusterHead);
+			END;
+			IF cont.right # bNil THEN
+				rCont := base.ReadSysPage(cont.right, FClusterHeadSize, fCH)(FClusterHead);
+			END;
+			base.Merge(cont.father, cont.left, cont.right, lCont, rCont, child, dist);
+			nPtr := cont.father;
+			IF nPtr = bNil THEN
+				root := child;
+				IF root = bNil THEN
+					max := 0;
+				ELSE
+					cont := base.ReadSysPage(root, FClusterHeadSize, fCH)(FClusterHead);
+					max := cont.size;
+				END;
+			ELSE
+				LOOP
+					cont := base.ReadSysPage(nPtr, FClusterHeadSize, fCH)(FClusterHead);
+					oldDist := cont.rDist;
+					IF cont.left = ptr THEN
+						cont.left := child;
+						cont.lDist := dist;
+					ELSE ASSERT(cont.right = ptr, 60);
+						cont.right := child;
+						cont.rDist := dist;
+					END;
+					IF cont.rDist > cont.lDist THEN
+						child := cont.left; cont.left := cont.right; cont.right := child;
+						dist := cont.lDist; cont.lDist := cont.rDist; cont.rDist := dist;
+					END;
+					newDist := cont.rDist;
+					dad := cont.father;
+					base.WritePage(nPtr);
+					IF newDist = oldDist THEN
+						EXIT;
+					END;
+					dist := newDist; INC(dist);
+					ptr := nPtr;
+					child := nPtr;
+					nPtr := dad;
+					IF nPtr = bNil THEN
+						EXIT;
+					END;
+				END;
+			END;
+		END BaseRemoveFree;
+	
+	(* Reserve a page of size size on disk in base and return its position *)
+	PROCEDURE (base: Database) AllocateBase (size: INTEGER): INTEGER, NEW;
+		
+		VAR
+			
+			sz, szRest, ptr: INTEGER;
+			cont: FClusterHead;
+			contT: FClusterTail;
+			contHR: RClusterHead;
+			contTR: RClusterTail;
+		
+		BEGIN (*AllocateBase*)
+			sz := ((size + RClusterHeadSize + RClusterTailSize - 1) DIV (FClusterHeadSize + FClusterTailSize) + 1) * (FClusterHeadSize + FClusterTailSize); (* Quantification of disk space with lump sizes multiple of FClusterHeadSize + FClusterTailSize *)
+			IF base.max < sz THEN (* If not enough place, extend the base *)
+				ptr := base.end;
+				INC(base.end, sz);
+			ELSE (* Take a part of the biggest lump *)
+				szRest := base.max - sz;
+				ptr := base.root;
+				cont := base.ReadSysPage(ptr, FClusterHeadSize, fCH)(FClusterHead);
+				base.BaseRemoveFree(ptr, cont, base.root, base.max);
+				base.ErasePage(ptr);
+				IF szRest = 0 THEN
+					base.ErasePage(ptr + sz - 1);
+				ELSE
+					contT := base.ReadSysPage(ptr + sz + szRest - 1, FClusterTailSize, fCT)(FClusterTail);
+					contT.size := szRest;
+					base.WritePage(ptr + sz + szRest - 1);
+					cont := base.NewPage(FClusterHeadSize, fCH, ptr + sz)(FClusterHead);
+					cont.size := szRest;
+					base.BaseInsertFree(ptr + sz, cont, base.root, base.max);
+				END;
+			END;
+			contHR := base.NewPage(RClusterHeadSize, rCH, ptr)(RClusterHead);
+			contHR.size := size;
+			base.WritePage(ptr);
+			contTR := base.NewPage(RClusterTailSize, rCT, ptr + sz - 1)(RClusterTail);
+			base.WritePage(ptr + sz - 1);
+			INC(ptr, RClusterHeadSize);
+			RETURN ptr;
+		END AllocateBase;
+	
+	(* Return the reserved cluster at position ptr to the pool of free clusters on disk; aggregate adjacent free clusters into bigger ones; truncate the base file if possible *)
+	PROCEDURE (base: Database) DeleteBase (ptr: INTEGER), NEW;
+		
+		VAR
+			
+			q, sz: INTEGER;
+			contHF: FClusterHead;
+			contTF: FClusterTail;
+			contHR: RClusterHead;
+			contH: ClusterHead;
+			contT: ClusterTail;
+			hasTail: BOOLEAN;
+		
+		BEGIN (*DeleteBase*)
+			ASSERT(ptr >= baseHead + RClusterHeadSize + base.placeNb * INS, 112); (* ptr points after the fist head of reserved cluster *)
+			DEC(ptr, RClusterHeadSize);
+			contHR := base.ReadSysPage(ptr, RClusterHeadSize, rCH)(RClusterHead);
+			sz := ((contHR.size + RClusterHeadSize + RClusterTailSize - 1) DIV (FClusterHeadSize + FClusterTailSize) + 1) * (FClusterHeadSize + FClusterTailSize); (* Quantification of disk space with lump sizes multiple of FClusterHeadSize + FClusterTailSize *)
+			ASSERT(ptr + sz <= base.end, 113);
+			base.ErasePage(ptr); (* Erase head of reserved cluster... *)
+			q := ptr + sz;
+			base.ErasePage(q - 1); (* ...and its tail *)
+			hasTail := FALSE;
+			IF q = base.end THEN
+				base.end := ptr;
+				base.ref.Truncate(base.end); (* If last cluster, truncate file... *)
+			ELSIF base.FreeHead(q, contH) THEN (* ... else, if next cluster is free, aggregate it *)
+				contHF := contH(FClusterHead);
+				INC(sz, contHF.size);
+				base.BaseRemoveFree(q, contHF, base.root, base.max);
+				base.ErasePage(q);
+				hasTail := TRUE;
+			END;
+			q := ptr - 1;
+			IF base.FreeTail(q, contT) THEN (* If previous cluster is free... *)
+				contTF := contT(FClusterTail);
+				base.ErasePage(q);
+				q := ptr - contTF.size;
+				contHF := base.ReadSysPage(q, FClusterHeadSize, fCH)(FClusterHead);
+				base.BaseRemoveFree(q, contHF, base.root, base.max);
+				IF ptr = base.end THEN (* ... and if it's the last cluster, truncate file... *)
+					base.ErasePage(q);
+					base.ErasePage(ptr + sz - 1);
+					base.end := q;
+					base.ref.Truncate(base.end);
+				ELSE (* ... else aggregate it *)
+					INC(contHF.size, sz);
+					IF hasTail THEN
+						contTF := base.ReadSysPage(q + contHF.size - 1, FClusterTailSize, fCT)(FClusterTail);
+					ELSE
+						contTF := base.NewPage(FClusterTailSize, fCT, q + contHF.size - 1)(FClusterTail);
+					END;
+					contTF.size := contHF.size;
+					base.WritePage(q + contHF.size - 1);
+					base.BaseInsertFree(q, contHF, base.root, base.max);
+				END;
+			ELSIF ptr # base.end THEN
+				contHF := base.NewPage(FClusterHeadSize, fCH, ptr)(FClusterHead);
+				contHF.size := sz;
+				IF hasTail THEN
+					contTF := base.ReadSysPage(ptr + sz - 1, FClusterTailSize, fCT)(FClusterTail);
+				ELSE
+					contTF := base.NewPage(FClusterTailSize, fCT, ptr + sz - 1)(FClusterTail);
+				END;
+				contTF.size := sz;
+				base.WritePage(ptr + sz - 1);
+				base.BaseInsertFree(ptr, contHF, base.root, base.max);
+			END;
+			base.writtenLim := MIN(base.writtenLim, base.end);
+		END DeleteBase;
+	
+	(* Read and return the content of the fixed place place of the database base. The first place has number 0. *)
+	PROCEDURE (base: Database) ReadPlace* (place: INTEGER): INTEGER, NEW;
+		
+		BEGIN (*ReadPlace*)
+			ASSERT(base.ref # NIL, 20);
+			ASSERT((place >= 0) & (place < base.placeNb), 21);
+			base.ref.PosReader((place + 4) * INS);
+			RETURN base.ref.ReadInt();
+		END ReadPlace;
+	
+	(* Write val in the fixed place place of the database base. The first place has number 0. *)
+	PROCEDURE (base: Database) WritePlace* (place: INTEGER; val: INTEGER), NEW;
+		
+		BEGIN (*WritePlace*)
+			ASSERT(base.ref # NIL, 20);
+			ASSERT((place >= 0) & (place < base.placeNb), 21);
+			base.ref.PosWriter((place + 4) * INS);
+			base.ref.WriteInt(val);
+		END WritePlace;
+	
+	(* Reserve a page of size pageSize on disk and create a new buffer page for it, with the help of fac; return the empty data, and the page position in pos *)
+	PROCEDURE (base: Database) NewDiskPage (pageSize: INTEGER; fac: DataFac; OUT pos: INTEGER): Data, NEW;
+		
+		BEGIN (*NewDiskPage*)
+			pos := base.AllocateBase(pageSize);
+			RETURN base.NewPage(pageSize, fac, pos);
+		END NewDiskPage;
+	
+	(* Erase the page on disk at position pos and its buffer page *)
+	PROCEDURE (base: Database) EraseDiskPage (pos: INTEGER), NEW;
+		
+		BEGIN (*EraseDiskPage*)
+			base.ErasePage(pos);
+			base.DeleteBase(pos);
+		END EraseDiskPage;
+	
+	(* For an already existing normal page (not cluster head nor tail page) on disk at position pos, promote and possibly create its buffer page and return it *)
+	PROCEDURE (base: Database) SelectPage (pos: INTEGER): Page, NEW;
+		
+		VAR
+			
+			p: Page;
+		
+		BEGIN (*SelectPage*)
+			IF base.FindPage(pos, p) THEN
+				base.PromotePage(p);
+			ELSE
+				p := base.CreatePage(base.ReadBaseLength(pos), pos);
+			END;
+			RETURN p;
+		END SelectPage;
+	
+	(* Find in buffer the size of the normal page (not cluster head nor tail page) at position pos and return it *)
+	PROCEDURE (base: Database) ReadPageLength (pos: INTEGER): INTEGER, NEW;
+		
+		BEGIN (*ReadPageLength*)
+			RETURN base.SelectPage(pos).sizeP;
+		END ReadPageLength;
+	
+	(* Find, or create and fill if not found, the normal buffer page (not cluster head nor tail page) at position pos; creation of data, if any, is made with the help of fac *)
+	PROCEDURE (base: Database) ReadPage (pos: INTEGER; fac: DataFac): Data, NEW;
+		
+		VAR
+			
+			p: Page;
+			a: Bytes;
+			r: Reader;
+		
+		BEGIN (*ReadPage*)
+			p := base.SelectPage(pos);
+			IF p.pageP = NIL THEN
+				NEW(a, p.sizeP);
+				p.pageP := fac.New(p.sizeP);
+				base.ReadBase(pos, a);
+				r.InitReader(base.ref, a, 0);
+				p.pageP.Read(r);
+			END;
+			RETURN p.pageP;
+		END ReadPage;
+	
+	(* Read user data d in database base at position ptr. *)
+	PROCEDURE (d: DataMan) ReadData* (ptr: INTEGER): Data, NEW;
+		
+		VAR
+			
+			r: Reader;
+			w: Writer;
+			a: Bytes;
+			pa: Data;
+		
+		BEGIN (*ReadData*)
+			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(ptr # bNil, 21);
+			w.InitWriter(d.base.ref);
+			d.base.ReadPage(ptr, d.fac).Write(w);
+			a := w.Write();
+			r.InitReader(d.base.ref, a, 0);
+			pa := d.fac.New(LEN(a));
+			pa.Read(r);
+			RETURN pa;
+		END ReadData;
+	
+	(* Consider using WriteAllocateData instead.Allocate a cluster for data, managed by d, in the database of d, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size. *)
+	PROCEDURE (d: DataMan) AllocateData* (data: Data): INTEGER, NEW;
+		
+		VAR
+			
+			w: Writer;
+			pos: INTEGER;
+			pa: Data;
+		
+		BEGIN (*AllocateData*)
+			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(data # NIL, 21);
+			w.InitWriter(d.base.ref);
+			data.Write(w);
+			pa := d.base.NewDiskPage(w.s.NumberOfElems(), d.fac, pos);
+			RETURN pos;
+		END AllocateData;
+	
+	(* Allocate a cluster for data, managed by d, in the database of d, and write data into it; return the position of the allocated cluster. *)
+	PROCEDURE (d: DataMan) WriteAllocateData* (data: Data): INTEGER, NEW;
+		
+		VAR
+			
+			r: Reader;
+			w: Writer;
+			a: Bytes;
+			ptr: INTEGER;
+			pa: Data;
+		
+		BEGIN (*WriteAllocateData*)
+			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(data # NIL, 21);
+			w.InitWriter(d.base.ref);
+			data.Write(w);
+			a := w.Write();
+			pa := d.base.NewDiskPage(LEN(a), d.fac, ptr);
+			r.InitReader(d.base.ref, a, 0);
+			d.base.ReadPage(ptr, d.fac).Read(r);
+			d.base.WritePage(ptr);
+			RETURN ptr;
+		END WriteAllocateData;
+	
+	(* Write data, managed by d, at the position ptr in the database of d. *)
+	PROCEDURE (d: DataMan) WriteData* (ptr: INTEGER; data: Data), NEW;
+		
+		VAR
+			
+			r: Reader;
+			w: Writer;
+			a: Bytes;
+		
+		BEGIN (*WriteData*)
+			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(data # NIL, 21);
+			ASSERT(ptr # bNil, 22);
+			w.InitWriter(d.base.ref);
+			data.Write(w);
+			r.InitReader(d.base.ref, w.Write(), 0);
+			d.base.ReadPage(ptr, d.fac).Read(r);
+			d.base.WritePage(ptr);
+		END WriteData;
+	
+	(* Erase data managed by d at position ptr in the database of d. *)
+	PROCEDURE (d: DataMan) EraseData* (ptr: INTEGER), NEW;
+		
+		BEGIN (*EraseData*)
+			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(ptr # bNil, 21);
+			d.base.EraseDiskPage(ptr);
+		END EraseData;
+	
+	PROCEDURE (pa: PageI) Write (VAR w: Writer);
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*Write*)
+			w.OutInt(pa.keys);
+			w.OutInt(pa.elNb);
+			FOR i := 0 TO 2 * (minEl + 1) - 1 DO
+				w.OutInt(pa.elems[i].ptr);
+				w.OutInt(pa.elems[i].endK);
+			END;
+		END Write;
+	
+	PROCEDURE (pa: PageI) Read (VAR r: Reader);
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*Read*)
+			pa.keys := r.InInt();
+			pa.elNb := r.InInt();
+			FOR i := 0 TO 2 * (minEl + 1) - 1 DO
+				pa.elems[i].ptr := r.InInt();
+				pa.elems[i].endK := r.InInt();
+			END;
+		END Read;
+	
+	PROCEDURE (f: PageIFac) New (sz: INTEGER): PageI;
+		
+		VAR
+			
+			pa: PageI;
+		
+		BEGIN (*New*)
+			ASSERT(sz = pageIS, 114);
+			NEW(pa);
+			RETURN pa;
+		END New;
+	
+	PROCEDURE (c: KeyCont) Write (VAR w: Writer);
+		
+		BEGIN (*Write*)
+			IF c.c # NIL THEN
+				w.OutBytes(c.c);
+			END;
+		END Write;
+	
+	PROCEDURE (c: KeyCont) Read (VAR r: Reader);
+		
+		BEGIN (*Read*)
+			IF c.c # NIL THEN
+				r.InBytes(c.c);
+			END;
+		END Read;
+	
+	PROCEDURE (f: KeyFac) New (sz: INTEGER): KeyCont;
+		
+		VAR
+			
+			pa: KeyCont;
+		
+		BEGIN (*New*)
+			ASSERT(sz >= 0, 115);
+			NEW(pa);
+			IF sz = 0 THEN
+				pa.c := NIL;
+			ELSE
+				NEW(pa.c, sz);
+			END;
+			RETURN pa;
+		END New;
+	
+	PROCEDURE (c: StringI) Write (VAR w: Writer);
+		
+		BEGIN (*Write*)
+			w.OutInt(c.next);
+			w.OutInt(c.prev);
+			w.OutInt(c.dataPos);
+			IF c.key # NIL THEN
+				w.OutBytes(c.key);
+			END;
+		END Write;
+	
+	PROCEDURE (c: StringI) Read (VAR r: Reader);
+		
+		BEGIN (*Read*)
+			c.next := r.InInt();
+			c.prev := r.InInt();
+			c.dataPos := r.InInt();
+			IF c.key # NIL THEN
+				r.InBytes(c.key);
+			END;
+		END Read;
+	
+	PROCEDURE (f: StringIFac) New (sz: INTEGER): StringI;
+		
+		VAR
+			
+			pa: StringI;
+		
+		BEGIN (*New*)
+			ASSERT(sz >= stringIS, 20);
+			NEW(pa);
+			sz := sz - stringIS;
+			IF sz = 0 THEN
+				pa.key := NIL;
+			ELSE
+				NEW(pa.key, sz);
+			END;
+			RETURN pa;
+		END New;
+	
+	PROCEDURE (i: Info) Write (VAR w: Writer);
+		
+		BEGIN (*Write*)
+			w.OutInt(guard1);
+			w.OutInt(i.iRoot);
+			w.OutInt(i.iString);
+			w.OutInt(i.iKSize);
+			w.OutInt(i.iH);
+			w.OutInt(i.iSize);
+			w.OutInt(guard2);
+		END Write;
+	
+	PROCEDURE (i: Info) Read (VAR r: Reader);
+		
+		BEGIN (*Read*)
+			ASSERT(r.InInt() = guard1, 116);
+			i.iRoot := r.InInt();
+			i.iString := r.InInt();
+			i.iKSize := r.InInt();
+			i.iH := r.InInt();
+			i.iSize := r.InInt();
+			ASSERT(r.InInt() = guard2, 116);
+		END Read;
+	
+	PROCEDURE (f: InfoFac) New (sz: INTEGER): Info;
+		
+		VAR
+			
+			pa: Info;
+		
+		BEGIN (*New*)
+			ASSERT(sz = infoS, 117);
+			NEW(pa);
+			RETURN pa;
+		END New;
+	
+	(* Create a new index in the database base and return its reference, but do not open it. keySize is the size of keys. If keys have a fixed size, put this size in keySize. If the size of keys does not vary much, put the greatest size in keySize. If the greatest size of keys is unknown, or if this size vary much, or if you want to use prefixes, put zero in keySize: you'll have to fix the size of each key later. *)
+	PROCEDURE (base: Database) CreateIndex* (keySize: INTEGER): INTEGER, NEW;
+		
+		VAR
+			
+			pos: INTEGER;
+			p: Info;
+			c: StringI;
+		
+		BEGIN (*CreateIndex*)
+			ASSERT(base.ref # NIL, 20);
+			ASSERT(keySize >= 0, 21);
+			p := base.NewDiskPage(infoS, inff, pos)(Info);
+			p.iKSize := keySize;
+			p.iH := 0;
+			p.iSize := 0;
+			c := base.NewDiskPage(stringIS, sif, p.iString)(StringI);
+			p.iRoot := p.iString;
+			c.next := p.iString;
+			c.prev := p.iString;
+			c.dataPos := bNil;
+			base.WritePage(p.iString);
+			base.WritePage(pos);
+			RETURN pos;
+		END CreateIndex;
+	
+	(* Open and return an index created with the reference ref by Database.CreateIndex in the database base. man is the key manager of the index and f is the factory of its keys. The current position of the index is reset. *)
+	PROCEDURE (base: Database) OpenIndex* (ref: INTEGER; man: KeyManager; f: DataFac): Index, NEW;
+		
+		VAR
+			
+			ind: Index;
+			p: Info;
+		
+		BEGIN (*OpenIndex*)
+			ASSERT(base.ref # NIL, 20);
+			ASSERT(man # NIL, 21);
+			ASSERT(f # NIL, 22);
+			ASSERT(ref # bNil, 23);
+			ind := base.indRing.nextI;
+			WHILE (ind # base.indRing) & (ind.refI # ref) DO
+				ind := ind.nextI;
+			END;
+			ASSERT(ind = base.indRing, 24);
+			p := base.ReadPage(ref, inff)(Info);
+			NEW(ind);
+			ind.rootI := p.iRoot;
+			ind.stringI := p.iString;
+			ind.keySize := p.iKSize;
+			ind.height := p.iH;
+			ind.size := p.iSize;
+			ind.nextI := base.indRing.nextI;
+			ind.prevI := base.indRing;
+			base.indRing.nextI.prevI := ind;
+			base.indRing.nextI := ind;
+			ind.baseI := base;
+			ind.refI := ref;
+			man.f := f;
+			ind.manager := man;
+			ind.posI := ind.stringI;
+			IF ind.keySize = 0 THEN
+				ind.keysSize := sectSize;
+			ELSE
+				ind.keysSize := (2 * minEl + 1) * ind.keySize;
+			END;
+			RETURN ind;
+		END OpenIndex;
+	
+	(* Delete the index at position ref in the database base; this index must have been closed. *)
+	PROCEDURE (base: Database) DeleteIndex* (ref: INTEGER), NEW;
+		
+		VAR
+			
+			p: Info;
+			ind: Index;
+			a: ARRAY infoS OF BYTE;
+			i: INTEGER;
+		
+		PROCEDURE IndDel (pos, h: INTEGER);
+			
+			VAR
+				
+				i: INTEGER;
+				pa: PageI;
+			
+			BEGIN (*IndDel*)
+				IF h > 0 THEN
+					pa := base.ReadPage(pos, pif)(PageI);
+					base.EraseDiskPage(pa.keys);
+					FOR i := 0 TO pa.elNb DO
+						IndDel(pa.elems[i].ptr, h - 1);
+					END;
+				END;
+				base.EraseDiskPage(pos);
+			END IndDel;
+		
+		BEGIN (*DeleteIndex*)
+			ASSERT(base.ref # NIL, 20);
+			ASSERT(ref # bNil, 22);
+			ind := base.indRing.nextI;
+			WHILE (ind # base.indRing) & (ind.refI # ref) DO
+				ind := ind.nextI;
+			END;
+			ASSERT(ind = base.indRing, 21);
+			p := base.ReadPage(ref, inff)(Info);
+			IndDel(p.iRoot, p.iH);
+			FOR i := 0 TO infoS - 1 DO
+				a[i] := 0;
+			END;
+			base.WriteBase(ref, a); (* Erase the two "guards" *)
+			base.EraseDiskPage(ref);
+		END DeleteIndex;
+	
+	(* Calculate the prefix of c2 relative to c1, with the help of man.PrefP, and return it as a Key in p; l is the length of p (in bytes); ref is used for real <-> bytes translations *)
+	PROCEDURE (man: KeyManager) Prefix (ref: File; c1, c2: Data; OUT p: Key; OUT l: INTEGER), NEW;
+		
+		VAR
+			
+			w: Writer;
+		
+		BEGIN (*Prefix*)
+			man.PrefP(c1, c2);
+			w.InitWriter(ref);
+			c2.Write(w);
+			p := w.Write();
+			l := LEN(p);
+		END Prefix;
+	
+	(* Update the root of ind's btree on disk *)
+	PROCEDURE (ind: Index) UpdateRoot, NEW;
+		
+		VAR
+			
+			p: Info;
+		
+		BEGIN (*UpdateRoot*)
+			p := ind.baseI.ReadPage(ind.refI, inff)(Info);
+			p.iRoot := ind.rootI;
+			p.iH := ind.height;
+			p.iSize := ind.size;
+			ind.baseI.WritePage(ind.refI);
+		END UpdateRoot;
+	
+	(* Change the allocation of p.keys when its size is increased by extra *)
+	PROCEDURE (ind: Index) AdjustKeysSize (p: PageI; extra: INTEGER), NEW;
+		
+		VAR
+			
+			l, l1, l2, i: INTEGER;
+			nKeys: INTEGER;
+			k: KeyCont;
+			nK: Key;
+		
+		BEGIN (*AdjustKeysSize*)
+			l1 := ind.baseI.ReadPageLength(p.keys);
+			l := p.elems[p.elNb].endK;
+			l2 := l + extra;
+			IF l2 > l1 THEN
+				REPEAT
+					INC(l1, sectSize);
+				UNTIL l1 >= l2;
+				nK := ind.baseI.NewDiskPage(l1, kf, nKeys)(KeyCont).c;
+				k := ind.baseI.ReadPage(p.keys, kf)(KeyCont);
+				FOR i := 0 TO l - 1 DO
+					nK[i] := k.c[i];
+				END;
+				ind.baseI.WritePage(nKeys);
+				ind.baseI.EraseDiskPage(p.keys);
+				p.keys := nKeys;
+			END;
+		END AdjustKeysSize;
+	
+	(* Transfer nb successive elements from pa1 to pa2, starting at rank src in pa1 and at rank dst in pa2 *)
+	PROCEDURE (ind: Index) TransInter (pa1, pa2: PageI; src, dst, nb: INTEGER), NEW;
+		
+		VAR
+			
+			cl1, cl2: KeyCont;
+			lC, i, diff, u, v: INTEGER;
+		
+		BEGIN (*TransInter*)
+			lC := pa1.elems[src + nb - 1].endK - pa1.elems[src - 1].endK;
+			ind.AdjustKeysSize(pa2, lC);
+			cl1 := ind.baseI.ReadPage(pa1.keys, kf)(KeyCont);
+			cl2 := ind.baseI.ReadPage(pa2.keys, kf)(KeyCont);
+			FOR i := pa2.elems[pa2.elNb].endK - 1 TO pa2.elems[dst - 1].endK BY - 1 DO
+				cl2.c[i + lC] := cl2.c[i];
+			END;
+			u := pa2.elems[dst - 1].endK; v := pa1.elems[src - 1].endK;
+			FOR i := 0 TO lC - 1 DO
+				cl2.c[i + u] := cl1.c[i + v];
+			END;
+			ind.baseI.WritePage(pa2.keys);
+			diff := pa1.elems[src + nb - 1].endK - pa1.elems[src - 1].endK;
+			FOR i := pa1.elems[src + nb - 1].endK TO pa1.elems[pa1.elNb].endK - 1 DO
+				cl1.c[i - diff] := cl1.c[i];
+			END;
+			ind.baseI.WritePage(pa1.keys);
+			FOR i := dst TO pa2.elNb DO
+				INC(pa2.elems[i].endK, lC);
+			END;
+			FOR i := pa2.elNb TO dst BY - 1 DO
+				pa2.elems[i + nb] := pa2.elems[i];
+			END;
+			diff := pa2.elems[dst - 1].endK - pa1.elems[src - 1].endK;
+			FOR i := src TO src + nb - 1 DO
+				INC(pa1.elems[i].endK, diff);
+			END;
+			FOR i := 0 TO nb - 1 DO
+				pa2.elems[dst + i] := pa1.elems[src + i];
+			END;
+			FOR i := src + nb TO pa1.elNb DO
+				DEC(pa1.elems[i].endK, lC);
+			END;
+			FOR i := src + nb TO pa1.elNb DO
+				pa1.elems[i - nb] := pa1.elems[i];
+			END;
+			INC(pa2.elNb, nb);
+			DEC(pa1.elNb, nb);
+		END TransInter;
+	
+	(* Add, in the page pa of  the index ind, an element of rank dst corresponding to the key c of length lC and pointing to the page of position el (PageI inside index or StringI at its bottom) *)
+	PROCEDURE (ind: Index) TransIn (pa: PageI; el: INTEGER; c: Key; lC, dst: INTEGER), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+			k: KeyCont;
+		
+		BEGIN (*TransIn*)
+			ind.AdjustKeysSize(pa, lC);
+			k := ind.baseI.ReadPage(pa.keys, kf)(KeyCont);
+			FOR i := pa.elems[pa.elNb].endK - 1 TO pa.elems[dst - 1].endK BY - 1 DO
+				k.c[i + lC] := k.c[i];
+			END;
+			FOR i := 0 TO lC - 1 DO
+				k.c[pa.elems[dst - 1].endK + i] := c[i];
+			END;
+			ind.baseI.WritePage(pa.keys);
+			FOR i := dst TO pa.elNb DO
+				INC(pa.elems[i].endK, lC);
+			END;
+			FOR i := pa.elNb TO dst BY - 1 DO
+				pa.elems[i + 1] := pa.elems[i];
+			END;
+			pa.elems[dst].ptr := el;
+			pa.elems[dst].endK := pa.elems[dst - 1].endK + lC;
+			INC(pa.elNb);
+		END TransIn;
+	
+	(* Substract, in the page pa of  the index ind, an element of rank src corresponding to the key c of length lC and pointing to the page of position el (PageI inside index or StringI at its bottom) *)
+	PROCEDURE (ind: Index) TransOut (pa: PageI; src: INTEGER; OUT el: INTEGER; OUT c: Key; OUT lC: INTEGER), NEW;
+		
+		VAR
+			
+			k: KeyCont;
+			i: INTEGER;
+		
+		BEGIN (*TransOut*)
+			el := pa.elems[src].ptr;
+			lC := pa.elems[src].endK - pa.elems[src - 1].endK;
+			IF lC = 0 THEN
+				c := NIL;
+			ELSE
+				NEW(c, lC);
+			END;
+			k := ind.baseI.ReadPage(pa.keys, kf)(KeyCont);
+			FOR i := 0 TO lC - 1 DO
+				c[i] := k.c[pa.elems[src - 1].endK + i];
+			END;
+			FOR i := pa.elems[src].endK TO pa.elems[pa.elNb].endK - 1 DO
+				k.c[i - lC] := k.c[i];
+			END;
+			ind.baseI.WritePage(pa.keys);
+			FOR i := src + 1 TO pa.elNb DO
+				DEC(pa.elems[i].endK, lC);
+			END;
+			FOR i := src TO pa.elNb - 1 DO
+				pa.elems[i] := pa.elems[i + 1]
+			END;
+			DEC(pa.elNb);
+		END TransOut;
+	
+	(* Seek in the index ind the key key and insert it if it is not there already. The result indicates if the key was found. Fix the current position of the index on the key found or inserted. *)
+	PROCEDURE (ind: Index) SearchIns* (key: Data): BOOLEAN, NEW;
+		
+		VAR
+			
+			inc, found, save1, save2: BOOLEAN;
+			szA, el, p, lC: INTEGER;
+			page: PageI;
+			kC: KeyCont;
+			c, keyA: Key;
+			w: Writer;
+		
+		(* Search in the page of address p the key key; father is the address of the father of p, fatherNum is the rank of p in father, h is the height of p; at exit, if inc (tree has grown), el is the new link to insert (PageI inside index or StringI at its bottom), c is the new key (or prefix) to insert and lC is its length *)
+		PROCEDURE Search (p, father: INTEGER; fatherNum, h: INTEGER; OUT el, lC: INTEGER; OUT c: Key);
+			
+			VAR
+				
+				s, nS: StringI;
+				comp: BYTE;
+				pa, pa1, pa2, paP: PageI;
+				cRet: Key;
+				kC: KeyCont;
+				lft, rgt, i, lCRet, n, m, elRet, nEl: INTEGER;
+				data: Data;
+				r: Reader;
+			
+			BEGIN (*Search*)
+				IF h = 0 THEN (* At the bottom of btree *)
+					s := ind.baseI.ReadPage(p, sif)(StringI);
+					IF p = ind.stringI THEN (* Null length key *)
+						data := ind.manager.f.New(0);
+						comp := gt;
+					ELSE
+						data := ind.manager.f.New(ind.baseI.ReadPageLength(p) - stringIS);
+						r.InitReader(ind.baseI.ref, s.key, 0);
+						data.Read(r);
+						comp := ind.manager.CompP(key, data);
+					END;
+					found := comp = eq;
+					inc := ~found;
+					IF inc THEN (* New key: insert it... *)
+						nS := ind.baseI.NewDiskPage(stringIS + szA, sif, el)(StringI);
+						ind.posI := el;
+						nS.dataPos := bNil;
+						ASSERT(LEN(nS.key) = LEN(keyA), 118);
+						nS.key := keyA;
+						IF comp = lt THEN (* ... before... *)
+							nS.next := p;
+							nS.prev := s.prev;
+							ind.baseI.WritePage(el);
+							n := s.prev;
+							s.prev := el;
+							ind.baseI.WritePage(p);
+							nS := ind.baseI.ReadPage(n, sif)(StringI);
+							nS.next := el;
+							ind.baseI.WritePage(n);
+							IF father # bNil THEN
+								pa := ind.baseI.ReadPage(father, pif)(PageI);
+								pa.elems[fatherNum].ptr := el;
+								ind.baseI.WritePage(father);
+							END;
+							el := p;
+							ind.manager.Prefix(ind.baseI.ref, key, data, c, lC);
+						ELSE (* ... or after *)
+							nS.next := s.next;
+							nS.prev := p;
+							ind.baseI.WritePage(el);
+							n := s.next;
+							s.next := el;
+							ind.baseI.WritePage(p);
+							nS := ind.baseI.ReadPage(n, sif)(StringI);
+							nS.prev := el;
+							ind.baseI.WritePage(n);
+							ind.manager.Prefix(ind.baseI.ref, data, key, c, lC);
+						END;
+					ELSE (* Old key *)
+						ind.posI := p;
+					END;
+				ELSE (* Inside btree *)
+					pa := ind.baseI.ReadPage(p, pif)(PageI);
+					kC := ind.baseI.ReadPage(pa.keys, kf)(KeyCont);
+					lft := 1; rgt := pa.elNb + 1;
+					(* (rgt > pa.elNb) OR (pa.elems[rgt].'key' > key) *)
+					WHILE lft < rgt DO
+						i := (lft + rgt) DIV 2;
+						data := ind.manager.f.New(pa.elems[i].endK - pa.elems[i - 1].endK);
+						r.InitReader(ind.baseI.ref, kC.c, pa.elems[i - 1].endK);
+						data.Read(r);
+						IF ind.manager.CompP(key, data) = lt THEN
+							rgt := i;
+						ELSE
+							lft := i + 1;
+						END;
+					END;
+					DEC(rgt);
+					(* (rgt = 0) OR (pa.elems[rgt].'key' <= key) *)
+					Search(pa.elems[rgt].ptr, p, rgt, h - 1, elRet, lCRet, cRet);
+					IF inc THEN (* New link to be inserted *)
+						pa := ind.baseI.ReadPage(p, pif)(PageI);
+						ind.TransIn(pa, elRet, cRet, lCRet, rgt + 1); (* Insert it *)
+						IF pa.elNb <= 2 * minEl THEN (* That's all! *)
+							inc := FALSE;
+						ELSE (* Too much links... *)
+							n := 1; (* Number of pages to consider *)
+							m := 2 * minEl + 1; (* Total number of elements in these pages *)
+							save1 := FALSE; save2 := FALSE;
+							IF father # bNil THEN (* ... try first to tranfer links to adjacent pages *)
+								paP := ind.baseI.ReadPage(father, pif)(PageI);
+								IF fatherNum > 0 THEN (* Previous page *)
+									INC(n);
+									lft := paP.elems[fatherNum - 1].ptr;
+									pa1 := ind.baseI.ReadPage(lft, pif)(PageI);
+									INC(m, pa1.elNb);
+								END;
+								IF fatherNum < paP.elNb THEN (* Next page *)
+									INC(n);
+									rgt := paP.elems[fatherNum + 1].ptr;
+									pa2 := ind.baseI.ReadPage(rgt, pif)(PageI);
+									INC(m, pa2.elNb);
+								END;
+							END;
+							IF m <= 2 * n * minEl THEN (* Transfer possible: do it... *)
+								inc := FALSE; (* ... and stop going up! *)
+								m := (m + n - 2) DIV n; (* minEl <= m <= 2 * minEl and there is at least one element to transfer our of pa and the number of elements transferred is minimal *)
+								(* Transfers out of pa, which is full *)
+								IF (fatherNum > 0) & (m > pa1.elNb) THEN (* Previous page *)
+									ind.TransOut(paP, fatherNum, el, c, lC);
+									ind.TransIn(pa1, pa.elems[0].ptr, c, lC, pa1.elNb + 1);
+									IF m > pa1.elNb THEN
+										ind.TransInter(pa, pa1, 1, pa1.elNb + 1, m - pa1.elNb);
+									END;
+									ind.TransOut(pa, 1, el, c, lC);
+									ind.TransIn(paP, p, c, lC, fatherNum);
+									pa.elems[0].ptr := el;
+									save1 := TRUE;
+								END;
+								IF (fatherNum < paP.elNb) & (m > pa2.elNb) THEN (* Next page *)
+									ind.TransOut(paP, fatherNum + 1, el, c, lC);
+									ind.TransIn(pa2, pa2.elems[0].ptr, c, lC, 1);
+									IF m > pa2.elNb THEN
+										ind.TransInter(pa, pa2, pa.elNb + pa2.elNb - m + 1, 1, m - pa2.elNb);
+									END;
+									ind.TransOut(pa, pa.elNb, nEl, c, lC);
+									ind.TransIn(paP, el, c, lC, fatherNum + 1);
+									pa2.elems[0].ptr := nEl;
+									save2 := TRUE;
+								END;
+								(* Possible tranfers to pa, which is no more full *)
+								IF (fatherNum > 0) & (m < pa1.elNb) THEN (* Previous page *)
+									ind.TransOut(paP, fatherNum, el, c, lC);
+									ind.TransIn(pa, pa.elems[0].ptr, c, lC, 1);
+									IF m + 1 < pa1.elNb THEN
+										ind.TransInter(pa1, pa, m + 2, 1, pa1.elNb - m - 1);
+									END;
+									ind.TransOut(pa1, m + 1, el, c, lC);
+									ind.TransIn(paP, p, c, lC, fatherNum);
+									pa.elems[0].ptr := el;
+									save1 := TRUE;
+								END;
+								IF (fatherNum < paP.elNb) & (m < pa2.elNb) THEN (* Next page *)
+									ind.TransOut(paP, fatherNum + 1, el, c, lC);
+									ind.TransIn(pa, pa2.elems[0].ptr, c, lC, pa.elNb + 1);
+									IF m + 1 < pa2.elNb THEN
+										ind.TransInter(pa2, pa, 1, pa.elNb + 1, pa2.elNb - m - 1);
+									END;
+									ind.TransOut(pa2, 1, nEl, c, lC);
+									ind.TransIn(paP, el, c, lC, fatherNum + 1);
+									pa2.elems[0].ptr := nEl;
+									save2 := TRUE;
+								END;
+								ind.baseI.WritePage(father);
+							ELSE (* Transfer impossible: split page, and up one level *)
+								ind.TransOut(pa, minEl + 1, nEl, c, lC);
+								pa1 := ind.baseI.NewDiskPage(pageIS, pif, el)(PageI);
+								kC := ind.baseI.NewDiskPage(ind.keysSize, kf, pa1.keys)(KeyCont);
+								pa1.elNb := 0;
+								pa1.elems[0].ptr := nEl;
+								pa1.elems[0].endK := 0;
+								ind.TransInter(pa, pa1, minEl + 1, 1, minEl);
+								ind.baseI.WritePage(el);
+							END;
+							IF save1 THEN
+								ind.baseI.WritePage(lft);
+							END;
+							IF save2 THEN
+								ind.baseI.WritePage(rgt);
+							END;
+						END;
+						ind.baseI.WritePage(p);
+					END;
+				END;
+			END Search;
+		
+		BEGIN (*SearchIns*)
+			ASSERT(ind.baseI # NIL, 20);
+			ASSERT(key # NIL, 21);
+			w.InitWriter(ind.baseI.ref); key.Write(w);
+			keyA := w.Write();
+			szA := LEN(keyA);
+			Search(ind.rootI, bNil, 0, ind.height, el, lC, c);
+			IF ~found THEN
+				INC(ind.size);
+			END;
+			IF inc THEN (* Top page split: increase height of btree *)
+				INC(ind.height);
+				p := ind.rootI;
+				page := ind.baseI.NewDiskPage(pageIS, pif, ind.rootI)(PageI);
+				kC := ind.baseI.NewDiskPage(ind.keysSize, kf, page.keys)(KeyCont);
+				page.elNb := 0;
+				page.elems[0].ptr := p;
+				page.elems[0].endK := 0;
+				ind.TransIn(page, el, c, lC, 1);
+				ind.baseI.WritePage(ind.rootI);
+			END;
+			IF ~found OR inc THEN
+				ind.UpdateRoot;
+			END;
+			RETURN found;
+		END SearchIns;
+	
+	(* Seek in the index ind the key key. The result indicates if the key was found. Fix the current position of the index on the found key or on the key which is immediately after the sought key in the event of unfruitful search. *)
+	PROCEDURE (ind: Index) Search* (key: Data): BOOLEAN, NEW;
+		
+		VAR
+			
+			h, lft, rgt, i, p: INTEGER;
+			pa: PageI;
+			kC: KeyCont;
+			s: StringI;
+			comp: BYTE;
+			data: Data;
+			r: Reader;
+		
+		BEGIN (*Search*)
+			ASSERT(ind.baseI # NIL, 20);
+			ASSERT(key # NIL, 21);
+			p := ind.rootI;
+			FOR h := 1 TO ind.height DO
+				pa := ind.baseI.ReadPage(p, pif)(PageI);
+				kC := ind.baseI.ReadPage(pa.keys, kf)(KeyCont);
+				lft := 1; rgt := pa.elNb + 1;
+				(* (rgt > pa.elNb) OR (pa.elems[rgt].'key' > key) *)
+				WHILE lft < rgt DO
+					i := (lft + rgt) DIV 2;
+					data := ind.manager.f.New(pa.elems[i].endK - pa.elems[i - 1].endK);
+					r.InitReader(ind.baseI.ref, kC.c, pa.elems[i - 1].endK);
+					data.Read(r);
+					IF ind.manager.CompP(key, data) = lt THEN
+						rgt := i;
+					ELSE
+						lft := i + 1;
+					END;
+				END;
+				DEC(rgt);
+				(* (rgt = 0) OR (pa.elems[rgt].'key' <= key) *)
+				p := pa.elems[rgt].ptr;
+			END;
+			s := ind.baseI.ReadPage(p, sif)(StringI);
+			IF p = ind.stringI THEN
+				comp := gt;
+			ELSE
+				data := ind.manager.f.New(ind.baseI.ReadPageLength(p) - stringIS);
+				r.InitReader(ind.baseI.ref, s.key, 0);
+				data.Read(r);
+				comp := ind.manager.CompP(key, data);
+			END;
+			IF comp = gt THEN
+				ind.posI := s.next;
+			ELSE
+				ind.posI := p;
+			END;
+			RETURN comp = eq;
+		END Search;
+	
+	(* Erase from index ind the key key. If key does not belong to the index, ind.Erase does nothing and returns FALSE, otherwise ir returns TRUE. If the current position of the index was on the erased key, it is reset. *)
+	PROCEDURE (ind: Index) Erase* (key: Data): BOOLEAN, NEW;
+		
+		VAR
+			
+			dec, found, minus1: BOOLEAN;
+			followP, followNum: INTEGER;
+			
+			pa: PageI;
+		
+		(* Erase key in the subtree pointed by p; father is the father of p, fatherNum is the rank of p in father and h is the height of the subtree *)
+		PROCEDURE Era (p, father, fatherNum, h: INTEGER);
+			
+			VAR
+				
+				s, sP, sN: StringI;
+				pa: PageI;
+				kC: KeyCont;
+				c, cE: Key;
+				lC, lCE, i, lft, rgt, el, pP, pN: INTEGER;
+				data1, data2: Data;
+				r: Reader;
+			
+			(* The number of elements in the page pointed by elems[num].ptr (in the page pointed by p) has become less than minEl; Fix fixes this problem *)
+			PROCEDURE Fix (p, num: INTEGER);
+				
+				VAR
+					
+					lC, q, el, nEl, q1: INTEGER;
+					paP, pa, pa1: PageI;
+					c: Key;
+					join, right: BOOLEAN;
+				
+				BEGIN (*Fix*)
+					paP := ind.baseI.ReadPage(p, pif)(PageI); (* Father page *)
+					join := FALSE; (* Look if it's possible to join the modified page with an adjacent page at the same level *)
+					IF num > 0 THEN (* Look at the previous page *)
+						q1 := paP.elems[num - 1].ptr;
+						pa1 := ind.baseI.ReadPage(q1, pif)(PageI);
+						join := pa1.elNb = minEl;
+						right := FALSE;
+					END;
+					IF ~join & (num < paP.elNb) THEN (* or at the next one *)
+						q1 := paP.elems[num + 1].ptr;
+						pa1 := ind.baseI.ReadPage(q1, pif)(PageI);
+						join := pa1.elNb = minEl;
+						right := TRUE;
+					END;
+					q := paP.elems[num].ptr;
+					pa := ind.baseI.ReadPage(q, pif)(PageI);
+					IF join THEN (* Join pa and pa1 *)
+						IF right THEN
+							ind.TransOut(paP, num + 1, el, c, lC);
+							ind.TransIn(pa1, pa1.elems[0].ptr, c, lC, 1);
+							ind.TransInter(pa, pa1, 1, 1, pa.elNb);
+							pa1.elems[0].ptr := pa.elems[0].ptr;
+							paP.elems[num].ptr := el;
+						ELSE
+							ind.TransOut(paP, num, el, c, lC);
+							ind.TransIn(pa1, pa.elems[0].ptr, c, lC, pa1.elNb + 1);
+							ind.TransInter(pa, pa1, 1, pa1.elNb + 1, pa.elNb);
+						END;
+						ASSERT(pa.elNb = 0); (* Everything is in pa1 *)
+						ind.baseI.EraseDiskPage(pa.keys);
+						ind.baseI.EraseDiskPage(q);
+						dec := paP.elNb < minEl; (* The father page may underflow too *)
+					ELSE (* Transfer one element from pa1 to pa via paP *)
+						dec := FALSE;
+						IF right THEN
+							ind.TransOut(paP, num + 1, el, c, lC);
+							ind.TransIn(pa, pa1.elems[0].ptr, c, lC, pa.elNb + 1);
+							ind.TransOut(pa1, 1, nEl, c, lC);
+							ind.TransIn(paP, el, c, lC, num + 1);
+							pa1.elems[0].ptr := nEl;
+						ELSE
+							ind.TransOut(paP, num, el, c, lC);
+							ind.TransIn(pa, pa.elems[0].ptr, c, lC, 1);
+							ind.TransOut(pa1, pa1.elNb, el, c, lC);
+							ind.TransIn(paP, q, c, lC, num);
+							pa.elems[0].ptr := el;
+						END;
+						ind.baseI.WritePage(q);
+					END;
+					ind.baseI.WritePage(q1);
+					ind.baseI.WritePage(p);
+				END Fix;
+			
+			(* Erase the element of the last key at level 1 in the subtree pointed by q, and put its key in the page pointed by p at position rgt; h is the current level *)
+			PROCEDURE Del (q, h: INTEGER);
+				
+				VAR
+					
+					pa: PageI;
+					el, lC, lCE: INTEGER;
+					c, cE: Key;
+				
+				BEGIN (*Del*)
+					pa := ind.baseI.ReadPage(q, pif)(PageI);
+					IF h = 1 THEN
+						ind.TransOut(pa, pa.elNb, el, c, lC);
+						dec := pa.elNb < minEl;
+						ind.baseI.WritePage(q);
+						pa := ind.baseI.ReadPage(p, pif)(PageI);
+						ind.TransOut(pa, rgt, el, cE, lCE);
+						ind.TransIn(pa, el, c, lC, rgt);
+						ind.baseI.WritePage(p);
+					ELSE
+						Del(pa.elems[pa.elNb].ptr, h - 1);
+						IF dec THEN
+							pa := ind.baseI.ReadPage(q, pif)(PageI);
+							Fix(q, pa.elNb);
+						END;
+					END;
+				END Del;
+			
+			(* Compare c with the numth key (or prefix) of pa and return TRUE if they are equal *)
+			PROCEDURE EqualKeys (c: Key; pa: PageI; num: INTEGER): BOOLEAN;
+				
+				VAR
+					
+					i, l, m: INTEGER;
+					cc: Key;
+				
+				BEGIN (*EqualKeys*)
+					IF c = NIL THEN
+						l := 0;
+					ELSE
+						l := LEN(c);
+					END;
+					m := pa.elems[num].endK - pa.elems[num - 1].endK;
+					IF l # m THEN
+						RETURN FALSE;
+					END;
+					IF l > 0 THEN
+						cc := ind.baseI.ReadPage(pa.keys, kf)(KeyCont).c;
+						m := pa.elems[num - 1].endK;
+						FOR i := 0 TO l - 1 DO
+							IF c[i] # cc[m + i] THEN
+								RETURN FALSE;
+							END;
+						END;
+					END;
+					RETURN TRUE;
+				END EqualKeys;
+			
+			BEGIN (*Era*)
+				IF h = 0 THEN (* At the bottom of btree *)
+					dec := FALSE;
+					IF p = ind.stringI THEN (* Null key *)
+						found := FALSE;
+					ELSE (* Read the value in data1 ... *)
+						s := ind.baseI.ReadPage(p, sif)(StringI);
+						data1 := ind.manager.f.New(ind.baseI.ReadPageLength(p) - stringIS);
+						r.InitReader(ind.baseI.ref, s.key, 0);
+						data1.Read(r);
+						found := ind.manager.CompP(key, data1) = eq; (* ... and compare with the key *)
+						IF found THEN
+							pP := s.prev;
+							pN := s.next;
+						END;
+					END;
+					minus1 := found;
+					IF found THEN (* Key was found, delete it *)
+						(* Remove page from the ring ind.stringI *)
+						sN := ind.baseI.ReadPage(pN, sif)(StringI);
+						sN.prev := pP;
+						ind.baseI.WritePage(pN);
+						sP := ind.baseI.ReadPage(pP, sif)(StringI);
+						sP.next := pN;
+						ind.baseI.WritePage(pP);
+						IF (fatherNum = 0) & (father # bNil) THEN
+							pa := ind.baseI.ReadPage(father, pif)(PageI);
+							pa.elems[fatherNum].ptr := pP; (* Change this link to the previous StringI, since the corrresponding key (or prefix) will be deleted *)
+							ind.baseI.WritePage(father);
+						END;
+						IF followP # bNil THEN (* If there are following keys (or prefixes), correct the following prefix, which may have changed, since its previous key has changed *)
+							data1 := ind.manager.f.New(ind.baseI.ReadPageLength(pP) - stringIS);
+							IF pP # ind.stringI THEN
+								r.InitReader(ind.baseI.ref, sP.key, 0);
+								data1.Read(r);
+							END;
+							data2 := ind.manager.f.New(ind.baseI.ReadPageLength(pN) - stringIS);
+							IF pN # ind.stringI THEN
+								r.InitReader(ind.baseI.ref, sN.key, 0);
+								data2.Read(r);
+							END;
+							ind.manager.Prefix(ind.baseI.ref, data1, data2, c, lC);
+							pa := ind.baseI.ReadPage(followP, pif)(PageI);
+							IF ~EqualKeys(c, pa, followNum) THEN
+								ind.TransOut(pa, followNum, el, cE, lCE);
+								ind.TransIn(pa, el, c, lC, followNum);
+								ind.baseI.WritePage(followP);
+							END;
+						END;
+						IF ind.posI = p THEN (* Reset the position of the index if it was on the erased key *)
+							ind.posI := ind.stringI;
+						END;
+						ind.baseI.EraseDiskPage(p);
+					END;
+				ELSE (* Inside btree *)
+					pa := ind.baseI.ReadPage(p, pif)(PageI);
+					kC := ind.baseI.ReadPage(pa.keys, kf)(KeyCont);
+					(* Find the position of key in pa (binary search) *)
+					lft := 1; rgt := pa.elNb + 1;
+					(* (rgt > pa.elNb) OR (pa.elems[rgt].'key' > key) *)
+					WHILE lft < rgt DO
+						i := (lft + rgt) DIV 2;
+						data1 := ind.manager.f.New(pa.elems[i].endK - pa.elems[i - 1].endK);
+						r.InitReader(ind.baseI.ref, kC.c, pa.elems[i - 1].endK);
+						data1.Read(r);
+						IF ind.manager.CompP(key, data1) = lt THEN
+							rgt := i;
+						ELSE
+							lft := i + 1;
+						END;
+					END;
+					DEC(rgt);
+					(* (rgt = 0) OR (pa.elems[rgt].'key' <= key) *)
+					IF rgt < pa.elNb THEN
+						followP := p;
+						followNum := rgt + 1;
+					END;
+					Era(pa.elems[rgt].ptr, p, rgt, h - 1);
+					IF found THEN
+						(* If rgt = 0, the corresponding key (or prefix) is upper in the tree and will be deleted later (unless it is ind.stringI) *)
+						IF rgt > 0 THEN
+							pa := ind.baseI.ReadPage(p, pif)(PageI);
+							IF h = 1 THEN (* At the lower level, the key can be erased directly *)
+								ind.TransOut(pa, rgt, el, c, lC);
+								dec := pa.elNb < minEl;
+								ind.baseI.WritePage(p);
+							ELSE (* At an upper level, erase the element of the previous key at level 1 and put this previous key in place of this one *)
+								Del(pa.elems[rgt - 1].ptr, h - 1);
+								IF dec THEN
+									Fix(p, rgt - 1);
+								END;
+							END;
+							found := FALSE; (* key has already been found and erased *)
+						END;
+					ELSIF dec THEN
+						Fix(p, rgt);
+					END;
+				END;
+			END Era;
+		
+		BEGIN (*Erase*)
+			ASSERT(ind.baseI # NIL, 20);
+			ASSERT(key # NIL, 21);
+			followP := bNil;
+			Era(ind.rootI, bNil, 0, ind.height);
+			IF minus1 THEN
+				DEC(ind.size);
+			END;
+			IF dec THEN (* Subtree has been erased... *)
+				pa := ind.baseI.ReadPage(ind.rootI, pif)(PageI);
+				IF pa.elNb = 0 THEN (*... if it was the last, decrease the height of subtree *)
+					DEC(ind.height);
+					followP := ind.rootI;
+					ind.rootI := pa.elems[0].ptr;
+					ind.baseI.EraseDiskPage(pa.keys);
+					ind.baseI.EraseDiskPage(followP);
+				END;
+			END;
+			IF minus1 OR dec THEN
+				ind.UpdateRoot;
+			END;
+			RETURN minus1;
+		END Erase;
+	
+	(* Return the number of different keys in ind *)
+	PROCEDURE (ind: Index) NumberOfKeys* (): INTEGER, NEW;
+		
+		BEGIN (*NumberOfKeys*)
+			ASSERT(ind.baseI # NIL, 20);
+			RETURN ind.size;
+		END NumberOfKeys;
+	
+	(* Reset the current position of the index ind. After this action, ind.PosSet() returns false. *)
+	PROCEDURE (ind: Index) ResetPos*, NEW;
+		
+		BEGIN (*ResetPos*)
+			ASSERT(ind.baseI # NIL, 20);
+			ind.posI := ind.stringI;
+		END ResetPos;
+	
+	(* Test if the index ind is positioned on a key (return true) or if its current position is reset (false returned). *)
+	PROCEDURE (ind: Index) PosSet* (): BOOLEAN, NEW;
+		
+		BEGIN (*PosSet*)
+			ASSERT(ind.baseI # NIL, 20);
+			RETURN ind.posI # ind.stringI;
+		END PosSet;
+	
+	(* Position the index ind on the next key. If the current position is reset, the index is positioned on the first key. If the index is positioned on the last key, its current position becomes reset. *)
+	PROCEDURE (ind: Index) Next*, NEW;
+		
+		VAR
+			
+			s: StringI;
+		
+		BEGIN (*Next*)
+			ASSERT(ind.baseI # NIL, 20);
+			s := ind.baseI.ReadPage(ind.posI, sif)(StringI);
+			ind.posI := s.next;
+		END Next;
+	
+	(* Position the index ind on the previous key. If the current position is reset, the index is positioned on the last key. If the index is positioned on the first key, its current position becomes reset. *)
+	PROCEDURE (ind: Index) Previous*, NEW;
+		
+		VAR
+			
+			s: StringI;
+		
+		BEGIN (*Previous*)
+			ASSERT(ind.baseI # NIL, 20);
+			s := ind.baseI.ReadPage(ind.posI, sif)(StringI);
+			ind.posI := s.prev;
+		END Previous;
+	
+	(* Return the current position of ind. *)
+	PROCEDURE (ind: Index) GetCurrPos* (): IndexPos, NEW;
+		
+		VAR
+			
+			pos: IndexPos;
+		
+		BEGIN (*GetCurrPos*)
+			ASSERT(ind.baseI # NIL, 20);
+			NEW(pos);
+			pos.posI := ind.posI;
+			RETURN pos;
+		END GetCurrPos;
+	
+	(* Set the current position of ind to pos. WARNING: the content of ind must not have changed since the setting of pos by GetCurrPos, i.e. no call of ind.Rechins, with a return of FALSE, nor of ind.Erase with a return of TRUE, must have occurred; otherwise impredictable errors may happen. *)
+	PROCEDURE (ind: Index) SetCurrPos* (pos: IndexPos), NEW;
+		
+		BEGIN (*SetCurrPos*)
+			ASSERT(ind.baseI # NIL, 20);
+			ASSERT(pos # NIL, 21);
+			ind.posI := pos.posI;
+		END SetCurrPos;
+	
+	(* Return the value of the key in the current position of the index ind, or NIL if the current position of the index is reset. *)
+	PROCEDURE (ind: Index) CurrentKey* (): Data, NEW;
+		
+		VAR
+			
+			s: StringI;
+			r: Reader;
+			data: Data;
+		
+		BEGIN (*CurrentKey*)
+			ASSERT(ind.baseI # NIL, 20);
+			IF ind.posI = ind.stringI THEN
+				RETURN NIL;
+			END;
+			s := ind.baseI.ReadPage(ind.posI, sif)(StringI);
+			data := ind.manager.f.New(ind.baseI.ReadPageLength(ind.posI) - stringIS);
+			r.InitReader(ind.baseI.ref, s.key, 0);
+			data.Read(r);
+			RETURN data;
+		END CurrentKey;
+	
+	(* Read, at the current position of the index ind, the integer associated data and return it. When a new key is inserted, the data which is initially attached to it has the value bNil. The reset position of an index has, itself, a associated data, legible by Index.ReadValue. *)
+	PROCEDURE (ind: Index) ReadValue* (): INTEGER, NEW;
+		
+		VAR
+			
+			s: StringI;
+		
+		BEGIN (*ReadValue*)
+			ASSERT(ind.baseI # NIL, 20);
+			s := ind.baseI.ReadPage(ind.posI, sif)(StringI);
+			RETURN s.dataPos;
+		END ReadValue;
+	
+	(* Write on the current position of the index ind the value val of the associated integer data. When a new key is inserted, the data which is initially attached to it has the value bNil. The reset position of an index has, itself, a associated data, modifiable by Index.WriteValue. *)
+	PROCEDURE (ind: Index) WriteValue* (val: INTEGER), NEW;
+		
+		VAR
+			
+			s: StringI;
+		
+		BEGIN (*WriteValue*)
+			ASSERT(ind.baseI # NIL, 20);
+			s := ind.baseI.ReadPage(ind.posI, sif)(StringI);
+			s.dataPos := val;
+			ind.baseI.WritePage(ind.posI);
+		END WriteValue;
+	
+	(* Debug *)
+	
+	BEGIN (*UtilBTree*)
+		NEW(fCH);
+		NEW(rCH);
+		NEW(fCT);
+		NEW(rCT);
+		NEW(pif);
+		NEW(kf);
+		NEW(sif);
+		NEW(inff);
+		bL := NIL;
+	END UtilBTree.

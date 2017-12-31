@@ -1,0 +1,962 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE DuniterWotWizard;
+	
+	(* For versions 1.4+ of Duniter *)
+	(* This version suppose equiprobable all external certifications (toward a non-member identity) which are concurrent at the same date, and process concurrent internal certifications (toward an already-member identity) afterwards *)
+	
+	
+
+	IMPORT
+		
+		(*
+		StdLog,
+		*)
+		
+		A := UtilAvlTree, B := DuniterBlockchain, S := DuniterSandbox, BA := DuniterBasic;
+	
+	CONST
+		
+		maxStackLengthDef = 800000000; (* Default value for the greatest allowed allocated memory size  *)
+		
+		(* Sizes of different types *)
+		INS = SIZE(INTEGER);
+		LIS = SIZE(LONGINT);
+		RES = SIZE(REAL);
+		PTRS = SIZE(ANYPTR);
+	
+	TYPE
+		
+		(* Internal certification, or dossier of external certifications toward the same identity *)
+		CertOrDoss* = POINTER TO ABSTRACT RECORD
+			date-, (* Entry date *)
+			limit-: LONGINT; (* Expiration date *)
+		END;
+		
+		File* = POINTER TO ARRAY OF CertOrDoss; (* Array of internal certifications and dossiers *)
+		
+		(* Internal certification *)
+		Certif* = POINTER TO RECORD (CertOrDoss)
+			from-, to-: B.String;
+		END;
+		
+		(* Dossier of external certifications *)
+		Dossier* = POINTER TO RECORD (CertOrDoss)
+			id-: B.String; (* Certified identity *)
+			princCertif-: INTEGER; (* Rank of the certification whose entry date gives the entry date of the dossier (1 <= princCertif <= B.pars.sigQty) *)
+			certifs-: File; (* Array of certifications *)
+		END;
+	
+	CONST
+		
+		CS = 2 * LIS + 2 * PTRS; (* Size of Certif *)
+		DS = 2 * LIS + 2 * PTRS + INS; (* Size of Dossier *)
+	
+	TYPE
+		
+		(* AVL trees of Propagation are used in the main CalcPermutations procedure; trees of Propagation are sorted by id(s) first and then by date(s) *)
+		
+		Propagation* = POINTER TO EXTENSIBLE RECORD (A.Elem)
+			id*: B.String; (* uid of a candidate *)
+			date*: LONGINT; (* A possible date of her entry *)
+			after*: BOOLEAN; (* after = TRUE if this entry can occur at the date date or after (uncertainty due to incomplete computation) *)
+			proba*: REAL; (* Probability of this entry *)
+		END;
+		
+		(* AVL trees of PropName and PropDate are the ouput formats of procedures CalcEntries and BuildEntries *)
+		PropName* = POINTER TO RECORD (Propagation)
+		END;
+		PropDate* = POINTER TO RECORD (Propagation)
+		END;
+		
+		(* Element of sets of trees of Propagation, each tree corresponding to a possible permutation of the order of the entries *)
+		Set* = POINTER TO RECORD (A.Elem)
+			proba-: REAL; (* Probability of the permutation *)
+			t-: A.Tree; (* AVL tree *)
+		END;
+		
+		(* Chained list of Pubkey(s); used to test the distance rule in the procedure NotTooFar *)
+		PubList = POINTER TO RECORD
+			next: PubList;
+			pub: B.Pubkey;
+		END;
+		
+		(* The virtual stack elements (stored in a queue) used in the main procedure CalcPermutations and representing the tree of all possible permutations of Dossier(s) in the final order of the File f *)
+		Node = POINTER TO RECORD
+			next, (* Next node in the queue (or brother in the possibilities tree) *)
+			stack: Node; (* Previous node in the stack (or father in the possibilities tree) *)
+			f: File; (* The File used at this point *)
+			step, (* Current position in f *)
+			len, (* Number of sons in the possibilities tree *)
+			len2: INTEGER; (* Number of sons already seen *)
+			sets: A.Tree; (* Set of permutations of entries of Dossier(s) found in the descendants of this node *)
+		END;
+		
+		(* Queue (or fifo list) of Node(s) *)
+		Queue = RECORD
+			end: Node;
+		END;
+		
+		Debug* = PROCEDURE (f: File; i0: INTEGER);
+	
+	CONST
+		
+		NS = 4 * PTRS + 3 * INS; (* Size of Node *)
+	
+	VAR
+		
+		maxStackLength-: LONGINT; (* Maximum allowed virtual stack length for the execution of CalcPermutations *)
+		(*
+		log: TextMappers.Formatter;
+		*)
+	
+	(* Standard managing procedures for Queue *)
+	
+	PROCEDURE (VAR q: Queue) Init, NEW;
+		
+		BEGIN (*Init*)
+			q.end := NIL;
+		END Init;
+	
+	PROCEDURE (IN q: Queue) IsEmpty (): BOOLEAN, NEW;
+		
+		BEGIN (*IsEmpty*)
+			RETURN q.end = NIL;
+		END IsEmpty;
+	
+	PROCEDURE (VAR q: Queue) Put (n: Node), NEW;
+		
+		BEGIN (*Put*)
+			IF q.end = NIL THEN
+				q.end := n;
+				n.next := n;
+			ELSE
+				n.next := q.end.next;
+				q.end.next := n;
+				q.end := n;
+			END;
+		END Put;
+	
+	PROCEDURE (VAR q: Queue) Get (OUT n: Node), NEW;
+		
+		BEGIN (*Get*)
+			ASSERT(q.end # NIL, 100);
+			n := q.end.next;
+			q.end.next := n.next;
+			IF q.end = n THEN
+				q.end := NIL;
+			END;
+		END Get;
+	
+	(* Comparison procedures for Propagation, PropName, PropDate and Set *)
+	
+	PROCEDURE CompareProp (p1, p2: A.Elem): BYTE;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*CompareProp*)
+			IF p1 = NIL THEN
+				IF p2 = NIL THEN
+					RETURN A.eq;
+				END;
+				RETURN A.lt;
+			END;
+			IF p2 = NIL THEN
+				RETURN A.gt;
+			END;
+			WITH p1: Propagation DO
+				WITH p2: Propagation DO
+					i := 0;
+					WHILE (p1.id[i] = p2.id[i]) & (p1.id[i] # 0X) DO
+						INC(i);
+					END;
+					IF p1.id[i] < p2.id[i] THEN
+						RETURN A.lt;
+					END;
+					IF p1.id[i] > p2.id[i] THEN
+						RETURN A.gt;
+					END;
+					IF p1.date < p2.date THEN
+						RETURN A.lt;
+					END;
+					IF p1.date > p2.date THEN
+						RETURN A.gt;
+					END;
+					IF p1.after & ~p2.after THEN
+						RETURN A.lt;
+					END;
+					IF ~p1.after & p2.after THEN
+						RETURN A.gt;
+					END;
+				END;
+			END;
+			RETURN A.eq;
+		END CompareProp;
+	
+	PROCEDURE (p1: Propagation) Compare- (p2: A.Elem): BYTE, EXTENSIBLE;
+		
+		BEGIN (*Compare*)
+			RETURN CompareProp(p1, p2);
+		END Compare;
+	
+	PROCEDURE (p1: PropName) Compare- (p2: A.Elem): BYTE;
+		
+		VAR
+			
+			b: BYTE;
+		
+		BEGIN (*Compare*)
+			WITH p2: PropName DO
+				b := BA.CompP(p1.id, p2.id);
+				IF b # A.eq THEN
+					RETURN b;
+				END;
+				IF p1.date < p2.date THEN
+					RETURN A.lt;
+				END;
+				IF p1.date > p2.date THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	PROCEDURE (p1: PropDate) Compare- (p2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH p2: PropDate DO
+				IF p1.date < p2.date THEN
+					RETURN A.lt;
+				END;
+				IF p1.date > p2.date THEN
+					RETURN A.gt;
+				END;
+				RETURN BA.CompP(p1.id, p2.id);
+			END;
+		END Compare;
+	
+	PROCEDURE (s1: Set) Compare- (s2: A.Elem): BYTE;
+		
+		VAR
+			
+			e1, e2: A.Elem;
+			b: BYTE;
+		
+		BEGIN (*Compare*)
+			WITH s2: Set DO
+				e1 := s1.t.Next(NIL); e2 := s2.t.Next(NIL);
+				b := CompareProp(e1, e2);
+				WHILE (b = A.eq) & (e1 # NIL) DO
+					e1 := s1.t.Next(e1); e2 := s2.t.Next(e2);
+					b := CompareProp(e1, e2);
+				END;
+				RETURN b;
+			END;
+		END Compare;
+	
+	(* Copy procedures for Propagation and InvProp *)
+	
+	PROCEDURE (p: PropDate) Copy- (): A.Elem;
+		
+		VAR
+			
+			pp: PropDate;
+		
+		BEGIN (*Copy*)
+			NEW(pp);
+			pp.id := p.id;
+			pp.date := p.date;
+			pp.proba := p.proba;
+			RETURN pp;
+		END Copy;
+	
+	PROCEDURE (p: PropName) Copy- (): A.Elem;
+		
+		VAR
+			
+			pp: PropName;
+		
+		BEGIN (*Copy*)
+			NEW(pp);
+			pp.id := p.id;
+			pp.date := p.date;
+			pp.proba := p.proba;
+			RETURN pp;
+		END Copy;
+	
+	(* Copy f and return its copy; the copy is shallow for elements of ranks less than deepFrom, and deep afterwards; size is the size of the copy *)
+	PROCEDURE CopyFile (f: File; deepFrom: INTEGER; OUT size: LONGINT): File;
+		
+		VAR
+			
+			g, h: File;
+			cd: CertOrDoss;
+			c: Certif;
+			d: Dossier;
+			i, j, len: INTEGER;
+		
+		BEGIN (*CopyFile*)
+			size := 0;
+			IF f = NIL THEN
+				RETURN NIL;
+			END;
+			len := LEN(f);
+			ASSERT(deepFrom <= len, 100);
+			NEW(g, len);
+			INC(size, len * PTRS);
+			FOR i := 0 TO deepFrom - 1 DO
+				g[i] := f[i];
+			END;
+			FOR i := deepFrom TO len - 1 DO
+				cd := f[i];
+				WITH
+					|cd: Certif DO
+						NEW(c);
+						INC(size, CS);
+						c^ := cd^;
+						g[i] := c;
+					|cd: Dossier DO
+						NEW(d);
+						INC(size, DS);
+						d^ := cd^;
+						g[i] := d;
+						IF cd.certifs = NIL THEN
+							d.certifs := NIL;
+						ELSE
+							NEW(h, LEN(cd.certifs));
+							INC(size, LEN(cd.certifs) * PTRS);
+							FOR j := 0 TO LEN(cd.certifs) - 1 DO
+								NEW(c);
+								INC(size, CS);
+								c^ := cd.certifs[j](Certif)^;
+								h[j] := c;
+							END;
+							d.certifs := h;
+						END;
+				END;
+			END;
+			RETURN g;
+		END CopyFile;
+	
+	(* Fix the next possible date d of a certification from p *)
+	PROCEDURE FixCertNextDate (IN p: B.Pubkey; OUT d: LONGINT);
+		
+		VAR
+			
+			pos: B.CertPos;
+			ok, b: BOOLEAN;
+			from, to: B.Pubkey;
+			block_number: INTEGER;
+			tm, t, exp: LONGINT;
+		
+		BEGIN (*FixCertNextDate*)
+			d := 0;
+			IF B.CertFrom(p, pos) THEN
+				ok := pos.CertNextPos(from, to);
+				WHILE ok DO
+					b := B.Cert(from, to, block_number, exp); ASSERT(b, 100);
+					b := B.TimeOf(block_number, tm, t);
+					d := MAX(d, tm);
+					ok := pos.CertNextPos(from, to);
+				END;
+				INC(d, B.pars.sigPeriod);
+			END;
+		END FixCertNextDate;
+	
+	(* Fix the disponibility dates of the elements of f, always after the current date *)
+	PROCEDURE FileDates (f: File; afterNow: BOOLEAN);
+		
+		VAR
+			
+			cd: CertOrDoss;
+			i: INTEGER;
+			now: LONGINT;
+		
+		BEGIN (*FileDates*)
+			IF f # NIL THEN
+				IF afterNow THEN
+					now := B.Now();
+				END;
+				FOR i := 0 TO LEN(f) - 1 DO
+					cd := f[i];
+					WITH 
+						|cd: Dossier DO
+							IF cd.certifs = NIL THEN
+								IF afterNow THEN
+									cd.date := now;
+								ELSE
+									cd.date := 0;
+								END;
+							ELSE
+								IF afterNow THEN
+									cd.date := MAX(cd.certifs[cd.princCertif - 1].date, now);
+								ELSE
+									cd.date := cd.certifs[cd.princCertif - 1].date;
+								END;
+							END;
+						|cd: Certif DO
+							IF afterNow THEN
+								cd.date := MAX(cd.date, now);
+							END;
+					END;
+				END;
+			END;
+		END FileDates;
+	
+	(* Sort, by insertion, the end of f, starting at position i0; all the dates must have been fixed before *)
+	PROCEDURE SortAll (f: File; i0: INTEGER);
+		
+		VAR
+			
+			cdx: CertOrDoss;
+			i, j: INTEGER;
+		
+		(* Dossiers with at least B.pars.sigQty certifications and internal certifications first; other dossiers last; dossiers are sorted by number of certifications first, then by dates; internal certifications are sorted by dates; if a dossier with at least B.pars.sigQty certifications and an internal certification have the same date, the dossier comes first *)
+		PROCEDURE Less (cd1, cd2: CertOrDoss): BOOLEAN;
+			
+			BEGIN (*Less*)
+				WITH
+					|cd1: Dossier DO
+						WITH
+							|cd2: Dossier DO
+								RETURN (cd1.princCertif > cd2.princCertif) OR (cd1.princCertif = cd2.princCertif) & (cd1.date < cd2.date);
+							|cd2: Certif DO
+								RETURN (cd1.princCertif = B.pars.sigQty) & (cd1.date <= cd2.date);
+						END;
+					|cd1: Certif DO
+						WITH
+							|cd2: Dossier DO
+								RETURN (cd2.princCertif < B.pars.sigQty) OR (cd1.date < cd2.date);
+							|cd2: Certif DO
+								RETURN cd1.date < cd2.date;
+						END;
+				END;
+			END Less;
+		
+		BEGIN (*SortAll*)
+			IF f # NIL THEN
+				FOR i := i0 + 1 TO LEN(f) - 1 DO
+					j := i; cdx := f[j];
+					WHILE (j > i0) & Less(cdx, f[j - 1]) DO (* No sentinel; inefficient *)
+						f[j] := f[j - 1];
+						DEC(j);
+					END;
+					f[j] := cdx;
+				END;
+			END;
+		END SortAll;
+	
+	(* Sort the end of f, starting at position i0; the dates of all Certification(s) must have been fixed before, but not those of Dossier(s); if afterNow, the disponibility dates are put after the current date *)
+	PROCEDURE SortFile (f: File; i0: INTEGER; afterNow: BOOLEAN);
+		
+		VAR
+			
+			i: INTEGER;
+			cd: CertOrDoss;
+		
+		BEGIN (*SortFile*)
+			IF f # NIL THEN
+				FOR i := i0 TO LEN(f) - 1 DO
+					cd := f[i];
+					WITH cd: Dossier DO
+						SortAll(cd.certifs, 0);
+					ELSE
+					END;
+				END;
+				FileDates(f, afterNow);
+				SortAll(f, i0);
+			END;
+		END SortFile;
+	
+	(* Update the list of sentries and the distance rule test at each step? Too long execution time! *)
+	(* Simulate the entry of f[step] in the blockchain and update all f[i] with i > step *)
+	PROCEDURE Propagate (VAR f: File; step: INTEGER; debug: Debug);
+		
+		VAR
+			
+			cd: CertOrDoss;
+			j, k, m, nc, n1, n2: INTEGER;
+			newDate: LONGINT;
+			g: File;
+		
+		PROCEDURE IncDates (uid: B.String; newDate: LONGINT; i0: INTEGER);
+			
+			VAR
+				
+				i, j: INTEGER;
+				cd, c: CertOrDoss;
+			
+			BEGIN (*IncDates*)
+				FOR i := i0 TO LEN(f) - 1 DO
+					cd := f[i];
+					WITH
+						|cd: Certif DO
+							IF cd.from$ = uid$ THEN
+								IF newDate > cd.limit THEN
+									cd.date := BA.never;
+								ELSE
+									cd.date := newDate;
+								END;
+							END;
+						|cd: Dossier DO
+							j := LEN(cd.certifs);
+							WHILE j > 0 DO
+								DEC(j);
+								c := cd.certifs[j];
+								WITH c: Certif DO
+									IF c.from$ = uid$ THEN
+										IF newDate > MIN(cd.limit, c.limit) THEN
+											c.date := BA.never;
+										ELSE
+											c.date := newDate;
+										END;
+										j := 0;
+									END;
+								END;
+							END;
+						END;
+				END;
+			END IncDates;
+		
+		BEGIN (*Propagate*)
+			cd := f[step];
+			newDate := cd.date + B.pars.sigPeriod;
+			WITH
+				|cd: Certif DO
+					IncDates(cd.from, newDate, step + 1);
+				|cd: Dossier DO
+					j := 0;
+					(* All certifs with the same date as cd must lead to updates and certifs with a date less than cd.date + B.pars.avgGenTime have more than 50% probabity to be inserted in the same block and, so, must lead to update too *)
+					WHILE (j < B.pars.sigQty) OR (j < LEN(cd.certifs)) & (cd.certifs[j].date < cd.date + B.pars.avgGenTime) DO
+						IncDates(cd.certifs[j](Certif).from, newDate, step + 1);
+						INC(j);
+					END;
+					nc := LEN(cd.certifs) - j;
+					IF nc > 0 THEN
+						n1 := LEN(f); n2 := n1 + nc;
+						NEW(g, n2);
+						FOR m := 0 TO n1 - 1 DO
+							g[m] := f[m];
+						END;
+						k := j;
+						FOR m := n1 TO n2 - 1 DO
+							g[m] := cd.certifs[k];
+							INC(k);
+						END;
+						f := g;
+						NEW(g, j);
+						FOR m := 0 TO j - 1 DO
+							g[m] := cd.certifs[m];
+						END;
+						cd.certifs := g;
+					END;
+			END;
+			SortFile(f, step + 1, TRUE);
+			IF debug # NIL THEN
+				debug(f, step);
+			END;
+		END Propagate;
+	
+	(* Say whether the list of certifiers' Pubkey(s) c verifies the Duniter's distance rule *)
+	PROCEDURE NotTooFar (c: PubList; n: INTEGER): BOOLEAN;
+		
+		VAR
+			
+			certifiers: POINTER TO ARRAY OF B.Pubkey;
+			j: INTEGER;
+		
+		BEGIN (*NotTooFar*)
+			NEW(certifiers, n);
+			FOR j := 0 TO n - 1 DO
+				certifiers[j] := c.pub;
+				c := c.next;
+			END;
+			RETURN B.DistanceRuleOk(certifiers);
+		END NotTooFar;
+	
+	(* WotWizard main procedure; return in sets all the elements of type Set, i.e. all the possible permutations in the order of entries of the Dossier(s) in f, along with their probabilities *)
+	PROCEDURE CalcPermutations* (f: File; debug: Debug; OUT sets: A.Tree): BOOLEAN;
+		
+		VAR
+			
+			ok: BOOLEAN;
+			s: ARRAY 20 OF CHAR;
+		
+		(* Put into n.sets the set containing, as unique element, the list of entries in n.f *)
+		PROCEDURE Evaluate (n: Node);
+			
+			VAR
+				
+				set: Set;
+				i, m: INTEGER;
+				cd: CertOrDoss;
+				p: Propagation;
+				e: A.Elem;
+				b: BOOLEAN;
+			
+			BEGIN (*Evaluate*)
+				A.New(n.sets);
+				NEW(set); A.New(set.t);
+				FOR i := 0 TO LEN(n.f) - 1 DO
+					cd := n.f[i];
+					WITH cd: Dossier DO
+						NEW(p);
+						p.id := cd.id;
+						p.date := cd.date;
+						p.after := (i >= n.step) & (cd.date # BA.never);
+						e := p;
+						b := set.t.SearchIns(e, m); ASSERT(~b, 101);
+					ELSE
+					END;
+				END;
+				n.f := NIL;
+				set.proba := 1.;
+				e := set;
+				b := n.sets.SearchIns(e, m); ASSERT(~ b, 102);
+			END Evaluate;
+		
+		(* Merge the set of possible permutations (of type Set) setsUp into setsDown, combining probabilities *)
+		PROCEDURE AddProba (setsDown, setsUp: A.Tree; permNb: LONGINT);
+			
+			VAR
+				
+				x, y: REAL;
+				e, ee: A.Elem;
+				b: BOOLEAN;
+				n: INTEGER;
+			
+			BEGIN (*AddProba*)
+				x := 1. / permNb;
+				e := setsUp.Next(NIL);
+				WHILE e # NIL DO
+					ee := setsUp.Next(e);
+					WITH e: Set DO
+						y := e.proba * x;
+						e.proba := 0.;
+					END;
+					b := setsDown.SearchIns(e, n);
+					WITH e: Set DO
+						e.proba := e.proba + y;
+					END;
+					e := ee;
+				END;
+			END AddProba;
+		
+		(* Process f in the order of its elements by calling Propagate as long as successive Dossier(s) have the same date, and call itself (by creating new sons' nodes) for every first possible entry in a set of Dossier(s) with the same date and with a number of Dossier(s) greater than one, merge all the sets of possible permutations returned in sons' nodes into their father's node. It's not a recursive procedure, but it uses queues (fifo lists) to process all possible events in breadth-first order *)
+		PROCEDURE CalcRec (f: File; OUT sets: A.Tree);
+			
+			VAR
+				
+				j: INTEGER;
+				stackSize, size: LONGINT;
+				cd: CertOrDoss;
+				root, n, m: Node;
+				q1, q2: Queue;
+			
+			BEGIN (*CalcRec*)
+				stackSize := 0;
+				q1.Init; q2.Init;
+				NEW(root);
+				INC(stackSize, NS);
+				root.stack := NIL;
+				root.f := f;
+				root.step := 0;
+				root.len2 := 0;
+				root.sets := NIL;
+				q1.Put(root);
+				WHILE ~q1.IsEmpty() DO
+					q1.Get(n);
+					WHILE (n.step < LEN(n.f)) & (n.f[n.step].date # BA.never) & ((n.step >= LEN(n.f) - 1) OR (n.f[n.step] IS Certif) OR (n.f[n.step + 1] IS Certif) OR (n.f[n.step].date # n.f[n.step + 1].date)) DO
+						Propagate(n.f, n.step, debug);
+						INC(n.step);
+					END;
+					ok := ok & (stackSize <= maxStackLength);
+					IF (n.step = LEN(n.f)) OR (n.f[n.step].date = BA.never) OR ~ok THEN
+						Evaluate(n);
+						q2.Put(n);
+					ELSE
+						(* Assertion: (n.step < LEN(n.f) - 1) & (n.f[n.step] IS Dossier) & (n.f[n.step + 1] IS Dossier) & (n.f[n.step].date = n.f[n.step + 1].date)) *)
+						j := n.step + 2;
+						WHILE (j < LEN(n.f)) & (n.f[j] IS Dossier) & (n.f[j].date = n.f[n.step].date) DO
+							INC(j);
+						END;
+						n.len := j - n.step;
+						FOR j := n.step TO n.step + n.len - 1 DO
+							NEW(m);
+							INC(stackSize, NS);
+							m.len := 0;
+							m.len2 := 0;
+							m.stack := n;
+							m.f := CopyFile(n.f, n.step, size);
+							INC(stackSize, size);
+							cd := m.f[j]; m.f[j] := m.f[n.step]; m.f[n.step] := cd;
+							Propagate(m.f, n.step, debug);
+							m.step := n.step + 1;
+							m.sets := NIL;
+							q1.Put(m);
+						END;
+						n.f := NIL;
+					END;
+				END;
+				WHILE ~q2.IsEmpty() DO
+					q2.Get(m);
+					IF m.len2 # m.len THEN
+						q2.Put(m);
+					ELSE
+						n := m.stack;
+						IF n # NIL THEN
+							IF n.sets = NIL THEN
+								A.New(n.sets);
+								q2.Put(n);
+							END;
+							INC(n.len2);
+							AddProba(n.sets, m.sets, n.len);
+						END;
+					END;
+				END;
+				sets := root.sets;
+			END CalcRec;
+		
+		BEGIN (*CalcPermutations*)
+			IF f # NIL THEN
+				ok := TRUE;
+				CalcRec(f, sets);
+				RETURN TRUE;
+			END;
+			RETURN FALSE;
+		END CalcPermutations;
+	
+	(* Merge the Set(s) returned by CalcPermutations and combine their probabilities; return the list of entries sorted by date(s) (occurDate with elements of type PropDate) or by id(s) (occurName with elements of type PropName)  *)
+	PROCEDURE CalcEntries* (f: File; OUT occurDate, occurName: A.Tree): BOOLEAN;
+		
+		VAR
+			
+			n: INTEGER;
+			sets, occur: A.Tree;
+			e, ee, eee: A.Elem;
+			id: B.String;
+			b: BOOLEAN;
+			pD: PropDate;
+			pN: PropName;
+			pAfter: Propagation;
+			debug: Debug;
+		
+		BEGIN (*CalcEntries*)
+			debug := NIL;
+			IF CalcPermutations(f, debug, sets) THEN
+				
+				(* Computing of Propagation(s) with their proba(s) *)
+				A.New(occur);
+				e := sets.Next(NIL);
+				WHILE e # NIL DO
+					WITH e: Set DO
+						ee := e.t.Next(NIL);
+						WHILE ee # NIL DO
+							eee := e.t.Next(ee);
+							WITH ee: Propagation DO
+								ee.proba := 0.;
+							END;
+							b := occur.SearchIns(ee, n);
+							WITH ee: Propagation DO
+								ee.proba := ee.proba + e.proba;
+							END;
+							ee := eee;
+						END;
+					END;
+					e := sets.Next(e);
+				END;
+				
+				(* For each uid, with increasing date(s), gather all Propagation(s) following a Propagation with after = true together *)
+				NEW(id, 1); id^ := "";
+				e := occur.Next(NIL);
+				WHILE e # NIL DO
+					ee := occur.Next(e);
+					WITH e: Propagation DO
+						IF e.id$ # id$ THEN
+							id := e.id;
+							pAfter := NIL;
+						END;
+						IF (pAfter = NIL) & e.after THEN
+							pAfter := e;
+						ELSIF pAfter # NIL THEN
+							pAfter.proba := pAfter.proba + e.proba;
+							b := occur.Delete(e); ASSERT(b, 101);
+						END;
+					END;
+					e := ee;
+				END;
+				
+				
+				(* Propagation -> PropDate & PropName *)
+				A.New(occurDate);
+				A.New(occurName);
+				e := occur.Next(NIL);
+				WHILE e # NIL DO
+					WITH e: Propagation DO
+						NEW(pD);
+						pD.id := e.id;
+						pD.date := e.date;
+						pD.after := e.after;
+						pD.proba := e.proba;
+						ee := pD;
+						b := occurDate.SearchIns(ee, n); ASSERT(~b, 102);
+						NEW(pN);
+						pN.id := e.id;
+						pN.date := e.date;
+						pN.after := e.after;
+						pN.proba := e.proba;
+						ee := pN;
+						b := occurName.SearchIns(ee, n); ASSERT(~b, 103);
+					END;
+					e := occur.Next(e);
+				END;
+				RETURN TRUE;
+			END;
+			RETURN FALSE;
+		END CalcEntries;
+	
+	(* Extract f from the blockchain (DuniterBlockchain) and the sandbox (DuniterSandbox) and sort it; minCertifs is the minimum number of certifications by Dossier required (at least 1 if minCertifs < 1); keep only valid elements *)
+	PROCEDURE FillFile* (minCertifs: INTEGER; OUT f: File);
+		
+		TYPE
+			
+			CdList = POINTER TO RECORD
+				next: CdList;
+				cd: CertOrDoss;
+			END;
+		
+		VAR
+			
+			ok, okP, b: BOOLEAN;
+			pos, posI: S.CertPos;
+			from, to: B.Pubkey;
+			toHash: S.Hash;
+			i, j, bnb, nbCertifs, cNb, dNb: INTEGER;
+			exp, date, mt, t: LONGINT;
+			d: Dossier;
+			c: Certif;
+			uid: B.String;
+			certs, cert: PubList;
+			cdL, l: CdList;
+		
+		BEGIN (*FillFile*)
+			NEW(cdL); l := cdL;
+			dNb := 0;
+			ok := S.IdNextHash(TRUE, toHash);
+			WHILE ok DO
+				nbCertifs := 0; certs := NIL;
+				IF S.CertTo(toHash, pos) THEN
+					posI := pos;
+					REPEAT
+						okP := pos.CertNextPos(from, to, toHash, exp);
+						IF okP THEN
+							FixCertNextDate(from, date);
+							IF date <= exp THEN (* Not-expired certification *)
+								INC(nbCertifs);
+								NEW(cert); cert.pub := from;
+								cert.next := certs; certs := cert;
+							END;
+						END;
+					UNTIL ~okP;
+				END;
+				IF (nbCertifs >= minCertifs) & ((minCertifs < B.pars.sigQty) OR (nbCertifs < B.pars.sigQty) OR NotTooFar(certs, nbCertifs)) THEN
+					INC(dNb);
+					NEW(d);
+					NEW(l.next); l := l.next;
+					l.cd := d;
+					d.princCertif := MIN(nbCertifs, B.pars.sigQty);
+					b := S.IdHash(toHash, to, d.id, d.limit); ASSERT(b, 100);
+					NEW(d.certifs, nbCertifs);
+					j := 0;
+					pos := posI;
+					okP := pos.CertNextPos(from, to, toHash, exp); ASSERT(okP, 101);
+					REPEAT
+						NEW(c);
+						b := B.IdPub(from, c.from, bnb); ASSERT(b, 102);
+						FixCertNextDate(from, c.date);
+						c.limit := exp;
+						IF c.date <= c.limit THEN
+							d.certifs[j] := c;
+							INC(j);
+						END;
+						okP := pos.CertNextPos(from, to, toHash, exp);
+					UNTIL ~okP;
+				END;
+				ok := S.IdNextHash(FALSE, toHash);
+			END;
+			cNb := 0;
+			ok := S.CertNextTo(TRUE, pos);
+			WHILE ok DO
+				IF pos.CertNextPos(from, to, toHash, exp) & B.IdPub(to, uid, bnb) THEN
+					REPEAT
+						NEW(c);
+						b := B.IdPub(from, c.from, bnb); ASSERT(b, 103);
+						c.to := uid;
+						FixCertNextDate(from, c.date);
+						c.limit := exp;
+						(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite *)
+						mt := 0;
+						b := B.TimeOf(B.LastBlock() - 1, mt, t); ASSERT(b OR (B.LastBlock() = 0), 104);
+						IF (c.date <= c.limit) & (c.date > mt) THEN
+							INC(cNb);
+							NEW(l.next); l := l.next;
+							l.cd := c;
+						END;
+					UNTIL ~pos.CertNextPos(from, to, toHash, exp);
+				END;
+				ok := S.CertNextTo(FALSE, pos);
+			END;
+			l.next := NIL; cdL := cdL.next;
+			IF dNb = 0 THEN
+				f := NIL;
+			ELSE
+				NEW(f, dNb + cNb);
+				i := 0;
+				WHILE cdL # NIL DO
+					f[i] := cdL.cd;
+					INC(i);
+					cdL := cdL.next;
+				END;
+				SortFile(f, 0, minCertifs >= B.pars.sigQty);
+			END;
+		END FillFile;
+	
+	(* Calculate the current set of entries, sorted by dates (occur) and by names (invOccur) *)
+	PROCEDURE BuildEntries* (OUT occurDate, occurName: A.Tree): BOOLEAN;
+		
+		VAR
+			
+			f: File;
+			b: BOOLEAN;
+			n: LONGINT;
+		
+		BEGIN (*BuildEntries*)
+			FillFile(B.pars.sigQty, f);
+			b := CalcEntries(CopyFile(f, 0, n), occurDate, occurName);
+			RETURN b;
+		END BuildEntries;
+	
+	PROCEDURE ChangeMaxStackLength* (newMaxStackLength: LONGINT);
+		
+		BEGIN (*ChangeMaxStackLength*)
+			maxStackLength := newMaxStackLength;
+		END ChangeMaxStackLength;
+	
+	BEGIN (*DuniterWotWizard*)
+		maxStackLength := maxStackLengthDef;
+		(*
+		log.ConnectTo(StdLog.text);
+		*)
+	END DuniterWotWizard.

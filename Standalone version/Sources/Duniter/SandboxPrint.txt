@@ -1,0 +1,111 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE DuniterSandboxPrint;
+	
+	
+
+	IMPORT
+		
+		B := DuniterBlockchain, BA := DuniterBasic, S := DuniterSandbox, StdLog;
+	
+	PROCEDURE Print*;
+		
+		VAR
+			
+			hash, toHash: S.Hash;
+			uid: S.String;
+			pubkey, from, to: S.Pubkey;
+			bnb: INTEGER;
+			exp, exp2: LONGINT;
+			ok, okP, b: BOOLEAN;
+			pos: S.CertPos;
+			s: BA.DateTime;
+		
+		BEGIN (*Print*)
+			StdLog.Clear; StdLog.Open;
+			ok := S.IdNextHash(TRUE, hash);
+			WHILE ok DO
+				b := S.IdHash(hash, pubkey, uid, exp); ASSERT(b);
+				StdLog.String(pubkey); StdLog.Tab;
+				StdLog.String(uid); StdLog.Tab;
+				BA.TimestampToString(exp, s);
+				StdLog.String(s);
+				StdLog.Ln;
+				ok := S.IdNextHash(FALSE, hash);
+			END;
+			StdLog.Ln;
+			ok := S.IdNextPubkey(TRUE, pubkey);
+			WHILE ok DO
+				StdLog.String(pubkey); StdLog.Tab;
+				b := S.IdPub(pubkey, hash); ASSERT(b);
+				StdLog.String(hash);
+				StdLog.Ln;
+				ok := S.IdNextPubkey(FALSE, pubkey);
+			END;
+			StdLog.Ln;
+			ok := S.IdNextUid(TRUE, uid);
+			WHILE ok DO
+				StdLog.String(uid); StdLog.Tab;
+				b := S.IdUid(uid, hash); ASSERT(b);
+				StdLog.String(hash);
+				StdLog.Ln;
+				ok := S.IdNextUid(FALSE, uid);
+			END;
+			StdLog.Ln;
+			
+			ok := S.CertNextFrom(TRUE, pos);
+			WHILE ok DO
+				okP := pos.CertNextPos(from, to, toHash, exp);
+				WHILE okP DO
+					StdLog.String(from);
+					IF B.IdPub(from, uid, bnb) THEN
+						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
+					END;
+					StdLog.String(" -> ");
+					StdLog.String(to);
+					IF S.IdHash(toHash, pubkey, uid, exp2) OR B.IdPub(to, uid, bnb) THEN
+						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
+					END;
+					BA.TimestampToString(exp, s);
+					StdLog.String(s);
+					StdLog.Ln;
+					okP := pos.CertNextPos(from, to, toHash, exp);
+				END;
+				ok := S.CertNextFrom(FALSE, pos);
+			END;
+			StdLog.Ln;
+			ok := S.CertNextTo(TRUE, pos);
+			WHILE ok DO
+				okP := pos.CertNextPos(from, to, toHash, exp);
+				WHILE okP DO
+					StdLog.String(to);
+					IF S.IdHash(toHash, to, uid, exp2) OR B.IdPub(to, uid, bnb) THEN
+						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
+					END;
+					StdLog.String(" <- ");
+					StdLog.String(from);
+					IF B.IdPub(from, uid, bnb) THEN
+						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
+					END;
+					BA.TimestampToString(exp, s);
+					StdLog.String(s);
+					StdLog.Ln;
+					okP := pos.CertNextPos(from, to, toHash, exp);
+				END;
+				ok := S.CertNextTo(FALSE, pos);
+			END;
+		END Print;
+	
+	END DuniterSandboxPrint.
+
+DuniterSandboxPrint.Print;

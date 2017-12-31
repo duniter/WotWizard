@@ -1,0 +1,211 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE DuniterBasic;
+	
+	
+
+	IMPORT
+		
+		A := UtilAvlTree, B := UtilBBTree, Dates, Kernel, Strings, UC := UnicodeCase_Mapping, UL := UnicodeLetter_Mapping;
+	
+	CONST
+		
+		year0 = 1970; month0 = 1; day0 = 1; (* Start date of computing history *)
+		
+		never* = MAX(LONGINT);
+	
+	TYPE
+		
+		String* = POINTER TO ARRAY OF CHAR;
+		
+		DateTime* = ARRAY 20 OF CHAR;
+	
+	VAR
+		
+		t0*: INTEGER; (* Origin of dates *)
+	
+	(* Convert the time t to the strings date and time *)
+	PROCEDURE TimestampToDate (t: LONGINT; OUT date: Dates.Date; OUT time: Dates.Time);
+		
+		BEGIN (*TimestampToDate*)
+			time.second := SHORT(t MOD 60); t := t DIV 60;
+			time.minute := SHORT(t MOD 60); t := t DIV 60;
+			time.hour := SHORT(t MOD 24);
+			Dates.DayToDate(SHORT(t DIV 24 + t0), date);
+		END TimestampToDate;
+	
+	(* Convert the date t to the string dt *)
+	PROCEDURE TimestampToString* (t: LONGINT; OUT dt: DateTime);
+		
+		VAR
+			
+			ti, da: ARRAY 11 OF CHAR;
+			date: Dates.Date;
+			time: Dates.Time;
+		
+		BEGIN (*TimestampToString*)
+			TimestampToDate(t, date, time);
+			Dates.DateToString(date, Dates.short, da);
+			Dates.TimeToString(time, ti);
+			dt := da + " " + ti;
+		END TimestampToString;
+	
+	(* Convert the string dt to a date *)
+	PROCEDURE StringToTimestamp* (dt: DateTime): LONGINT;
+		
+		VAR
+			
+			d: Dates.Date;
+			n, m: LONGINT;
+			res: INTEGER;
+			s: ARRAY 5 OF CHAR;
+		
+		BEGIN (*StringToTimestamp*)
+			Strings.Extract(dt, 6, 4, s); Strings.StringToInt(s, d.year, res);
+			IF res # 0 THEN
+				RETURN never;
+			END;
+			Strings.Extract(dt, 3, 2, s); Strings.StringToInt(s, d.month, res); ASSERT(res = 0, 101);
+			Strings.Extract(dt, 0, 2, s); Strings.StringToInt(s, d.day, res); ASSERT(res = 0, 102);
+			n := Dates.Day(d) - t0;
+			Strings.Extract(dt, 11, 2, s); Strings.StringToLInt(s, m, res); ASSERT(res = 0, 103);
+			n := n * 24 + m;
+			Strings.Extract(dt, 14, 2, s); Strings.StringToLInt(s, m, res); ASSERT(res = 0, 104);
+			n := n * 60 + m;
+			Strings.Extract(dt, 17, 2, s); Strings.StringToLInt(s, m, res); ASSERT(res = 0, 105);
+			n := n * 60 + m;
+			RETURN n;
+		END StringToTimestamp;
+	
+	(* Extract the significant character at the position i in s, or further; only alphanumeric characters are significant, and their case of lowest rank is returned *)
+	PROCEDURE DownC (IN s: ARRAY OF CHAR; VAR i: INTEGER): CHAR;
+		
+		VAR
+			
+			c: CHAR;
+		
+		PROCEDURE LetterOrDigit (c: CHAR): BOOLEAN;
+			
+			BEGIN (*LetterOrDigit*)
+				RETURN (c >= '0') & (c <= '9') OR UL.IsLetter(ORD(c));
+			END LetterOrDigit;
+		
+		BEGIN (*DownC*)
+			LOOP
+				c := s[i];
+				IF c = 0X THEN
+					EXIT;
+				END;
+				INC(i);
+				IF LetterOrDigit(c) THEN
+					c := MIN(UC.Lower(c), UC.Upper(c));
+					EXIT;
+				END;
+			END;
+			RETURN c;
+		END DownC;
+	
+	PROCEDURE ToDown* (IN s: ARRAY OF CHAR): String;
+		
+		VAR
+			
+			ss: String;
+			c: CHAR;
+			i: INTEGER;
+		
+		BEGIN (*ToDown*)
+			NEW(ss, LEN(s$) + 1); ss^ := s$;
+			i := 0;
+			WHILE ss[i] # 0X DO
+				c := DownC(ss, i);
+				ss[i - 1] := c;
+			END;
+			RETURN ss;
+		END ToDown;
+	
+	(* Standard comparison procedure for identifiers; they are first compared with ~strict, and if still equal, with strict *)
+	PROCEDURE CompP* (IN s1, s2: ARRAY OF CHAR): BYTE;
+		
+		VAR
+			
+			i1, i2: INTEGER;
+			c1, c2: CHAR;
+		
+		BEGIN (*CompP*)
+			i1 := 0; i2 := 0;
+			REPEAT
+				c1 := DownC(s1, i1);
+				c2 := DownC(s2, i2);
+			UNTIL (c1 # c2) OR (c1 = 0X);
+			IF c1 < c2 THEN
+				RETURN A.lt;
+			END;
+			IF c1 > c2 THEN
+				RETURN A.gt;
+			END;
+			i1 := 0;
+			WHILE (s1[i1] = s2[i1]) & (s1[i1] # 0X) DO
+				INC(i1);
+			END;
+			IF s1[i1] < s2[i1] THEN
+				RETURN A.lt;
+			END;
+			IF s1[i1] > s2[i1] THEN
+				RETURN A.gt;
+			END;
+			RETURN A.eq;
+		END CompP;
+	
+	PROCEDURE Prefix* (IN s1, s2: ARRAY OF CHAR): BOOLEAN;
+		
+		VAR
+			
+			i1, i2: INTEGER;
+			c1, c2: CHAR;
+		
+		BEGIN (*Prefix*)
+			i1 := 0; i2 := 0;
+			REPEAT
+				c1 := DownC(s1, i1 );
+				c2 := DownC(s2, i2);
+			UNTIL (c1 # c2) OR (c1 = 0X);
+			RETURN c1 = 0X;
+		END Prefix;
+	
+	(* Help emptying the memory by calling the garbage collector *)
+	PROCEDURE Collect*;
+		
+		BEGIN (*Collect*)
+			IF Kernel.WouldFinalize() THEN
+				Kernel.Collect;
+			ELSE
+				Kernel.FastCollect;
+			END;
+		END Collect;
+	
+	PROCEDURE Init;
+		
+		VAR
+			
+			date: Dates.Date;
+		
+		BEGIN (*Init*)
+			date.year := year0; date.month := month0; date.day := day0;
+			t0 := Dates.Day(date);
+			(* Can we mix both sets of constants *)
+			ASSERT((B.lt = A.lt) & (B.eq = A.eq) & (B.gt = A.gt), 100);
+		END Init;
+	
+	BEGIN (*DuniterBasic*)
+		Init;
+	END DuniterBasic.

@@ -1,0 +1,73 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE DuniterSentriesPrint;
+	
+	
+
+	IMPORT
+		
+		A := UtilAvlTree, B := DuniterBlockchain, BA := DuniterBasic, Dialog, Math, StdLog;
+	
+	TYPE
+		
+		Uid = POINTER TO RECORD (A.Elem)
+			uid: B.String;
+		END;
+	
+	PROCEDURE (i1: Uid) Compare (i2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH i2: Uid DO
+				RETURN BA.CompP(i1.uid, i2.uid);
+			END;
+		END Compare;
+	
+	PROCEDURE Do*;
+		
+		VAR
+			
+			ok, b: BOOLEAN;
+			pubkey: B.Pubkey;
+			bnb, n: INTEGER;
+			ids: A.Tree;
+			id: Uid;
+			e: A.Elem;
+			s: Dialog.String;
+		
+		BEGIN (*Do*)
+			StdLog.Clear; StdLog.Open;
+			Dialog.MapString("#Duniter:Threshold", s);
+			StdLog.String(s + " = ");
+			StdLog.Int(SHORT(ENTIER(Math.Ceiling(Math.Power(B.IdLen(), 1 / B.pars.stepMax)))));
+			StdLog.Ln; StdLog.Ln;
+			A.New(ids);
+			ok := B.NextSentry(TRUE, pubkey);
+			WHILE ok DO
+				NEW(id);
+				b := B.IdPub(pubkey, id.uid, bnb); ASSERT(b);
+				e := id;
+				b := ids.SearchIns(e, n); ASSERT(~ b);
+				ok := B.NextSentry(FALSE, pubkey);
+			END;
+			e := ids.Next(NIL);
+			WHILE e # NIL DO
+				StdLog.String(e(Uid).uid); StdLog.Ln;
+				e := ids.Next(e);
+			END;
+			StdLog.Ln;
+			Dialog.MapString("#Duniter:SentriesNb", s);
+			StdLog.String(s + " = ");
+			StdLog.Int(B.SentriesLen()); StdLog.Ln;
+		END Do;
+	
+	END DuniterSentriesPrint.Do;

@@ -1,0 +1,49 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE DuniterParametersPrint;
+	
+	
+
+	IMPORT
+		
+		B := DuniterBlockchain, StdLog;
+	
+	PROCEDURE Do*;
+		
+		BEGIN (*Do*)
+			StdLog.Clear; StdLog.Open;
+			StdLog.String("c = "); StdLog.Real(B.pars.c); StdLog.Ln;
+			StdLog.String("dt = "); StdLog.Int(B.pars.dt); StdLog.Ln;
+			StdLog.String("ud0 = "); StdLog.Int(B.pars.ud0); StdLog.Ln;
+			StdLog.String("sigPeriod = "); StdLog.Int(B.pars.sigPeriod); StdLog.Ln;
+			StdLog.String("sigStock = "); StdLog.Int(B.pars.sigStock); StdLog.Ln;
+			StdLog.String("sigWindow = "); StdLog.Int(B.pars.sigWindow); StdLog.Ln;
+			StdLog.String("sigValidity = "); StdLog.Int(B.pars.sigValidity); StdLog.Ln;
+			StdLog.String("sigQty = "); StdLog.Int(B.pars.sigQty); StdLog.Ln;
+			StdLog.String("idtyWindow = "); StdLog.Int(B.pars.idtyWindow); StdLog.Ln;
+			StdLog.String("msWindow = "); StdLog.Int(B.pars.msWindow); StdLog.Ln;
+			StdLog.String("msPeriod = "); StdLog.Int(B.pars.msPeriod); StdLog.Ln;
+			StdLog.String("xpercent = "); StdLog.Real(B.pars.xpercent); StdLog.Ln;
+			StdLog.String("msValidity = "); StdLog.Int(B.pars.msValidity); StdLog.Ln;
+			StdLog.String("stepMax = "); StdLog.Int(B.pars.stepMax); StdLog.Ln;
+			StdLog.String("medianTimeBlocks = "); StdLog.Int(B.pars.medianTimeBlocks); StdLog.Ln;
+			StdLog.String("avgGenTime = "); StdLog.Int(B.pars.avgGenTime); StdLog.Ln;
+			StdLog.String("dtDiffEval = "); StdLog.Int(B.pars.dtDiffEval); StdLog.Ln;
+			StdLog.String("percentRot = "); StdLog.Real(B.pars.percentRot); StdLog.Ln;
+			StdLog.String("udTime0 = "); StdLog.Int(B.pars.udTime0); StdLog.Ln;
+			StdLog.String("udReevalTime0 = "); StdLog.Int(B.pars.udReevalTime0); StdLog.Ln;
+			StdLog.String("dtReeval = "); StdLog.Int(B.pars.dtReeval); StdLog.Ln;
+			StdLog.String("txWindow = "); StdLog.Int(B.pars.txWindow); StdLog.Ln;
+		END Do;
+	
+	END DuniterParametersPrint.Do;

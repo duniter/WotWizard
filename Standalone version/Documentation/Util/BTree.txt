@@ -1,0 +1,749 @@
+UtilBTree
+
+DEFINITION UtilBTree;
+
+	CONST
+		BOS = 1;
+		SCS = 1;
+		CHS = 2;
+		BYS = 1;
+		SIS = 2;
+		INS = 4;
+		LIS = 8;
+		SRS = 4;
+		RES = 8;
+		SES = 4;
+		bNil = 0;
+		lt = -1;
+		eq = 0;
+		gt = 1;
+
+	TYPE
+		Bytes = POINTER TO ARRAY OF BYTE;
+
+		Factory = POINTER TO ABSTRACT RECORD 
+			(fac: Factory) Create- (IN nF: ARRAY OF CHAR): BOOLEAN, NEW, ABSTRACT;
+			(fac: Factory) Open- (IN nF: ARRAY OF CHAR): File, NEW, ABSTRACT;
+			(fac: Factory) CreateBase (IN nF: ARRAY OF CHAR; placeNb: INTEGER): BOOLEAN, NEW;
+			(fac: Factory) OpenBase (IN nF: ARRAY OF CHAR; pageNb: INTEGER): Database, NEW;
+			(fac: Factory) CloseBase (IN nF: ARRAY OF CHAR), NEW;
+			(fac: Factory) TestBase (IN nF: ARRAY OF CHAR): BOOLEAN, NEW
+		END;
+
+		File = POINTER TO ABSTRACT RECORD 
+			(ref: File) PosReader- (pos: INTEGER), NEW, ABSTRACT;
+			(ref: File) Read- (OUT a: ARRAY OF BYTE), NEW, ABSTRACT;
+			(ref: File) PosWriter- (pos: INTEGER), NEW, ABSTRACT;
+			(ref: File) Write- (IN a: ARRAY OF BYTE), NEW, ABSTRACT;
+			(ref: File) End- (OUT end: INTEGER), NEW, ABSTRACT;
+			(ref: File) Truncate- (end: INTEGER), NEW, ABSTRACT;
+			(ref: File) Flush-, NEW, EMPTY;
+			(ref: File) Close-, NEW, ABSTRACT;
+			(ref: File) BytesToReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): REAL, NEW, ABSTRACT;
+			(ref: File) BytesToSReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): SHORTREAL, NEW, ABSTRACT;
+			(ref: File) RealToBytes- (r: REAL): Bytes, NEW, ABSTRACT;
+			(ref: File) SRealToBytes- (r: SHORTREAL): Bytes, NEW, ABSTRACT
+		END;
+
+		Database = POINTER TO LIMITED RECORD 
+			end-, placeNb-: INTEGER;
+			(base: Database) ReadPlace (place: INTEGER): INTEGER, NEW;
+			(base: Database) WritePlace (place, val: INTEGER), NEW;
+			(base: Database) CreateDataMan (fac: DataFac): DataMan, NEW;
+			(base: Database) CreateIndex (keySize: INTEGER): INTEGER, NEW;
+			(base: Database) OpenIndex (ref: INTEGER; man: KeyManager; f: DataFac): Index, NEW;
+			(base: Database) DeleteIndex (ref: INTEGER), NEW;
+			(base: Database) UpdateBase, NEW;
+			(base: Database) CloseBase, NEW
+		END;
+
+		DataFac = POINTER TO ABSTRACT RECORD 
+			(f: DataFac) New- (size: INTEGER): Data, NEW, ABSTRACT
+		END;
+
+		Data = POINTER TO ABSTRACT RECORD 
+			(d: Data) Read- (VAR r: Reader), NEW, ABSTRACT;
+			(d: Data) Write- (VAR w: Writer), NEW, ABSTRACT
+		END;
+
+		StringFac = POINTER TO EXTENSIBLE RECORD (DataFac)
+			(f: StringFac) New- (size: INTEGER): String
+		END;
+
+		String = POINTER TO EXTENSIBLE RECORD (Data)
+			c: POINTER TO ARRAY OF CHAR;
+			(s: String) Read- (VAR r: Reader);
+			(s: String) Write- (VAR w: Writer)
+		END;
+
+		DataMan = POINTER TO LIMITED RECORD 
+			(d: DataMan) ReadData (ptr: INTEGER): Data, NEW;
+			(d: DataMan) AllocateData (data: Data): INTEGER, NEW;
+			(d: DataMan) WriteAllocateData (data: Data): INTEGER, NEW;
+			(d: DataMan) WriteData (ptr: INTEGER; data: Data), NEW;
+			(d: DataMan) EraseData (ptr: INTEGER), NEW
+		END;
+
+		IndexPos = POINTER TO LIMITED RECORD  END;
+
+		Index = POINTER TO LIMITED RECORD 
+			(ind: Index) SearchIns (key: Data): BOOLEAN, NEW;
+			(ind: Index) Search (key: Data): BOOLEAN, NEW;
+			(ind: Index) Erase (key: Data): BOOLEAN, NEW;
+			(ind: Index) NumberOfKeys (): INTEGER, NEW;
+			(ind: Index) ResetPos, NEW;
+			(ind: Index) GetCurrPos (): IndexPos, NEW;
+			(ind: Index) SetCurrPos (pos: IndexPos), NEW;
+			(ind: Index) Next, NEW;
+			(ind: Index) Previous, NEW;
+			(ind: Index) PosSet (): BOOLEAN, NEW;
+			(ind: Index) CurrentKey (): Data, NEW;
+			(ind: Index) ReadValue (): INTEGER, NEW;
+			(ind: Index) WriteValue (val: INTEGER), NEW;
+			(ind: Index) Close, NEW
+		END;
+
+		KeyManager = POINTER TO ABSTRACT RECORD 
+			(man: KeyManager) CompP- (s1, s2: Data): BYTE, NEW, ABSTRACT;
+			(man: KeyManager) PrefP- (key1: Data; VAR key2: Data), NEW, EMPTY
+		END;
+
+		StringKeyManager = POINTER TO EXTENSIBLE RECORD (KeyManager)
+			(man: StringKeyManager) CompP- (key1, key2: Data): BYTE, EXTENSIBLE;
+			(man: StringKeyManager) PrefP- (key1: Data; VAR key2: Data)
+		END;
+
+		Reader = LIMITED RECORD 
+			len-, pos-: INTEGER;
+			(VAR r: Reader) InBool (): BOOLEAN, NEW;
+			(VAR r: Reader) InByte (): BYTE, NEW;
+			(VAR r: Reader) InBytes (OUT b: ARRAY OF BYTE), NEW;
+			(VAR r: Reader) InSChar (): SHORTCHAR, NEW;
+			(VAR r: Reader) InSCharsLen (): INTEGER, NEW;
+			(VAR r: Reader) InSChars (OUT c: ARRAY OF SHORTCHAR), NEW;
+			(VAR r: Reader) InChar (): CHAR, NEW;
+			(VAR r: Reader) InCharsLen (): INTEGER, NEW;
+			(VAR r: Reader) InChars (OUT c: ARRAY OF CHAR), NEW;
+			(VAR r: Reader) InSInt (): SHORTINT, NEW;
+			(VAR r: Reader) InInt (): INTEGER, NEW;
+			(VAR r: Reader) InLInt (): LONGINT, NEW;
+			(VAR r: Reader) InSReal (): SHORTREAL, NEW;
+			(VAR r: Reader) InReal (): REAL, NEW;
+			(VAR r: Reader) InSet (): SET, NEW
+		END;
+
+		Writer = LIMITED RECORD 
+			(VAR w: Writer) OutBool (b: BOOLEAN), NEW;
+			(VAR w: Writer) OutByte (c: BYTE), NEW;
+			(VAR w: Writer) OutBytes (IN b: ARRAY OF BYTE), NEW;
+			(VAR w: Writer) OutSChar (c: SHORTCHAR), NEW;
+			(VAR w: Writer) OutSChars (IN c: ARRAY OF SHORTCHAR), NEW;
+			(VAR w: Writer) OutChar (c: CHAR), NEW;
+			(VAR w: Writer) OutChars (IN c: ARRAY OF CHAR), NEW;
+			(VAR w: Writer) OutSInt (n: SHORTINT), NEW;
+			(VAR w: Writer) OutInt (n: INTEGER), NEW;
+			(VAR w: Writer) OutLInt (n: LONGINT), NEW;
+			(VAR w: Writer) OutSReal (r: SHORTREAL), NEW;
+			(VAR w: Writer) OutReal (r: REAL), NEW;
+			(VAR w: Writer) OutSet (s: SET), NEW
+		END;
+
+END UtilBTree.
+
+The module UtilBTree manages a disk file like a heap, allocating and freeing it easily, with the possibility of indexing by BTrees.
+
+Error 100: Database opened with an insufficient maximal number of allocated buffer pages.
+
+CONST BOS
+SIZE(BOOLEAN)
+
+CONST SCS
+SIZE(SHORTCHAR)
+
+CONST CHS
+SIZE(CHAR)
+
+CONST BYS
+SIZE(BYTE)
+
+CONST SIS
+SIZE(SHORTINT)
+
+CONST INS
+SIZE(INTEGER)
+
+CONST LIS
+SIZE(LONGINT)
+
+CONST SRS
+SIZE(SHORTREAL)
+
+CONST RES
+SIZE(REAL)
+
+CONST SES
+SIZE(SET)
+
+CONST bNil
+Nil pointer in a database.
+
+CONST lt 
+Result of a comparaison. Less than.
+
+CONST eq
+Result of a comparaison. Equal.
+
+CONST gt
+Result of a comparaison. Greater than.
+
+TYPE Bytes
+POINTER TO ARRAY OF BYTES.
+
+TYPE Factory
+ABSTRACT
+Factory for files and databases.
+
+PROCEDURE (fac: Factory) Create- (IN nF: ARRAY OF CHAR): BOOLEAN
+NEW, ABSTRACT
+Create a file with name nF, with the help of fac. Don't open this file. Return TRUE if all is OK.
+
+PROCEDURE (fac: Factory) Open- (IN nF: ARRAY OF CHAR): File
+NEW, ABSTRACT
+Open a file with name nF, with the help of fac, and return this file. Return NIL if the file does not exist.
+
+PROCEDURE (fac: Factory) CreateBase (IN nF: ARRAY OF CHAR; placeNb: INTEGER): BOOLEAN
+NEW
+Create a new file of name nF, with the help of fac, and a database inside this file, with placeNb fixed places. Don't open this database. Fixed places are locations where can be recorded integers, i.e. data pointers. Return TRUE if the database has been created.
+
+PROCEDURE (fac: Factory) OpenBase (IN nF: ARRAY OF CHAR; pageNb: INTEGER): Database
+NEW
+Open and return, with the help of fac, the database created in the file of name nF. pageNb is the maximal number of allocated buffer pages. Return NIL if the file does not exist or can't be opened.
+
+Pre
+The file of name nF contains a database	20
+The database is closed	21
+
+PROCEDURE (fac: Factory) CloseBase (IN nF: ARRAY OF CHAR)
+NEW
+Close, with the help of fac, the database created in the file of name nF, if it exists and is open. It is a rescue procedure. Use it only in case of an accidentally kept open database. Normally, use Database.CloseBase.
+
+Pre
+The file of name nF doesn't exist or contains a database	20
+
+PROCEDURE (fac: Factory) TestBase (IN nF: ARRAY OF CHAR): BOOLEAN
+NEW
+Verify, with the help of fac, if the file nF exists and if it contains a database; return TRUE in this case; the base must be closed.
+
+TYPE File
+ABSTRACT
+File.
+
+PROCEDURE (ref: File) PosReader- (pos: INTEGER)
+NEW, ABSTRACT
+Set the reading position of the file ref to pos; the firt position is 0.
+
+PROCEDURE (ref: File) Read- (OUT a: ARRAY OF BYTE)
+NEW, ABSTRACT
+Read the array a from the file ref at reading position.
+
+PROCEDURE (ref: File) PosWriter- (pos: INTEGER)
+NEW, ABSTRACT
+Set the writing position of the file ref to pos; the firt position is 0.
+
+PROCEDURE (ref: File) Write- (IN a: ARRAY OF BYTE)
+NEW, ABSTRACT
+Write the array a to the file ref at writing position.
+
+PROCEDURE (ref: File) End- (OUT end: INTEGER)
+NEW, ABSTRACT
+Return in end the length of the file ref.
+
+PROCEDURE (ref: File) Truncate- (end: INTEGER)
+NEW, ABSTRACT
+Truncate the file ref at the length end.
+
+PROCEDURE (ref: File) Flush-
+NEW, EMPTY
+Flush the file ref on disk.
+
+PROCEDURE (ref: File) Close-
+NEW, ABSTRACT
+Close the file ref.
+
+PROCEDURE (ref: File) BytesToReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): REAL
+NEW, ABSTRACT
+Read and return a real from the array a at position pos; put pos at the position following the real.
+
+PROCEDURE (ref: File) BytesToSReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): SHORTREAL
+NEW, ABSTRACT
+Read and return a shortreal from the array a at position pos; put pos at the position following the shortreal.
+
+PROCEDURE (ref: File) RealToBytes- (r: REAL): Bytes
+NEW, ABSTRACT
+Return a pointer to an array of byte coding for the real r.
+
+PROCEDURE (ref: File) SRealToBytes- (r: SHORTREAL): Bytes
+NEW, ABSTRACT
+Return a pointer to an array of byte coding for the shortreal r.
+
+TYPE Database
+LIMITED
+Database.
+
+end-: INTEGER
+Length of file.
+
+placeNb-: INTEGER
+Number of fixed places in database.
+
+PROCEDURE (base: Database) ReadPlace (place: INTEGER): INTEGER
+NEW
+Read and return the content of the fixed place place of the database base. The first place has number 0.
+
+Pre
+base is open	20
+0 <= place < base.placeNb	21
+
+PROCEDURE (base: Database) WritePlace (place, val: INTEGER)
+NEW
+Write val in the fixed place place of the database base. The first place has number 0.
+
+Pre
+base is open	20
+0 <= place < base.placeNb	21
+
+PROCEDURE (base: Database) CreateDataMan (fac: DataFac): DataMan
+NEW
+Create and return a new manager of the data created by fac in the database base.
+
+Pre
+fac # NIL	20
+
+PROCEDURE (base: Database) CreateIndex (keySize: INTEGER): INTEGER
+NEW
+Create a new index in the database base and return its reference, but do not open it. keySize is the size of keys on disk. If keys have a fixed size, put this size in keySize. If the size of keys does not vary much, put the greatest size in keySize. If the greatest size of keys is unknown, or if this size vary much, or if you want to use prefixes, put zero in keySize: you'll have to fix the size of each key later. In any case, the actual size of a key of type Key is given by the length of the output of Key.Write.
+
+Pre
+base is open	20
+keySize >= 0	21
+
+PROCEDURE (base: Database) OpenIndex (ref: INTEGER; man: KeyManager; f: DataFac): Index
+NEW
+Open and return an index created with the reference ref by Database.CreateIndex in the database base. man is the key manager of the index and f is the factory of its keys. The current position of the index is reset.
+
+Pre
+base is open	20
+man # NIL	21
+f # NIL	22
+ref # bNil	23
+index is not already open 24
+
+PROCEDURE (base: Database) DeleteIndex (ref: INTEGER)
+NEW
+Delete the index of position ref in the database base; this index must have been closed.
+
+Pre
+base is open	20
+The index at position ref is closed	21
+ref # bNil	22
+
+PROCEDURE (base: Database) UpdateBase
+NEW
+Update the database base on disk.
+
+Pre
+base is open	20
+
+PROCEDURE (base: Database) CloseBase
+NEW
+Close the database base.
+
+Pre
+base is open	20
+
+TYPE DataFac
+ABSTRACT
+Factory of data.
+
+PROCEDURE (IN f: DataFac) New- (size: INTEGER): Data
+NEW, ABSTRACT
+Create data, of length size (bytes) on disk, with the help of f. The length of a data of type MyData is given by the length of the output of MyData.Write; e.g. the length of s: POINTER TO RECORD (Data) c: ARRAY n OF CHAR END is n * CHS, i.e  2 * n. Warning: if Data is the type of an Index key, size may be 0, independently of the actual size.
+
+TYPE Data
+ABSTRACT
+A data, of any kind, written in the database.
+
+PROCEDURE (d: Data) Read- (VAR r: Reader)
+NEW, ABSTRACT
+Read data d with the help of the reader r.
+
+PROCEDURE (d: Data) Write- (VAR w: Writer)
+NEW, ABSTRACT
+Write data d with the help of the writer w.
+
+TYPE StringFac (DataFac)
+EXTENSIBLE
+Factory of Strings.
+
+PROCEDURE (IN f: StringFac) New- (size: INTEGER): String
+Create data containing an array of char of length l (chars) and size = l * CHS (bytes), with the help of f.
+
+Pre
+size >= 0	20
+size MOD SIZE(CHAR) = 0	21
+
+TYPE String (Data)
+EXTENSIBLE
+String, a kind of data.
+
+c: POINTER TO ARRAY OF CHAR
+Array of char contained in String.
+
+PROCEDURE (s: String) Read- (VAR r: Reader)
+Read s.c with the help of the reader r.
+
+PROCEDURE (s: String) Write- (VAR w: Writer)
+Write s.c with the help of the writer w. The length of the production is CHS * (LEN(s.c$)+ 1).
+
+TYPE DataMan
+LIMITED
+Manager of data.
+
+PROCEDURE (d: DataMan) ReadData (ptr: INTEGER): Data
+NEW
+Read user data d in database base at position ptr.
+
+Pre
+The database of d is open	20
+ptr # bNil	21
+
+PROCEDURE (d: DataMan) AllocateData (data: Data): INTEGER
+NEW
+Consider using WriteAllocateData instead.Allocate a cluster for data, managed by d, in the database of d, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size.
+
+Pre
+The database of d is open	20
+size > 0	21
+
+PROCEDURE (d: DataMan) WriteAllocateData (data: Data): INTEGER
+NEW
+Allocate a cluster for data, managed by d, in the database of d, and write data into it; return the position of the allocated cluster.
+
+Pre
+The database of d is open	20
+data # NIL	21
+ptr # bNil	22
+
+PROCEDURE (d: DataMan) WriteData (ptr: INTEGER; data: Data)
+NEW
+Write data, managed by d, at the position ptr in the database of d.
+
+Pre
+The database of d is open	20
+data # NIL	21
+ptr # bNil	22
+
+PROCEDURE (d: DataMan) EraseData (ptr: INTEGER)
+NEW
+Erase data managed by d at position ptr in the database of d.
+
+Pre
+The database of d is open	20
+ptr # bNil	21
+
+TYPE IndexPos
+LIMITED
+Store a position in an index
+
+TYPE Index
+LIMITED
+Index, structured as a btree.
+
+PROCEDURE (ind: Index) SearchIns (key: Data): BOOLEAN
+NEW
+Seek in the index ind the key key and insert it if it is not there already. The result indicates if the key was found. Fix the current position of the index on the key found or inserted.
+
+Pre
+ind is open	20
+key # NIL	21
+
+PROCEDURE (ind: Index) Search (key: Data): BOOLEAN
+NEW
+Seek in the index ind the key key. The result indicates if the key was found. Fix the current position of the index on the found key or on the key which is immediately after the sought key in the event of unfruitful search (in this case, if there is no next key, the current position is reset).
+
+Pre
+ind is open	20
+key # NIL	21
+
+PROCEDURE (ind: Index) Erase (key: Data): BOOLEAN
+NEW
+Erase from index ind the key key. If key does not belong to the index, ind.Erase does nothing and returns FALSE, otherwise ir returns TRUE. If the current position of the index was on the erased key, it is reset.
+
+Pre
+ind is open	20
+key # NIL	21
+
+PROCEDURE (ind: Index) NumberOfKeys (): INTEGER
+NEW
+Return the number of different keys in the index ind
+
+Pre
+ind is open	20
+
+PROCEDURE (ind: Index) ResetPos
+NEW
+Reset the current position of the index ind. After this action, ind.PosSet() returns FALSE.
+
+Pre
+ind is open	20
+
+PROCEDURE (ind: Index) GetCurrPos (): IndexPos
+NEW
+Return the current position of ind.
+
+Pre
+ind is open	20
+
+PROCEDURE (ind: Index) SetCurrPos (pos: IndexPos)
+NEW
+Set the current position of ind to pos. WARNING: the content of ind must not have changed since the setting of pos by GetCurrPos, i.e. no call of ind.Rechins, with a return of FALSE, nor of ind.Erase, must have occurred; otherwise impredictable errors may happen.
+
+Pre
+ind is open	20
+pos # NIL	21
+
+PROCEDURE (ind: Index) Next
+NEW
+Position the index ind on the next key. If the current position is reset, the index is positioned on the first key. If the index is positioned on the last key, its current position becomes reset.
+
+Pre
+ind is open	20
+
+PROCEDURE (ind: Index) Previous
+NEW
+Position the index ind on the previous key. If the current position is reset, the index is positioned on the last key. If the index is positioned on the first key, its current position becomes reset.
+
+Pre
+ind is open	20
+
+PROCEDURE (ind: Index) PosSet (): BOOLEAN
+NEW
+Test if the index ind is positioned on a key (return TRUE then) or if its current position is reset (FALSE returned).
+
+Pre
+ind is open	20
+
+PROCEDURE (ind: Index) CurrentKey (): Data
+NEW
+Return the value of the key in the current position of the index ind, or NIL if the current position of the index is reset.
+
+Pre
+ind is open	20
+
+PROCEDURE (ind: Index) ReadValue (): INTEGER
+NEW
+Read, at the current position of the index ind, the integer associated data and return it. When a new key is inserted, the data which is initially attached to it has the value bNil. The reset position of an index has, itself, a associated data, legible by Index.ReadValue.
+
+Pre
+ind is open	20
+
+PROCEDURE (ind: Index) WriteValue (val: INTEGER)
+NEW
+Write on the current position of the index ind the value val of the associated integer data. When a new key is inserted, the data which is initially attached to it has the value bNil. The reset position of an index has, itself, a associated data, modifiable by Index.WriteValue.
+
+Pre
+ind is open	20
+
+PROCEDURE (ind: Index) Close
+NEW
+Close the index ind.
+
+Pre
+ind is open	20
+
+TYPE KeyManager
+ABSTRACT
+Key manager.
+
+PROCEDURE (man: KeyManager) CompP- (s1, s2: Data): BYTE
+NEW, ABSTRACT
+Comparison method. s1 and s2 are the keys to be compared. The result can be lt (s1 < s2), eq (s1 = s2) or gt (s1 > s2). KeyManager.CompP must induce a total order on the set of keys.
+
+PROCEDURE (man: KeyManager) PrefP- (key1: Data; VAR key2: Data)
+NEW, EMPTY
+Create a prefix of a key, i.e. a shorter key, possibly of null length, which can replace the former key without changing the order of keys. On input key1 and key2 are two keys, with key1 < key2. On output, key2 may be modified, but cannot be enlarged, so that it becomes a prefix of its previous value. A prefix Pref(key1, key2) of  the key key2 in relation to the key key1 is defined by:
+		1) Pref(key1, key2) is a key, which can be compared to other keys by the mean of the method KeyManager.CompP;
+		2) Pref(key1, key2) is the shortest key with key1 < Pref(key1, key2) <= key2;
+		3) key1 may have a null length and, in this case, mut be considered less than any other key.
+Prefixes are useful if keys are long or if their lengths vary much. In this case, if KeyManager.PrefP is instantiated, database is shorter and searches are faster.
+
+TYPE StringKeyManager
+EXTENSIBLE
+Key manager for strings.
+
+PROCEDURE (man: StringKeyManager) CompP- (key1, key2: Data): BYTE
+EXTENSIBLE
+Comparison method of two Strings. Use the lexical order.
+
+Pre
+(key1 # NIL) & (key2 # NIL)	20
+
+PROCEDURE (man: StringKeyManager) PrefP- (key1: Data; VAR key2: Data)
+Calculate the shortest prefix of a String, in the proper sense.
+
+Pre
+(key1 # NIL) & (key2 # NIL)	20
+man.CompP(key1, key2) = lt (i.e. key1 < key2)	21
+
+TYPE Reader
+LIMITED
+Reader of a byte stream.
+
+len-: INTEGER
+Length of the input stream of the reader.
+
+pos-: INTEGER
+Position of the reader in the input stream.
+
+PROCEDURE (VAR r: Reader) InBool (): BOOLEAN
+NEW
+Read a boolean from the input stream.
+
+Pre
+r.pos < r.len	20
+
+PROCEDURE (VAR r: Reader) InByte (): BYTE
+NEW
+Read a byte from the input stream.
+
+Pre
+r.pos < r.len	20
+
+PROCEDURE (VAR r: Reader) InBytes (OUT b: ARRAY OF BYTE)
+NEW
+Read an array of bytes from the input stream.
+
+Pre
+r.len- r.pos >= LEN(b)	20
+
+PROCEDURE (VAR r: Reader) InSChar (): SHORTCHAR
+NEW
+Read a shortchar from the input stream.
+
+Pre
+r.pos + SIZE(SHORTCHAR) <= r.len	20
+
+PROCEDURE (VAR r: Reader) InSCharsLen (): INTEGER
+NEW
+Return the length of  the following array of shortchars to be read from the input stream. The length doesn't include the possible terminal 0X
+
+PROCEDURE (VAR r: Reader) InSChars (OUT c: ARRAY OF SHORTCHAR)
+NEW
+Read an array of shortchars from the input stream. Reading stops when a 0X has been read, or when LEN(c) - 1 shortchars have been read, or when the end of the input stream has been reached. In any case the string returned in c is 0X terminated.
+
+PROCEDURE (VAR r: Reader) InChar (): CHAR
+NEW
+Read a char from the input stream.
+
+Pre
+r.pos + SIZE(SHORTCHAR) <= r.len	20
+
+PROCEDURE (VAR r: Reader) InCharsLen (): INTEGER
+NEW
+Return the length of  the following array of chars to be read from the input stream. The length doesn't include the possible terminal 0X
+
+PROCEDURE (VAR r: Reader) InChars (OUT c: ARRAY OF CHAR)
+NEW
+Read an array of chars from the input stream. Reading stops when a 0X has been read, or when LEN(c) - 1 chars have been read, or when the end of the input stream has been reached. In any case the string returned in c is 0X terminated.
+
+PROCEDURE (VAR r: Reader) InSInt (): SHORTINT
+NEW
+Read a shortint from the input stream.
+
+Pre
+r.pos + SIZE(SHORTINT) <= r.len	20
+
+PROCEDURE (VAR r: Reader) InInt (): INTEGER
+NEW
+Read an integer from the input stream.
+
+Pre
+r.pos + SIZE(INTEGER) <= r.len	20
+
+PROCEDURE (VAR r: Reader) InLInt (): LONGINT
+NEW
+Read a longint from the input stream.
+
+Pre
+r.pos + SIZE(LONGINT) <= r.len	20
+
+PROCEDURE (VAR r: Reader) InSReal (): SHORTREAL
+NEW
+Read a shortreal from the input stream. Use File.BytesToSReal.
+
+PROCEDURE (VAR r: Reader) InReal (): REAL
+NEW
+Read a real from the input stream. Use File.BytesToReal.
+
+PROCEDURE (VAR r: Reader) InSet (): SET
+NEW
+Read a set from the input stream.
+
+Pre
+r.pos + SIZE(SET) <= r.len	20
+
+TYPE Writer
+LIMITED
+Writer on a byte stream.
+
+PROCEDURE (VAR w: Writer) OutBool (b: BOOLEAN)
+NEW
+Write a boolean to the output stream.
+
+PROCEDURE (VAR w: Writer) OutByte (b: BYTE)
+NEW
+Write a byte to the output stream.
+
+PROCEDURE (VAR w: Writer) OutBytes (IN b: ARRAY OF BYTE)
+NEW
+Write an array of bytes to the output stream.
+
+PROCEDURE (VAR w: Writer) OutSChar (c: SHORTCHAR)
+NEW
+Write a shortchar to the output stream.
+
+PROCEDURE (VAR w: Writer) OutSChars (IN c: ARRAY OF SHORTCHAR)
+NEW
+Write an array of shortchars to the output stream, up to, and including, the first 0X shortchar. Warning: LEN(c$) + 1 characters are written.
+
+PROCEDURE (VAR w: Writer) OutChar (c: CHAR)
+NEW
+Write a char to the output stream.
+
+PROCEDURE (VAR w: Writer) OutChars (IN c: ARRAY OF CHAR)
+NEW
+Write an array of chars to the output stream, up to, and including, the first 0X char. Warning: LEN(c$) + 1 characters are written.
+
+PROCEDURE (VAR w: Writer) OutSInt (n: SHORTINT)
+NEW
+Write a shortint to the output stream.
+
+PROCEDURE (VAR w: Writer) OutInt (n: INTEGER)
+NEW
+Write an integer to the output stream.
+
+PROCEDURE (VAR w: Writer) OutLInt (n: LONGINT)
+NEW
+Write a longint to the output stream.
+
+PROCEDURE (VAR w: Writer) OutSReal (n: SHORTREAL)
+NEW
+Write a shortreal to the output stream. Use File.SRealToBytes.
+
+PROCEDURE (VAR w: Writer) OutReal (n: REAL)
+NEW
+Write a real to the output stream. Use File.RealToBytes.
+
+PROCEDURE (VAR w: Writer) OutSet (s: SET)
+NEW
+Write a set to the output stream.
