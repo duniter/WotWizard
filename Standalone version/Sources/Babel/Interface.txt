@@ -1,0 +1,405 @@
+(* 
+Babel: a compiler compiler.
+
+Copyright (C) 2001 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*)
+
+MODULE BabelInterface;
+	
+	
+	
+	(* The module BabelInterface is part of the Babel subsystem, a compiler compiler. BabelInterface is the programming interface corresponding (and called by) the user interface BabelBabel. It builds a tbl file from a definition document. *)
+	
+	IMPORT
+		
+		A := BabelAnaSem, C := BabelCompil, D := BabelDef, I := BabelInit;
+	
+	CONST
+		
+		eOF1* = D.eOF1; (* End of file character. *)
+		
+		withoutDisp* = 0; (* Indicates that compilation was done without display of comments. *)
+		remarks* = 1; (* Indicates the production of remarks during compilation ... *)
+		warnings* = 2; (* ... or of warnings ... *)
+		errors* = 3; (* ... or of error messages. *)
+	
+	TYPE
+		
+		String* = POINTER TO ARRAY OF CHAR;
+		Chaine* = String;
+		
+		Sorties = POINTER TO RECORD (D.Sorties)
+			f: Face;
+		END;
+		
+		Sem = POINTER TO RECORD (A.Sem)
+			f: Face;
+			so: Sorties;
+		END;
+		
+		Face* = POINTER TO ABSTRACT RECORD
+			c: D.Compiler;
+			deb: INTEGER;
+		END;
+	
+	VAR
+		
+		comp: C.Compiler;
+	
+	(* Method for writing a string in the text of comments. *)
+	PROCEDURE (f: Face) String- (IN s: ARRAY OF CHAR), NEW, EMPTY;
+	
+	(* Method for writing an end of line in the text of comments. *)
+	PROCEDURE (f: Face) Ln-, NEW, EMPTY;
+	
+	(* Maps an index text to a more lengthy one, replacing ^0, ^1 and ^2 occurrences by p0, p1, p2, without any modification of the latter strings. Used to make explicit or to translate error messages. *)
+	PROCEDURE (f: Face) Map- (IN index, p0, p1, p2: ARRAY OF CHAR): String, NEW, EXTENSIBLE;
+		
+		VAR
+			
+			c: String;
+		
+		BEGIN (*Map*)
+			NEW(c, LEN(index$) + 1);
+			c^ := index$;
+			RETURN c;
+		END Map;
+	
+	(* Method for writing in the binary file; i: next integer to write. *)
+	PROCEDURE (f: Face) BinInt- (i: INTEGER), NEW, ABSTRACT;
+	
+	PROCEDURE (f: Face) BinByte (b: BYTE), NEW;
+		
+		BEGIN (*BinByte*)
+			f.BinInt(b);
+		END BinByte;
+	
+	PROCEDURE (f: Face) BinBool (b: BOOLEAN), NEW;
+		
+		BEGIN (*BinBool*)
+			IF b THEN
+				f.BinInt(1);
+			ELSE
+				f.BinInt(0);
+			END;
+		END BinBool;
+	
+	PROCEDURE (f: Face) BinChar (c: CHAR), NEW;
+		
+		BEGIN (*BinChar*)
+			f.BinInt(ORD(c));
+		END BinChar;
+	
+	PROCEDURE (f: Face) BinStr (IN s: ARRAY OF CHAR), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*BinStr*)
+			FOR i := 0 TO LEN(s$) DO
+				f.BinChar(s[i]);
+			END;
+		END BinStr;
+		
+	(* Method for reading the parsed text; ch is the next parsed character. *)
+	PROCEDURE (f: Face) Read- (OUT ch: CHAR), NEW, ABSTRACT;
+	
+	(* Returns the running position in the parsed text (any origin is allowed). *)
+	PROCEDURE (f: Face) Pos- (): INTEGER, NEW, ABSTRACT;
+	
+	(* Moves the running position in the parsed text to pos (the origin must be the same than for Pos). *)
+	PROCEDURE (f: Face) SetPos- (pos: INTEGER), NEW, ABSTRACT;
+	
+	PROCEDURE (so: Sorties) String (IN s: ARRAY OF CHAR);
+		
+		BEGIN (*String*)
+			so.f.String(s);
+		END String;
+	
+	PROCEDURE (so: Sorties) Ln;
+		
+		BEGIN (*Ln*)
+			so.f.Ln;
+		END Ln;
+	
+	PROCEDURE (so: Sorties) Map (IN index, p0, p1, p2: ARRAY OF CHAR): String;
+		
+		BEGIN (*Map*)
+			RETURN so.f.Map(index, p0, p1, p2);
+		END Map;
+	
+	PROCEDURE (se: Sem) Read (OUT ch: CHAR);
+		
+		BEGIN (*Read*)
+			se.f.Read(ch);
+		END Read;
+	
+	PROCEDURE (se: Sem) Pos (): INTEGER;
+		
+		BEGIN (*Pos*)
+			RETURN se.f.Pos();
+		END Pos;
+	
+	PROCEDURE (se: Sem) SetPos (pos: INTEGER);
+		
+		BEGIN (*SetPos*)
+			se.f.SetPos(pos);
+		END SetPos;
+	
+	PROCEDURE (se: Sem) Map (IN index: ARRAY OF CHAR): String;
+		
+		BEGIN (*Map*)
+			RETURN se.so.Map(index, "", "", "");
+		END Map;
+	
+	(* Reports an error which takes place at position p, line l and column c in the parsed text. mes is the error message. The implemented procedure writes these informations with f.String, f.Ln and f.Map. *)
+	PROCEDURE (f: Face) Error- (p, l, c: INTEGER; IN mes: ARRAY OF CHAR), NEW, EXTENSIBLE;
+		
+		CONST
+			
+			errorMark = '@';
+		
+		VAR
+			
+			ch: CHAR;
+			i, n, pos: INTEGER;
+			s: ARRAY 6 OF CHAR;
+		
+		BEGIN (*Error*)
+			f.String(f.Map("AnError", "", "", ""));
+			f.Ln; f.Ln;
+			f.String(f.Map("ILine", "", "", "")); f.String(" ");
+			D.CardToStr(l, s);
+			f.String(s);
+			f.String(", ");
+			f.String(f.Map("ICol", "", "", "")); f.String(" ");
+			D.CardToStr(c, s);
+			f.String(s);
+			f.String(" :");
+			f.Ln; f.Ln;
+			pos := f.Pos();
+			f.SetPos(p - c + f.deb);
+			f.Read(ch);
+			n := 0;
+			WHILE (ch # eOF1) & (ch # C.eOF2) & (ch # C.eOL1) & (ch # C.eOL2) DO
+				INC(n);
+				f.Read(ch);
+			END;
+			IF n > 0 THEN
+				s[1] := D.eOS;
+				f.SetPos(p - c + f.deb);
+				FOR i := 1 TO c - 1 DO
+					f.Read(ch);
+					s[0] := ch;
+					f.String(s);
+				END;
+				s[0] := errorMark;
+				f.String(s);
+				FOR i := c TO n DO
+					f.Read(ch);
+					s[0] := ch;
+					f.String(s);
+				END;
+				f.Ln;
+			END;
+			f.SetPos(pos);
+			f.Ln;
+			f.String(mes);
+			f.Ln; f.Ln; f.Ln;
+		END Error;
+	
+	PROCEDURE (se: Sem) Error (p, l, c: INTEGER; IN mes: ARRAY OF CHAR);
+		
+		BEGIN (*Error*)
+			se.f.Error(p, l, c, mes);
+		END Error;
+	
+	(* Compiles a definition document, builds from this document a compiler, writes possibly comments and returns a value (equal to withoutDisp, remarks, warnings or errors) indicating the state of compilation. If errors is returned, the compiler was not created. If another value that withoutDisp is returned, a text of comments were written by the Face.String and Face.Ln methods. The definition text is read by Face.Read, with the help of Face.Pos and Face.SetPos. name returns the name of the document, as written after the first keyword BABEL. *)
+	PROCEDURE (f: Face) CompComp* (OUT name: String): BYTE, NEW;
+		
+		VAR
+
+			se: Sem;
+			so: Sorties;
+		
+		BEGIN (*CompComp*)
+			f.deb := f.Pos();
+			NEW(se); NEW(so);
+			se.f := f; se.so := so;
+			so.f := f;
+			NEW(se.ls); NEW(se.ls.lx);
+			se.ls.lx.so := so;
+			se.ls.lx.InitTokL;
+			se.ls.InitSynt;
+			se.ls.yAAffichage := FALSE;
+			se.ls.yAAttention := FALSE;
+			IF se.Compile(comp, FALSE) & se.ls.VerifSynt() & se.ls.VerifSem() THEN
+				name := se.nom;
+				se.ls.lx.FabriqueLex;
+				f.c := se.ls.lx.CreeLex();
+				se.ls.FabriqueSynt;
+				se.ls.CreeSynt(f.c);
+				IF se.ls.yAAttention THEN
+					RETURN warnings;
+				ELSIF se.ls.yAAffichage THEN
+					RETURN remarks;
+				ELSE
+					RETURN withoutDisp;
+				END;
+			ELSE
+				name := se.nom;
+				f.c := NIL;
+				RETURN errors;
+			END;
+		END CompComp;
+	
+	(* Writes the binary file, corresponding to the compiler created by Face.CompComp, using the Face.BinInt method. *)
+	PROCEDURE (f: Face) OutComp*, NEW;
+		
+		VAR
+			
+			t: D.ToksLex;
+			a: D.ActSynt;
+			ca: D.Card;
+			g: D.GotoS;
+			aS: D.ActionsSem;
+			p: D.Params;
+			r: D.RecEtats;
+			i, j, k: INTEGER;
+		
+		PROCEDURE EcrisEtatsRedLex (nE: INTEGER; eL: D.EtatsLex);
+			
+			VAR
+				
+				i, j: INTEGER;
+				t: D.TransLex;
+			
+			BEGIN (*EcrisEtatsRedLex*)
+				FOR i := 0 TO nE-1 DO
+					f.BinInt(eL[i].recon);
+					f.BinInt(eL[i].nbTrans);
+					f.BinInt(eL[i].nbEps);
+				END;
+				FOR i := 0 TO nE-1 DO
+					t := eL[i].transL;
+					FOR j := 0 TO eL[i].nbEps - 1 DO
+						f.BinInt(t[j].goto);
+						f.BinInt(t[j](D.GotoLexT).transit);
+					END;
+					FOR j := eL[i].nbEps TO eL[i].nbTrans - 1 DO
+						f.BinInt(t[j].goto);
+						f.BinChar(t[j](D.GotoLexC).premCar);
+						f.BinChar(t[j](D.GotoLexC).derCar);
+					END;
+				END;
+			END EcrisEtatsRedLex;
+		
+		BEGIN (*OutComp*)
+			ASSERT(f.c # NIL, 20);
+			f.BinInt(f.c.nbToksLex);
+			f.BinInt(f.c.nbEtatsLex);
+			f.BinInt(f.c.profEtatsL);
+			f.BinInt(f.c.nbEtatsCom);
+			f.BinInt(f.c.profEtatsC);
+			f.BinInt(f.c.nbEtatsSynt);
+			f.BinInt(f.c.nbNonTSynt);
+			f.BinInt(f.c.nbRegleSynt);
+			f.BinInt(f.c.nbRecTerms);
+			t := f.c.toksLex;
+			FOR i := 0 TO f.c.nbToksLex - 1 DO
+				f.BinBool(t[i].utile);
+				f.BinBool(t[i].valUt);
+			END;
+			FOR i := 0 TO f.c.nbToksLex - 1 DO
+				IF t[i].nom = NIL THEN
+					k := 0;
+				ELSE
+					k := LEN(t[i].nom);
+				END;
+				f.BinInt(k);
+				IF k # 0 THEN
+					f.BinStr(t[i].nom);
+				END;
+			END;
+			EcrisEtatsRedLex(f.c.nbEtatsLex, f.c.etatsLex);
+			EcrisEtatsRedLex(f.c.nbEtatsCom, f.c.etatsCom);
+			FOR i := 0 TO f.c.nbEtatsSynt - 1 DO
+				f.BinInt(f.c.actionSynt[i].nbT);
+			END;
+			FOR i := 0 TO f.c.nbEtatsSynt - 1 DO
+				a := f.c.actionSynt[i].actions;
+				FOR j := 0 TO f.c.actionSynt[i].nbT - 1 DO
+					f.BinByte(a[j].quoi);
+					f.BinInt(a[j].premTerm);
+					f.BinInt(a[j].derTerm);
+					f.BinInt(a[j].aux);
+				END;
+			END;
+			FOR i := 0 TO f.c.nbNonTSynt - 1 DO
+				f.BinInt(f.c.gotoSynt[i].nbAtts);
+				f.BinInt(f.c.gotoSynt[i].nbE);
+			END;
+			FOR i := 0 TO f.c.nbNonTSynt - 1 DO
+				IF f.c.gotoSynt[i].nbAtts > 0 THEN
+					ca := f.c.gotoSynt[i].typsAt;
+					FOR j := 0 TO f.c.gotoSynt[i].nbAtts - 1 DO
+						f.BinInt(ca[j]);
+					END;
+				END;
+				IF f.c.gotoSynt[i].nbE > 0 THEN
+					g := f.c.gotoSynt[i].gotos;
+					FOR j := 0 TO f.c.gotoSynt[i].nbE- 1 DO
+						f.BinInt(g[j].depart);
+						f.BinInt(g[j].arrivee);
+					END;
+				END;
+			END;
+			FOR i := 0 TO f.c.nbRegleSynt - 1 DO
+				f.BinInt(f.c.regleSynt[i].longueur);
+				f.BinInt(f.c.regleSynt[i].nonTerm);
+				f.BinInt(f.c.regleSynt[i].nbAct);
+			END;
+			FOR i := 0 TO f.c.nbRegleSynt - 1 DO
+				IF f.c.regleSynt[i].nbAct > 0 THEN
+					aS := f.c.regleSynt[i].act;
+					FOR j := 0 TO f.c.regleSynt[i].nbAct - 1 DO
+						f.BinBool(aS[j].sOrH);
+						f.BinInt(aS[j].profG);
+						f.BinInt(aS[j].attG);
+						f.BinInt(aS[j].fonc);
+						f.BinInt(aS[j].nbPars);
+					END;
+					FOR j := 0 TO f.c.regleSynt[i].nbAct - 1 DO
+						IF aS[j].nbPars > 0 THEN
+							p := aS[j].pars;
+							FOR k := 0 TO aS[j].nbPars - 1 DO
+								f.BinInt(p[k].profD);
+								f.BinInt(p[k].attD);
+							END;
+						END;
+					END;
+				END;
+			END;
+			FOR i := 0 TO f.c.nbRecTerms - 1 DO
+				f.BinInt(f.c.recTerms[i].numTerm);
+				f.BinInt(f.c.recTerms[i].nbEtats);
+			END;
+			FOR i := 0 TO f.c.nbRecTerms - 1 DO
+				r := f.c.recTerms[i].recEtat;
+				FOR j := 0 TO f.c.recTerms[i].nbEtats - 1 DO
+					f.BinInt(r[j].etatDep);
+					f.BinInt(r[j].nTGoto);
+				END;
+			END;
+		END OutComp;
+	
+	BEGIN (*BabelInterface*)
+		comp := I.InitBabel();
+	END BabelInterface.

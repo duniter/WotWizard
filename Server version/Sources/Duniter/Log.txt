@@ -1,7 +1,7 @@
 (* 
 Duniter: WotWizard.
 
-Copyright (C) 2017 GérardMeunier
+Copyright (C) 2017 Gérard Meunier
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
 
@@ -18,7 +18,7 @@ MODULE DuniterLog;
 	
 	IMPORT
 		
-		F := BasicsFiles;
+		F := BasicsFiles, Dialog, Strings;
 	
 	CONST
 		
@@ -42,6 +42,54 @@ MODULE DuniterLog;
 			log.f.WriteLn;
 			log.f.Flush;
 		END Msg;
+	
+	PROCEDURE (VAR log: Log) MMsg* (IN m, p: ARRAY OF CHAR), NEW;
+		
+		VAR
+			
+			s: Dialog.String;
+		
+		BEGIN (*MMsg*)
+			Dialog.MapParamString(m, p, '', '', s);
+			log.Msg(s);
+		END MMsg;
+	
+	PROCEDURE (VAR log: Log) Err* (res: INTEGER; IN p: ARRAY OF CHAR), NEW;
+		
+		CONST
+			
+			noErr = 0;
+			invalidName = 1;
+			notFound = 2;
+			existsAlready = 3;
+			writeProtected = 4;
+			ioError = 5;
+			accessDenied = 6;
+			notEnoughMem = 80;
+			notEnoughDisk = 81;
+		
+		VAR
+			
+			s, ss: Dialog.String;
+		
+		BEGIN (*Err*)
+			CASE res OF
+				|noErr:
+				|invalidName: log.MMsg("#Duniter:invalidName", p);
+				|notFound: log.MMsg("#Duniter:notFound", p);
+				|existsAlready: log.MMsg("#Duniter:existsAlready", p);
+				|writeProtected: log.MMsg("#Duniter:writeProtected", p);
+				|ioError: log.MMsg("#Duniter:ioError", p);
+				|accessDenied: log.MMsg("#Duniter:accessDenied", p);
+				|notEnoughMem: log.MMsg("#Duniter:notEnoughMem", p);
+				|notEnoughDisk: log.MMsg("#Duniter:notEnoughDisk", p);
+				ELSE
+					Strings.IntToString(res, s);
+					Dialog.MapParamString("#Duniter:unknownError", p, s, '', ss);
+					log.Msg(s);
+			END;
+			ASSERT(res = 0, 100);
+		END Err;
 	
 	PROCEDURE Init;
 		

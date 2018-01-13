@@ -1,0 +1,193 @@
+(* 
+Babel: a compiler compiler.
+
+Copyright (C) 2001 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*)
+
+MODULE BabelFind;
+	
+	
+	
+	IMPORT
+		
+		B := BabelCompil, Dialog, Files, StdLog, Stores, TextControllers, TextModels, TextViews;
+	
+	CONST
+		
+		pathF = "Babel/Rsrc";
+		tblF = "Find.tbl";
+	
+	TYPE
+		
+		Directory = POINTER TO RECORD (B.Directory)
+			rd: Stores.Reader;
+		END;
+		
+		FindComp = POINTER TO RECORD (B.Compilation)
+			r: TextModels.Reader;
+			line, col, pos, newLine, newPos: INTEGER;
+			byPos: BOOLEAN;
+		END;
+	
+	VAR
+		
+		cF: B.Compiler;
+		
+		dial*: RECORD
+			line*,
+			col*,
+			pos*: INTEGER;
+			byPos*: BOOLEAN;
+		END;
+	
+	PROCEDURE (d: Directory) ReadInt (OUT i: INTEGER);
+		
+		BEGIN (*ReadInt*)
+			d.rd.ReadInt(i);
+		END ReadInt;
+	
+	PROCEDURE (c: FindComp) Read (OUT ch: CHAR);
+		
+		BEGIN (*Read*)
+			c.r.Read;
+			IF c.r.eot THEN
+				ch := B.eOF1;
+			ELSE
+				ch := c.r.char;
+			END;
+		END Read;
+	
+	PROCEDURE (c: FindComp) Pos (): INTEGER;
+		
+		BEGIN (*Pos*)
+			RETURN c.r.Pos();
+		END Pos;
+	
+	PROCEDURE (c: FindComp) SetPos (pos: INTEGER);
+		
+		BEGIN (*SetPos*)
+			IF pos <= c.r.Base().Length() THEN
+				c.r.SetPos(pos);
+			END;
+		END SetPos;
+	
+	PROCEDURE (c: FindComp) Execution (fNum, parsNb: INTEGER; pars: B.ObjectsList; OUT objPos: B.Object; OUT res: ANYPTR): BOOLEAN;
+		
+		BEGIN (*Execution*)
+			objPos := B.Parameter(pars, 1);
+			ASSERT(objPos.Column() = 1);
+			c.newLine := objPos.Line();
+			c.newPos := objPos.Position();
+			IF c.byPos THEN
+				IF (c.newPos <= c.pos) & (c.newPos + objPos.ObjStringLen() > c.pos) THEN
+					c.col := c.pos - c.newPos + 1;
+					c.StopCompil;
+				END;
+			ELSIF c.newLine = c.line THEN
+				c.col := MIN(c.col, objPos.ObjStringLen());
+				c.pos := c.newPos + c.col - 1;
+				c.StopCompil;
+			END;
+			RETURN TRUE;
+		END Execution;
+	
+	PROCEDURE (c: FindComp) Map (IN index: ARRAY OF CHAR): B.String;
+		
+		VAR
+			
+			s: Dialog.String;
+			ch: B.String;
+		
+		BEGIN (*Map*)
+			Dialog.MapString("#Babel:" + index, s);
+			NEW(ch, LEN(s$) + 1);
+			ch^ := s$;
+			RETURN ch;
+		END Map;
+	
+	PROCEDURE (c: FindComp) Error (pos, line, col: INTEGER; IN msg: ARRAY OF CHAR);
+		
+		BEGIN (*Error*)
+			StdLog.String("Line "); StdLog.Int(line); StdLog.Tab;
+			StdLog.String("Column "); StdLog.Int(col); StdLog.Ln;
+			StdLog.String(msg); StdLog.Ln;
+			StdLog.Ln;
+		END Error;
+	
+	PROCEDURE Position*;
+		
+		VAR
+			
+			cT: TextControllers.Controller;
+			co: FindComp;
+			b: BOOLEAN;
+		
+		BEGIN (*Position*)
+			cT := TextControllers.Focus();
+			IF (cT # NIL) & (dial.byPos & (dial.pos > 0) OR ~dial.byPos & (dial.line > 0) & (dial.col > 0)) THEN
+				NEW(co);
+				co.r := cT.text.NewReader(NIL);
+				co.byPos := dial.byPos;
+				co.newLine := 0; co.newPos := 0;
+				IF dial.byPos THEN
+					co.pos := MIN(dial.pos, cT.text.Length());
+				ELSE
+					co.line := dial.line; co.col := dial.col;
+					co.pos := cT.text.Length();
+				END;
+				b := co.Compile(cF, TRUE);
+				IF co.pos <= cT.text.Length() THEN
+					cT.SetSelection(co.pos - 1, co.pos);
+				ELSE
+					co.col := co.pos - co.newPos + 1;
+					cT.SetCaret(co.pos - 1);
+				END;
+				cT.view.ShowRange(co.pos - 1, co.pos, TextViews.focusOnly);
+				dial.line := co.newLine; dial.col := co.col; dial.pos := co.pos;
+				Dialog.Update(dial);
+			END;
+		END Position;
+	
+	PROCEDURE LineColGuard* (VAR p: Dialog.Par);
+		
+		BEGIN (*LineColGuard*)
+			p.readOnly := dial.byPos;
+		END LineColGuard;
+	
+	PROCEDURE PosGuard* (VAR p: Dialog.Par);
+		
+		BEGIN (*PosGuard*)
+			p.readOnly := ~dial.byPos;
+		END PosGuard;
+	
+	PROCEDURE Init;
+
+		VAR
+
+			l: Files.Locator;
+			f: Files.File;
+			d: Directory;
+		
+		BEGIN (*Init*)
+			NEW(d);
+			l := Files.dir.This(pathF);
+			ASSERT(l.res = 0, 20);
+			f := Files.dir.Old(l, tblF, Files.shared);
+			ASSERT(f # NIL, 21);
+			d.rd.ConnectTo(f);
+			cF := d.ReadCompiler();
+			dial.line := 1;
+			dial.col := 1;
+			dial.pos := 1;
+			dial.byPos := FALSE;
+		END Init;
+	
+	BEGIN (*BabelFind*)
+		Init;
+	END BabelFind.

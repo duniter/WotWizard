@@ -27,16 +27,12 @@ MODULE DuniterSandbox;
 	CONST
 		
 		driver = B.driver; (* Driver SQLite *)
-		
-		hashLen* = 64;
 	
 	TYPE
 		
-		Hash* = ARRAY hashLen + 1 OF CHAR;
-		
-		Pubkey* = B.Pubkey;
-		
 		String* = B.String;
+		Pubkey* = B.Pubkey;
+		Hash* = B.Hash;
 		
 		Identity = POINTER TO RECORD
 			hash: Hash; (* Necessary in sandbox: key of identities *)
@@ -60,7 +56,7 @@ MODULE DuniterSandbox;
 		IdHashE = POINTER TO RECORD (IdE) (* Sorted by hash *)
 		END;
 		
-		(* SQLite record for "SELECT hash, pubkey, uid, buid, revocation_sig, expires_on FROM idty WHERE NOT written" *)
+		(* SQLite record for "SELECT hash, pubkey, uid, buid, revocation_sig, expires_on FROM idty" *)
 		CurId* = RECORD
 			hash*: Hash;
 			pubkey*: Pubkey;
@@ -101,7 +97,7 @@ MODULE DuniterSandbox;
 			posCur: A.Elem; (* The last seen element in the subtree *)
 		END;
 		
-		(* SQLite record for "SELECT [from], [to], target, expires_on FROM cert WHERE NOT written" *)
+		(* SQLite record for "SELECT [from], [to], target, expires_on FROM cert" *)
 		CurC * = RECORD
 			from*: Pubkey;
 			to*: Pubkey;
@@ -129,9 +125,23 @@ MODULE DuniterSandbox;
 	
 	PROCEDURE (i1: IdUidE) Compare (i2: A.Elem): BYTE;
 		
+		VAR
+			
+			b: BYTE;
+		
 		BEGIN (*Compare*)
 			WITH i2: IdUidE DO
-				RETURN BA.CompP(i1.ref.uid, i2.ref.uid);
+				b := BA.CompP(i1.ref.uid, i2.ref.uid);
+				IF b # A.eq THEN
+					RETURN b;
+				END;
+				IF i1.ref.hash$ < i2.ref.hash$ THEN
+					RETURN A.lt;
+				END;
+				IF i1.ref.hash$ > i2.ref.hash$ THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
 			END;
 		END Compare;
 	
@@ -139,10 +149,16 @@ MODULE DuniterSandbox;
 		
 		BEGIN (*Compare*)
 			WITH i2: IdPubE DO
-				IF i1.ref.pubkey$ < i2.ref.pubkey$ THEN
+				IF i1.ref.pubkey < i2.ref.pubkey THEN
 					RETURN A.lt;
 				END;
-				IF i1.ref.pubkey$ > i2.ref.pubkey$ THEN
+				IF i1.ref.pubkey > i2.ref.pubkey THEN
+					RETURN A.gt;
+				END;
+				IF i1.ref.hash < i2.ref.hash THEN
+					RETURN A.lt;
+				END;
+				IF i1.ref.hash > i2.ref.hash THEN
 					RETURN A.gt;
 				END;
 				RETURN A.eq;
@@ -191,54 +207,6 @@ MODULE DuniterSandbox;
 			END;
 		END Compare;
 	
-	(* uid -> Identity *)
-	PROCEDURE IdUid* (IN uid: ARRAY OF CHAR; OUT hash: Hash): BOOLEAN;
-		
-		VAR
-			
-			id: Identity;
-			uP: IdUidE;
-			e: A.Elem;
-			n: INTEGER;
-		
-		BEGIN (*IdUid*)
-			NEW(id);
-			NEW(id.uid, LEN(uid$) + 1); id.uid^ := uid$;
-			NEW(uP); uP.ref := id;
-			e := uP;
-			IF idUidT.Search(e, n) THEN
-				WITH e: IdE DO
-					hash := e.ref.hash$;
-				END;
-				RETURN TRUE;
-			END;
-			RETURN FALSE;
-		END IdUid;
-	
-	(* pubkey -> Identity *)
-	PROCEDURE IdPub* (IN pubkey: Pubkey; OUT hash: Hash): BOOLEAN;
-		
-		VAR
-			
-			id: Identity;
-			pU: IdPubE;
-			e: A.Elem;
-			n: INTEGER;
-		
-		BEGIN (*IdPub*)
-			NEW(id);
-			id.pubkey := pubkey$;
-			NEW(pU); pU.ref := id;
-			e := pU;
-			IF idPubT.Search(e, n) THEN
-				WITH e: IdE DO
-					hash := e.ref.hash$;
-				END;
-				RETURN TRUE;
-			END;
-			RETURN FALSE;
-		END IdPub;
-	
 	(* hash -> Identity *)
 	PROCEDURE IdHash* (IN hash: Hash; OUT pubkey: Pubkey; OUT uid: String; OUT expires_on: LONGINT): BOOLEAN;
 		
@@ -286,6 +254,7 @@ MODULE DuniterSandbox;
 		BEGIN (*IdPosUid*)
 			NEW(id);
 			NEW(id.uid, LEN(uid$) + 1); id.uid^ := uid$;
+			id.hash := "";
 			NEW(uP); uP.ref := id;
 			e := uP;
 			b := idUidT.SearchNext(e, n);
@@ -293,7 +262,7 @@ MODULE DuniterSandbox;
 		END IdPosUid;
 	
 	(* Browse all Identity's uid(s) lexicographically step by step *)
-	PROCEDURE IdNextUid* (first: BOOLEAN; OUT uid: String): BOOLEAN;
+	PROCEDURE IdNextUid* (first: BOOLEAN; OUT uid: String; OUT hash: Hash): BOOLEAN;
 		
 		BEGIN (*IdNextUid*)
 			IF first THEN
@@ -305,6 +274,7 @@ MODULE DuniterSandbox;
 			END;
 			WITH idUidCur: IdE DO
 				NEW(uid, LEN(idUidCur.ref.uid$) + 1); uid^ := idUidCur.ref.uid$;
+				hash := idUidCur.ref.hash;
 			END;
 			RETURN TRUE;
 		END IdNextUid;
@@ -323,6 +293,7 @@ MODULE DuniterSandbox;
 		BEGIN (*IdPosPubkey*)
 			NEW(id);
 			id.pubkey := pubkey$;
+			id.hash := "";
 			NEW(pU); pU.ref := id;
 			e := pU;
 			b := idPubT.SearchNext(e, n);
@@ -330,7 +301,7 @@ MODULE DuniterSandbox;
 		END IdPosPubkey;
 	
 	(* Browse all Identity's pubkey(s)  step by step *)
-	PROCEDURE IdNextPubkey* (first: BOOLEAN; OUT pubkey: Pubkey): BOOLEAN;
+	PROCEDURE IdNextPubkey* (first: BOOLEAN; OUT pubkey: Pubkey; OUT hash: Hash): BOOLEAN;
 		
 		BEGIN (*IdNextPubkey*)
 			IF first THEN
@@ -341,7 +312,8 @@ MODULE DuniterSandbox;
 				RETURN FALSE;
 			END;
 			WITH idPubkeyCur: IdE DO
-				pubkey := idPubkeyCur.ref.pubkey$;
+				pubkey := idPubkeyCur.ref.pubkey;
+				hash := idPubkeyCur.ref.hash;
 			END;
 			RETURN TRUE;
 		END IdNextPubkey;
@@ -474,7 +446,7 @@ MODULE DuniterSandbox;
 		END CertPosLen;
 	
 	(* Browse all Certification(s) in a subtree step by step *)
-	PROCEDURE (VAR pos: CertPos) CertNextPos* (OUT from, to: Pubkey; OUT toHash: Hash; OUT expires_on: LONGINT): BOOLEAN, NEW;
+	PROCEDURE (VAR pos: CertPos) CertNextPos* (OUT from: Pubkey; OUT toHash: Hash): BOOLEAN, NEW;
 		
 		VAR
 			
@@ -488,9 +460,7 @@ MODULE DuniterSandbox;
 			END;
 			WITH e: CertE DO
 				from := e.ref.from;
-				to := e.ref.to;
 				toHash := e.ref.toHash;
-				expires_on := e.ref.expires_on;
 			END;
 			RETURN TRUE;
 		END CertNextPos;
@@ -562,7 +532,7 @@ MODULE DuniterSandbox;
 			RETURN i = 0;
 		END ExtractBlockId;
 	
-	(* Builds idHashT, idPubT and idUidT from the Duniter database *)
+	(* Build idHashT from the Duniter database *)
 	PROCEDURE Identities (d: S.Database);
 		
 		VAR
@@ -572,21 +542,19 @@ MODULE DuniterSandbox;
 			cur: CurId;
 			id: Identity;
 			hE: IdHashE;
-			pE: IdPubE;
-			uE: IdUidE;
 			e: A.Elem;
 			b: BOOLEAN;
 			now: LONGINT;
 		
 		BEGIN (*Identities*)
-			t := d.NewTable(); ASSERT(t # NIL, 101);
+			t := d.NewTable(); ASSERT(t # NIL, 100);
 			REPEAT
-				t.Exec("SELECT hash, pubkey, uid, buid, revocation_sig, expires_on FROM idty WHERE NOT written");
-				ASSERT(t.res IN {0, 6}, 100);
+				t.Exec("SELECT hash, pubkey, uid, buid, revocation_sig, expires_on FROM idty");
+				ASSERT(t.res IN {0, 6}, 101);
 			UNTIL t.res = 0;
-			ASSERT((t.rows = 0) OR (t.columns = 6), 103);
+			ASSERT((t.rows = 0) OR (t.columns = 6), 102);
 			now := B.Now();
-			A.New(idHashT); A.New(idPubT); A.New(idUidT);
+			A.New(idHashT);
 			FOR i := 0 TO t.rows - 1 DO
 				t.Read(i, cur);
 				IF ((cur.revocation_sig = NIL) OR (cur.revocation_sig$ = "")) & (now <= cur.expires_on) THEN
@@ -594,23 +562,15 @@ MODULE DuniterSandbox;
 					id.hash := cur.hash;
 					id.pubkey := cur.pubkey;
 					id.uid := cur.uid; cur.uid := NIL;
-					b := ExtractBlockId(cur.buid, id.bid); ASSERT(b);
+					b := ExtractBlockId(cur.buid, id.bid); ASSERT(b, 103);
 					id.expires_on := cur.expires_on;
 					NEW(hE); hE.ref := id; e := hE;
-					b := idHashT.SearchIns(e, n); ASSERT(~b);
-					NEW(pE); pE.ref := id; e := pE;
-					IF idPubT.SearchIns(e, n) & (e(IdPubE).ref.hash$ # id.hash$) & (id.bid > e(IdPubE).ref.bid) THEN
-						e(IdPubE).ref := id;
-					END;
-					NEW(uE); uE.ref := id; e := uE;
-					IF idUidT.SearchIns(e, n) & (e(IdUidE).ref.hash$ # id.hash$) & (id.bid > e(IdUidE).ref.bid) THEN
-						e(IdUidE).ref := id;
-					END;
+					b := idHashT.SearchIns(e, n); ASSERT(~b, 104);
 				END;
 			END;
 		END Identities;
 	
-	(* Scan the membership table in the Duniter database and delete all expired identities in idHashT, idPubT and idUidT *)
+	(* Scan the membership table in the Duniter database and delete all expired identities in idHashT; build idPubT and idUidT *)
 	PROCEDURE Memberships (d: S.Database);
 		
 		VAR
@@ -627,12 +587,12 @@ MODULE DuniterSandbox;
 			b: BOOLEAN;
 		
 		BEGIN (*Memberships*)
-			t := d.NewTable(); ASSERT(t # NIL, 101);
+			t := d.NewTable(); ASSERT(t # NIL, 100);
 			REPEAT
 				t.Exec("SELECT idtyHash, membership, expires_on FROM membership WHERE expired IS NULL AND written_number IS NULL ORDER BY blockNumber ASC");
-				ASSERT(t.res IN {0, 6}, 100);
+				ASSERT(t.res IN {0, 6}, 101);
 			UNTIL t.res = 0;
-			ASSERT((t.rows = 0) OR (t.columns = 3), 103);
+			ASSERT((t.rows = 0) OR (t.columns = 3), 102);
 			A.New(tr);
 			FOR i := t.rows - 1 TO 0 BY - 1 DO
 				t.Read(i, cur);
@@ -643,8 +603,8 @@ MODULE DuniterSandbox;
 					WITH e: IdHashE DO
 						e.ref.expires_on := MAX(e.ref.expires_on, cur.expires_on); (* ??? *)
 					END;
-				ELSE ASSERT(cur.inOrOut$ = "OUT");
-					b := tr.Delete(idH); ASSERT(b);
+				ELSE ASSERT(cur.inOrOut$ = "OUT", 103);
+					b := tr.Delete(idH); ASSERT(b, 104);
 				END;
 			END;
 			e := idHashT.Next(NIL);
@@ -657,14 +617,22 @@ MODULE DuniterSandbox;
 							e.ref.expires_on := MIN(e.ref.expires_on, eee.ref.expires_on);
 						END;
 					ELSE
-						b := idHashT.Delete(idH); ASSERT(b);
-						NEW(idU); idU.ref := e.ref;
-						b := idUidT.Delete(idU);
-						NEW(idP); idP.ref := e.ref;
-						b := idPubT.Delete(idP);
+						b := idHashT.Delete(idH); ASSERT(b, 105);
 					END;
 				END;
 				e := ee;
+			END;
+			
+			A.New(idPubT); A.New(idUidT);
+			e := idHashT.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: IdHashE DO
+					NEW(idU); idU.ref := e.ref; ee := idU;
+					b := idUidT.SearchIns(ee, n); ASSERT(~b, 106);
+					NEW(idP); idP.ref := e.ref; ee := idP;
+					b := idPubT.SearchIns(ee, n); ASSERT(~b, 107);
+				END;
+				e := idHashT.Next(e);
 			END;
 		END Memberships;
 	
@@ -682,22 +650,23 @@ MODULE DuniterSandbox;
 			e, ee: A.Elem;
 			b: BOOLEAN;
 			uid: String;
+			hash: Hash;
 			now,
 			exp: LONGINT;
 			pubkey: Pubkey;
 		
 		BEGIN (*Certifications*)
-			t := d.NewTable(); ASSERT(t # NIL, 101);
+			t := d.NewTable(); ASSERT(t # NIL, 100);
 			REPEAT
-				t.Exec("SELECT [from], [to], target, expires_on FROM cert WHERE NOT written");
-				ASSERT(t.res IN {0, 6}, 100);
+				t.Exec("SELECT [from], [to], target, expires_on FROM cert");
+				ASSERT(t.res IN {0, 6}, 101);
 			UNTIL t.res = 0;
-			ASSERT((t.rows = 0) OR (t.columns = 4), 103);
+			ASSERT((t.rows = 0) OR (t.columns = 4), 102);
 			now := B.Now();
 			A.New(certFromT); A.New(certToT);
 			FOR i := 0 TO t.rows - 1 DO
 				t.Read(i, cur);
-				IF ~B.Cert(cur.from, cur.to, bnb, exp) & (now <= cur.expires_on) & (IdHash(cur.toHash, pubkey, uid, exp) OR B.IdPub(cur.to, uid, bnb)) THEN (* If already in BC, no more in sandbox *)
+				IF ~B.Cert(cur.from, cur.to, bnb, exp) & (now <= cur.expires_on) & (IdHash(cur.toHash, pubkey, uid, exp) OR B.IdPub(cur.to, uid, hash, bnb) & (hash = cur.toHash)) THEN (* If already in BC, no more in sandbox *)
 					NEW(c);
 					c.from := cur.from;
 					c.to := cur.to;

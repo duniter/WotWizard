@@ -6,13 +6,13 @@ Download the Blackbox Component Framework Version 1.7 at:
 
 and extract it into the "Blackbox" directory (you may have copied this directory elsewhere before).
 
-Then, run "Blackbox/BlackBox.exe", open this file itself in the BlackBox framework (Blackbox/Duniter/Docu/MakingOf.odc) and execute the commands below.
+Then, run "Blackbox/BlackBox.exe", open this file itself in the BlackBox framework (Blackbox/Duniter0/Docu/MakingOf.odc) and execute the commands below.
 
  DevCompiler.CompileThis 
-CpcUtf8Conv SQLiteLib SQLiteHost SQLiteStrings SQLiteDriver UtilAvlTree UtilBTree UtilBBTree DuniterBasic DuniterBlockchain DuniterSandbox DuniterParametersPrint DuniterIdentitiesPrint DuniterCertificationsPrint DuniterSentriesPrint DuniterSandboxPrint DuniterIdentitySearch DuniterWotWizard DuniterWotWizardPrint DuniterWWViews DuniterMembers DuniterMembersPrint DuniterClock DuniterDates DuniterCertifiers 
+CpcUtf8Conv SQLiteLib SQLiteHost SQLiteStrings SQLiteDriver UtilAvlTree UtilBTree UtilBBTree Duniter0Basic Duniter0Blockchain Duniter0Sandbox Duniter0ParametersPrint Duniter0IdentitiesPrint Duniter0CertificationsPrint Duniter0SentriesPrint Duniter0SandboxPrint Duniter0IdentitySearch Duniter0WotWizard Duniter0WotWizardPrint Duniter0WWViews Duniter0Members Duniter0MembersPrint Duniter0Clock Duniter0Dates Duniter0Certifiers 
 
  DevDebug.UnloadThis 
-DuniterCertifiers DuniterWWViews DuniterWotWizardPrint DuniterWotWizard DuniterIdentitySearch DuniterSandboxPrint DuniterSandbox DuniterSentriesPrint DuniterIdentitiesPrint DuniterCertificationsPrint DuniterParametersPrint DuniterClock DuniterMembersPrint DuniterMembers DuniterDates DuniterBlockchain DuniterBasic UtilBBTree UtilBTree UtilAvlTree SQLiteDriver SQLiteStrings SQLiteHost CpcUtf8Conv 
+Duniter0Certifiers Duniter0WWViews Duniter0WotWizardPrint Duniter0WotWizard Duniter0IdentitySearch Duniter0SandboxPrint Duniter0Sandbox Duniter0SentriesPrint Duniter0IdentitiesPrint Duniter0CertificationsPrint Duniter0ParametersPrint Duniter0Clock Duniter0MembersPrint Duniter0Members Duniter0Dates Duniter0Blockchain Duniter0Basic UtilBBTree UtilBTree UtilAvlTree SQLiteDriver SQLiteStrings SQLiteHost CpcUtf8Conv 
 
  DevLinker.Link WotWizard.exe := 
 Kernel$+ Files HostFiles HostPackedFiles StdLoader
@@ -21,47 +21,48 @@ Kernel$+ Files HostFiles HostPackedFiles StdLoader
 1 Move.cur 2 Copy.cur 3 Link.cur 4 Pick.cur 5 Stop.cur 6 Hand.cur 7 Table.cur
 
  DevPacker.PackThis WotWizard.exe :=
-Duniter/Code/Basic.ocf Duniter/Code/Blockchain.ocf Duniter/Code/CertificationsPrint.ocf Duniter/Code/Certifiers.ocf Duniter/Code/Clock.ocf Duniter/Code/Dates.ocf Duniter/Code/IdentitiesPrint.ocf Duniter/Code/IdentitySearch.ocf Duniter/Code/Members.ocf Duniter/Code/MembersPrint.ocf Duniter/Code/ParametersPrint.ocf Duniter/Code/Sandbox.ocf Duniter/Code/SandboxPrint.ocf Duniter/Code/SentriesPrint.ocf Duniter/Code/WWViews.ocf Duniter/Code/WotWizard.ocf Duniter/Code/WotWizardPrint.ocf Host/Code/CFrames.ocf Host/Code/Clipboard.ocf Host/Code/Cmds.ocf Host/Code/Dialog.ocf Host/Code/Files.ocf Host/Code/Fonts.ocf Host/Code/Mechanisms.ocf Host/Code/Menus.ocf Host/Code/Ports.ocf Host/Code/Printers.ocf Host/Code/Registry.ocf Host/Code/Windows.ocf Ole/Code/Data.ocf SQLite/Code/Driver.ocf SQLite/Code/Host.ocf SQLite/Code/Strings.ocf Sql/Code/DB.ocf Sql/Code/Drivers.ocf Std/Code/Api.ocf Std/Code/CFrames.ocf Std/Code/Cmds.ocf Std/Code/Dialog.ocf Std/Code/Interpreter.ocf Std/Code/Links.ocf Std/Code/Loader.ocf Std/Code/Log.ocf Std/Code/MenuTool.ocf System/Code/Containers.ocf System/Code/Controllers.ocf System/Code/Controls.ocf System/Code/Converters.ocf System/Code/Dates.ocf System/Code/Dialog.ocf System/Code/Documents.ocf System/Code/Files.ocf System/Code/Fonts.ocf System/Code/Init.ocf System/Code/Kernel.ocf System/Code/Log.ocf System/Code/Math.ocf System/Code/Mechanisms.ocf System/Code/Meta.ocf System/Code/Models.ocf System/Code/Ports.ocf System/Code/Printers.ocf System/Code/Printing.ocf System/Code/Properties.ocf System/Code/Sequencers.ocf System/Code/Services.ocf System/Code/Stores.ocf System/Code/Strings.ocf System/Code/Views.ocf System/Code/Windows.ocf Text/Code/Cmds.ocf Text/Code/Controllers.ocf Text/Code/Mappers.ocf Text/Code/Models.ocf Text/Code/Rulers.ocf Text/Code/Setters.ocf Text/Code/Views.ocf Unicode/Code/Case_Mapping.ocf Unicode/Code/Letter_Mapping.ocf Util/Code/Alea.ocf Util/Code/AvlTree.ocf Util/Code/BBTree.ocf Util/Code/BTree.ocf Util/Code/External.ocf Util/Code/SortI.ocf
+Babel/Code/Compil.ocf Dev/Code/Search.ocf Duniter0/Code/Basic.ocf Duniter0/Code/Blockchain.ocf Duniter0/Code/CertificationsPrint.ocf Duniter0/Code/Certifiers.ocf Duniter0/Code/Clock.ocf Duniter0/Code/Dates.ocf Duniter0/Code/IdentitiesPrint.ocf Duniter0/Code/IdentitySearch.ocf Duniter0/Code/Members.ocf Duniter0/Code/MembersPrint.ocf Duniter0/Code/ParametersPrint.ocf Duniter0/Code/Sandbox.ocf Duniter0/Code/SandboxPrint.ocf Duniter0/Code/SentriesPrint.ocf Duniter0/Code/WWViews.ocf Duniter0/Code/WotWizard.ocf Duniter0/Code/WotWizardPrint.ocf Host/Code/CFrames.ocf Host/Code/Clipboard.ocf Host/Code/Cmds.ocf Host/Code/Dialog.ocf Host/Code/Files.ocf Host/Code/Fonts.ocf Host/Code/Mechanisms.ocf Host/Code/Menus.ocf Host/Code/Ports.ocf Host/Code/Printers.ocf Host/Code/Registry.ocf Host/Code/Windows.ocf Ole/Code/Data.ocf Sql/Code/DB.ocf Sql/Code/Drivers.ocf Std/Code/Api.ocf Std/Code/CFrames.ocf Std/Code/Cmds.ocf Std/Code/Dialog.ocf Std/Code/Interpreter.ocf Std/Code/Links.ocf Std/Code/Loader.ocf Std/Code/Log.ocf Std/Code/MenuTool.ocf System/Code/Containers.ocf System/Code/Controllers.ocf System/Code/Controls.ocf System/Code/Converters.ocf System/Code/Dates.ocf System/Code/Dialog.ocf System/Code/Documents.ocf System/Code/Files.ocf System/Code/Fonts.ocf System/Code/Init.ocf System/Code/Kernel.ocf System/Code/Log.ocf System/Code/Math.ocf System/Code/Mechanisms.ocf System/Code/Meta.ocf System/Code/Models.ocf System/Code/Ports.ocf System/Code/Printers.ocf System/Code/Printing.ocf System/Code/Properties.ocf System/Code/Sequencers.ocf System/Code/Services.ocf System/Code/Stores.ocf System/Code/Strings.ocf System/Code/Views.ocf System/Code/Windows.ocf Text/Code/Cmds.ocf Text/Code/Controllers.ocf Text/Code/Mappers.ocf Text/Code/Models.ocf Text/Code/Rulers.ocf Text/Code/Setters.ocf Text/Code/Views.ocf Unicode/Code/Case_Mapping.ocf Unicode/Code/Letter_Mapping.ocf Util/Code/Alea.ocf Util/Code/AvlTree.ocf Util/Code/BBTree.ocf Util/Code/BTree.ocf Util/Code/Json.ocf Util/Code/SortI.ocf
 
 Cpc/Code/Utf8Conv.ocf
 Dev/Code/Browser.ocf
 Dev/Code/Commanders.ocf
 Dev/Code/Debug.ocf
+Dev/Rsrc/Strings.odc
+Dev/Rsrc/fr/Strings.odc
 Docu/CP-Lang.odc
-Duniter/Code/SA-Config.ocf => System/Code/Config.ocf
-Duniter/Docu/GNU-License.odc
-Duniter/Docu/MakingOf.odc
-Duniter/Docu/Manual.odc
-Duniter/Docu/fr/Manual.odc
-Duniter/Mod/Basic.odc
-Duniter/Mod/Blockchain.odc
-Duniter/Mod/CertificationsPrint.odc
-Duniter/Mod/Certifiers.odc
-Duniter/Mod/Clock.odc
-Duniter/Mod/Dates.odc
-Duniter/Mod/IdentitiesPrint.odc
-Duniter/Mod/IdentitySearch.odc
-Duniter/Mod/Members.odc
-Duniter/Mod/MembersPrint.odc
-Duniter/Mod/ParametersPrint.odc
-Duniter/Mod/SA-Config.odc
-Duniter/Mod/Sandbox.odc
-Duniter/Mod/SandboxPrint.odc
-Duniter/Mod/SentriesPrint.odc
-Duniter/Mod/WotWizard.odc
-Duniter/Mod/WotWizardPrint.odc
-Duniter/Mod/WWViews.odc
-Duniter/Rsrc/About.odc
-Duniter/Rsrc/Clock.odc
-Duniter/Rsrc/Dates.odc
-Duniter/Rsrc/Documentation.odc
-Duniter/Rsrc/Identities.odc
-Duniter/Rsrc/MaxStackLength.odc
-Duniter/Rsrc/Sources.odc
-Duniter/Rsrc/Strings.odc
-Duniter/Rsrc/fr/Strings.odc
-Duniter/Rsrc/SA-Menus.odc => System/Rsrc/Menus.odc
-Duniter/Rsrc/WotWizard.odc
+Duniter0/Code/SA-Config.ocf => System/Code/Config.ocf
+Duniter0/Docu/GNU-License.odc
+Duniter0/Docu/MakingOf.odc
+Duniter0/Docu/Manual.odc
+Duniter0/Docu/fr/Manual.odc
+Duniter0/Mod/Basic.odc
+Duniter0/Mod/Blockchain.odc
+Duniter0/Mod/CertificationsPrint.odc
+Duniter0/Mod/Certifiers.odc
+Duniter0/Mod/Clock.odc
+Duniter0/Mod/Dates.odc
+Duniter0/Mod/IdentitiesPrint.odc
+Duniter0/Mod/IdentitySearch.odc
+Duniter0/Mod/Members.odc
+Duniter0/Mod/MembersPrint.odc
+Duniter0/Mod/ParametersPrint.odc
+Duniter0/Mod/SA-Config.odc
+Duniter0/Mod/Sandbox.odc
+Duniter0/Mod/SandboxPrint.odc
+Duniter0/Mod/SentriesPrint.odc
+Duniter0/Mod/WotWizard.odc
+Duniter0/Mod/WotWizardPrint.odc
+Duniter0/Mod/WWViews.odc
+Duniter0/Rsrc/About.odc
+Duniter0/Rsrc/Clock.odc
+Duniter0/Rsrc/Dates.odc
+Duniter0/Rsrc/Documentation.odc
+Duniter0/Rsrc/Identities.odc
+Duniter0/Rsrc/MaxStackLength.odc
+Duniter0/Rsrc/Sources.odc
+Duniter0/Rsrc/Strings.odc
+Duniter0/Rsrc/fr/Strings.odc
+Duniter0/Rsrc/SA-Menus.odc => System/Rsrc/Menus.odc
 Form/Code/Controllers.ocf
 Form/Code/Models.ocf
 Form/Code/Views.ocf
@@ -76,6 +77,9 @@ Ole/Code/Client.ocf
 Ole/Code/Server.ocf
 SQL/Rsrc/Strings.odc
 SQL/Rsrc/fr/Strings.odc
+SQLite/Code/Driver.ocf
+SQLite/Code/Host.ocf
+SQLite/Code/Strings.ocf
 SQLite/Rsrc/Strings.odc
 Std/Code/Folds.ocf
 Std/Code/Headers.ocf
@@ -84,8 +88,10 @@ Std/Rsrc/Strings.odc
 Std/Rsrc/fr/Strings.odc
 System/Rsrc/Strings.odc
 System/Rsrc/fr/Strings.odc
+Text/Rsrc/Cmds.odc
 Text/Rsrc/Strings.odc
 Text/Rsrc/fr/Strings.odc
+Util/Code/External.ocf
 Util/Docu/AvlTree.odc
 Util/Docu/BBTree.odc
 Util/Docu/BTree.odc
@@ -93,6 +99,7 @@ Util/Docu/GNU-License.odc
 Util/Mod/AvlTree.odc
 Util/Mod/BBTree.odc
 Util/Mod/BTree.odc
+Util/Rsrc/Json.tbl
 Util/Rsrc/Strings.odc
 Util/Rsrc/fr/Strings.odc
 Xhtml/Code/Exporter.ocf

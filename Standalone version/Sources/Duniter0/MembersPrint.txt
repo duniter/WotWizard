@@ -1,0 +1,47 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter0MembersPrint;
+	
+	
+
+	IMPORT
+		
+		M := Duniter0Members, TextMappers, TextModels, TextViews, Views;
+
+	PROCEDURE Do*;
+		
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			a: POINTER TO ARRAY OF INTEGER;
+			i: INTEGER;
+		
+		BEGIN (*Do*)
+			M.Count(a);
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			FOR i := 0 TO LEN(a) - 1 DO
+				f.WriteTab;
+				f.WriteInt(i);
+				f.WriteTab;
+				f.WriteInt(a[i]);
+				f.WriteLn;
+			END;
+			Views.OpenView(TextViews.dir.New(t));
+		END Do;
+	
+	END Duniter0MembersPrint.
+
+Duniter0MembersPrint.Do;

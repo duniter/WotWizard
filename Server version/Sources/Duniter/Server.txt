@@ -18,11 +18,11 @@ MODULE DuniterServer;
 
 	IMPORT
 		
-		A := UtilAvlTree, B := DuniterBlockchain, BA := DuniterBasic, L := DuniterLog, Dialog, Files, HostMenus, Math, Services, Strings, TextMappers, TextModels, TextViews, W := DuniterWotWizard, J := UtilJson, Views;
+		A := UtilAvlTree, B := DuniterBlockchain, BA := DuniterBasic, L := DuniterLog, Dialog, Files, HostFiles, HostMenus, Math, Services, Strings, TextMappers, TextModels, TextViews, W := DuniterWotWizard, J := UtilJson, Views;
 	
 	CONST
 		
-		version = "1.3.5";
+		version = "2.1.1";
 		
 		rsrcDir = "Duniter/Rsrc"; (* Directory for the two following files *)
 		maxStackLengthName = "WW_Max_Stack.txt"; (* File containing the greatest allowed allocated memory size *)
@@ -221,12 +221,13 @@ MODULE DuniterServer;
 			duration := Services.Ticks() - ti;
 			L.log.Msg("Writing json");
 			ti := Services.Ticks();
-			loc := Files.dir.This(""); ASSERT(loc.res = 0, 100);
+			loc := Files.dir.This(""); L.log.Err(loc.res, "");
 			t := TextModels.dir.New();
 			fo.ConnectTo(t);
 			WriteMeta(fo, duration, f, cNb, dNb);
 			name := textMeta;
-			Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, BA.utf8Conv, res); ASSERT(res = 0, 102);
+			Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, BA.utf8Conv, res);
+			L.log.Err(res, name);
 			BA.TimestampToString(B.Now(), nowS);
 			t := TextModels.dir.New();
 			fo.ConnectTo(t);
@@ -240,7 +241,8 @@ MODULE DuniterServer;
 			J.BuildObject;
 			J.GetJson().Write(fo);
 			name := textByDate;
-			Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, BA.utf8Conv, res); ASSERT(res = 0, 103);
+			Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, BA.utf8Conv, res);
+			L.log.Err(res, name);
 			BA.TimeToString(Services.Ticks() - ti, s);
 			L.log.Msg("End writing json. Time spent: " + s);
 		END StoreText;
@@ -265,8 +267,9 @@ MODULE DuniterServer;
 			B.UpdateAll;
 			BA.TimeToString(Services.Ticks() - t, s);
 			L.log.Msg("Total execution time: " + s);
-			loc := Files.dir.This(rsrcDir); ASSERT(loc.res = 0, 100);
-			Files.dir.Delete(loc, runningName); ASSERT(loc.res IN {0, 2, 6}, 101);
+			loc := Files.dir.This(rsrcDir); L.log.Err(loc.res, rsrcDir);
+			Files.dir.Delete(loc, runningName);
+			IF ~(loc.res IN {0, 2, 6}) THEN L.log.Err(loc.res, runningName); END;
 			IF loc.res = 6 THEN
 				L.log.Msg("Error 6 in deleting 'Running.odc' file");
 				n := maxTriesNb;
@@ -278,7 +281,7 @@ MODULE DuniterServer;
 					Strings.IntToString(loc.res, ss);
 					L.log.Msg("Error in deleting 'Running.odc' file: " + ss);
 				END;
-				ASSERT(loc.res = 0, 102);
+				ASSERT(loc.res = 0, 100);
 			END;
 			HostMenus.Exit;  (* End of WWServer.exe *)
 		END Start;
@@ -294,12 +297,13 @@ MODULE DuniterServer;
 			name: Files.Name;
 		
 		BEGIN (*StoreMaxStackLength*)
-			l := Files.dir.This(rsrcDir); ASSERT(l.res = 0, 100);
+			l := Files.dir.This(rsrcDir); L.log.Err(l.res, rsrcDir);
 			t := TextModels.dir.New();
 			f.ConnectTo(t);
 			f.WriteInt(maxStackLength);
 			name := maxStackLengthName;
-			Views.Register(TextViews.dir.New(t), Views.dontAsk, l, name, BA.utf8Conv, res); ASSERT(res = 0, 101);
+			Views.Register(TextViews.dir.New(t), Views.dontAsk, l, name, BA.utf8Conv, res); 
+			L.log.Err(res, name);
 		END StoreMaxStackLength;
 	
 	PROCEDURE Init;
@@ -313,14 +317,15 @@ MODULE DuniterServer;
 			v: Views.View;
 		
 		BEGIN (*Init*)
-			l := Files.dir.This(rsrcDir); ASSERT(l.res = 0, 100);
+			HostFiles.IgnoreAsk;
+			l := Files.dir.This(rsrcDir); L.log.Err(l.res, rsrcDir);
 			name := maxStackLengthName;
 			v := Views.Old(Views.dontAsk, l, name, BA.utf8Conv);
 			IF v = NIL THEN
 				maxStackLength := W.maxStackLength;
 				StoreMaxStackLength;
 			ELSE
-				ASSERT(v IS TextViews.View, 101);
+				ASSERT(v IS TextViews.View, 100);
 				sc.ConnectTo(v(TextViews.View).ThisModel());
 				sc.Scan; ASSERT((sc.type = TextMappers.int) OR (sc.type = TextMappers.lint), 101);
 				maxStackLength := sc.lint;

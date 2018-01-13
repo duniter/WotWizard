@@ -1,7 +1,7 @@
 (* 
 Duniter: WotWizard.
 
-Copyright (C) 2017 GérardMeunier
+Copyright (C) 2017 Gérard Meunier
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
 
@@ -22,7 +22,7 @@ MODULE DuniterWWViews;
 		StdLog,
 		*)
 		
-		A := UtilAvlTree, BA := DuniterBasic, Containers, Controllers, Controls, DevSearch, Dialog, Documents, Files, Fonts, J := UtilJson, Math, Models, Ports, Properties, Sequencers, Services, StdCmds, Stores, TextMappers, TextModels, TextRulers, TextViews, UtilExternal, Views, Windows;
+		A := UtilAvlTree, BA := DuniterBasic, Containers, Controllers, Controls, DevSearch, Dialog, Documents, Files, Fonts, J := UtilJson, Models, Ports, Properties, Sequencers, Services, StdCmds, Stores, TextMappers, TextModels, TextRulers, TextViews, UtilExternal, Views, Windows;
 	
 	CONST
 		
@@ -560,7 +560,7 @@ MODULE DuniterWWViews;
 		END OldResults;
 	
 	(* Extract now and build the permutations oD, sorted by dates, and oN, sorted by names, from j *)
-	PROCEDURE BuildOccurDM (j: J.Json; OUT now: BA.DateTime; OUT oD, oN: A.Tree);
+	PROCEDURE BuildOccurDN (j: J.Json; OUT now: BA.DateTime; OUT oD, oN: A.Tree);
 		
 		VAR
 			
@@ -572,7 +572,7 @@ MODULE DuniterWWViews;
 			e: A.Elem;
 			b: BOOLEAN;
 		
-		BEGIN (*BuildOccurDM*)
+		BEGIN (*BuildOccurDN*)
 			A.New(oD); A.New(oN);
 			IF j = NIL THEN
 				now := "";
@@ -624,7 +624,7 @@ MODULE DuniterWWViews;
 					END;
 				END;
 			END;
-		END BuildOccurDM;
+		END BuildOccurDN;
 	
 	(* Test whether the WotWizard lists have changed *)
 	PROCEDURE (v: View) UpdateText, NEW;
@@ -637,7 +637,7 @@ MODULE DuniterWWViews;
 			nowS: BA.DateTime;
 		
 		BEGIN (*UpdateText*)
-			BuildOccurDM(J.Read("", textByDate), nowS, occurD, v.occurN);
+			BuildOccurDN(J.Read("", textByDate), nowS, occurD, v.occurN);
 			BA.Collect;
 			meta := J.Read("", textMeta);
 			BA.Collect;

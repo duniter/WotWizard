@@ -53,6 +53,7 @@ MODULE DuniterWotWizard;
 		(* Dossier of external certifications *)
 		Dossier* = POINTER TO RECORD (CertOrDoss)
 			id-: B.String; (* Certified identity *)
+			princCertif: INTEGER; (* Rank of the certification whose entry date gives the entry date of the dossier (1 <= princCertif <= LEN(certifs) *)
 			proportionOfSentries-: REAL; (* Proportion of sentries reachable through B.pars.stepMax steps *)
 			certifs-: File; (* Array of certifications *)
 		END;
@@ -60,7 +61,7 @@ MODULE DuniterWotWizard;
 	CONST
 		
 		CS = 2 * LIS + 2 * PTRS; (* Size of Certif *)
-		DS = 2 * LIS + 2 * PTRS + RES; (* Size of Dossier *)
+		DS = 2 * LIS + 2 * PTRS + INS + RES; (* Size of Dossier *)
 	
 	TYPE
 		
@@ -73,7 +74,7 @@ MODULE DuniterWotWizard;
 			proba-: REAL; (* Probability of this entry *)
 		END;
 		
-		(* AVL trees of PropDate are the ouput format of procedures CalcEntries and BuildEntries *)
+		(* AVL tree of PropDate is the ouput format of procedures CalcEntries and BuildEntries *)
 		PropDate* = POINTER TO RECORD (Propagation)
 		END;
 		
@@ -318,7 +319,7 @@ MODULE DuniterWotWizard;
 		END FixCertNextDate;
 	
 	(* Fix the disponibility dates of the elements of f, always after the current date *)
-	PROCEDURE FileDates (f: File);
+PROCEDURE FileDates (f: File);
 		
 		VAR
 			
@@ -333,7 +334,7 @@ MODULE DuniterWotWizard;
 					cd := f[i];
 					WITH
 						|cd: Dossier DO
-							cd.date := MAX(cd.certifs[B.pars.sigQty - 1].date, now);
+							cd.date := MAX(cd.certifs[cd.princCertif - 1].date, now);
 							IF cd.date > cd.limit THEN
 								cd.date := BA.never;
 							END;
@@ -365,12 +366,7 @@ MODULE DuniterWotWizard;
 								RETURN cd1.date <= cd2.date;
 						END;
 					|cd1: Certif DO
-						WITH
-							|cd2: Dossier DO
-								RETURN cd1.date < cd2.date;
-							|cd2: Certif DO
-								RETURN cd1.date < cd2.date;
-						END;
+						RETURN cd1.date < cd2.date;
 				END;
 			END Less;
 		
@@ -467,8 +463,8 @@ MODULE DuniterWotWizard;
 					IncDates(cd.from, newDate, step + 1);
 				|cd: Dossier DO
 					j := 0;
-					(* All certifs with the same date as cd must lead to updates *)
-					WHILE (j < B.pars.sigQty) OR (j < LEN(cd.certifs)) & (cd.certifs[j].date = cd.date) DO
+					(* All certifs with the same date as cd must lead to updates and certifs with a date less than cd.date + B.pars.avgGenTime have more than 50% probabity to be inserted in the same block and, so, must lead to update too *)
+					WHILE (j < cd.princCertif) OR (j < LEN(cd.certifs)) & (cd.certifs[j].date < cd.date + B.pars.avgGenTime) DO
 						IncDates(cd.certifs[j](Certif).from, newDate, step + 1);
 						INC(j);
 					END;
@@ -499,21 +495,30 @@ MODULE DuniterWotWizard;
 		END Propagate;
 	
 	(* Say whether the list of certifiers' Pubkey(s) c verifies the Duniter's distance rule and gives, in proportionOfSentries the proportion of sentries members reachable in less than B.pars.stepMax steps *)
-	PROCEDURE NotTooFar (c: PubList; n: INTEGER; OUT proportionOfSentries: REAL): BOOLEAN;
+	PROCEDURE NotTooFar (c: PubList; n: INTEGER; OUT needed: INTEGER; OUT proportionOfSentries: REAL): BOOLEAN;
 		
 		VAR
 			
 			certifiers: POINTER TO ARRAY OF B.Pubkey;
+			cc: PubList;
 			j: INTEGER;
+			ok: BOOLEAN;
 		
 		BEGIN (*NotTooFar*)
-			NEW(certifiers, n);
-			FOR j := 0 TO n - 1 DO
-				certifiers[j] := c.pub;
-				c := c.next;
-			END;
-			proportionOfSentries := B.PercentOfSentries(certifiers);
-			RETURN proportionOfSentries >= B.pars.xpercent;
+			ASSERT(n >= B.pars.sigQty, 20);
+			needed := B.pars.sigQty - 1;
+			REPEAT
+				INC(needed);
+				NEW(certifiers, needed);
+				cc := c;
+				FOR j := 0 TO needed - 1 DO
+					certifiers[j] := cc.pub;
+					cc := cc.next;
+				END;
+				proportionOfSentries := B.PercentOfSentries(certifiers);
+				ok := proportionOfSentries >= B.pars.xpercent;
+			UNTIL ok OR (needed = n);
+			RETURN ok;
 		END NotTooFar;
 
 	(* WotWizard main procedure; return in sets all the elements of type Set, i.e. all the possible permutations in the order of entries of the Dossier(s) in f, along with their probabilities *)
@@ -524,7 +529,7 @@ MODULE DuniterWotWizard;
 			ok: BOOLEAN;
 			s: ARRAY 20 OF CHAR;
 		
-		(* Put into n.sets the set containing, as unique element, the list of entries in n.f *) 
+		(* Put into n.sets the set containing, as unique element, the list of entries in n.f *)
 		PROCEDURE Evaluate (n: Node);
 			
 			VAR
@@ -547,14 +552,14 @@ MODULE DuniterWotWizard;
 						p.date := cd.date;
 						p.after := (i >= n.step) & (cd.date # BA.never);
 						e := p;
-						b := set.t.SearchIns(e, m); ASSERT(~b, 101);
+						b := set.t.SearchIns(e, m); ASSERT(~b, 100);
 					ELSE
 					END;
 				END;
 				n.f := NIL;
 				set.proba := 1.;
 				e := set;
-				b := n.sets.SearchIns(e, m); ASSERT(~ b, 102);
+				b := n.sets.SearchIns(e, m); ASSERT(~ b, 101);
 			END Evaluate;
 		
 		(* Merge the set of possible permutations (of type Set) setsUp into setsDown, combining probabilities *)
@@ -734,7 +739,7 @@ MODULE DuniterWotWizard;
 							pAfter := e;
 						ELSIF pAfter # NIL THEN
 							pAfter.proba := pAfter.proba + e.proba;
-							b := occur.Delete(e); ASSERT(b, 101);
+							b := occur.Delete(e); ASSERT(b, 100);
 						END;
 					END;
 					e := ee;
@@ -751,7 +756,7 @@ MODULE DuniterWotWizard;
 						pD.after := e.after;
 						pD.proba := e.proba;
 						ee := pD;
-						b := occurDate.SearchIns(ee, n); ASSERT(~b, 102);
+						b := occurDate.SearchIns(ee, n); ASSERT(~b, 101);
 					END;
 					e := occur.Next(e);
 				END;
@@ -776,8 +781,8 @@ MODULE DuniterWotWizard;
 			ok, okP, b: BOOLEAN;
 			pos, posI: S.CertPos;
 			from, to: B.Pubkey;
-			toHash: S.Hash;
-			i, j, bnb, nbCertifs: INTEGER;
+			toHash, hash: S.Hash;
+			i, j, bnb, nbCertifs, princCertif: INTEGER;
 			exp, date, mt, t: LONGINT;
 			d: Dossier;
 			c: Certif;
@@ -796,8 +801,9 @@ MODULE DuniterWotWizard;
 				IF S.CertTo(toHash, pos) THEN
 					posI := pos;
 					REPEAT
-						okP := pos.CertNextPos(from, to, toHash, exp);
+						okP := pos.CertNextPos(from, toHash);
 						IF okP THEN
+							b := S.Cert(from, toHash, to, exp); ASSERT(b, 100);
 							FixCertNextDate(from, date);
 							IF date <= exp THEN (* Not-expired certification *)
 								INC(nbCertifs);
@@ -807,27 +813,29 @@ MODULE DuniterWotWizard;
 						END;
 					UNTIL ~okP;
 				END;
-				IF (nbCertifs >= B.pars.sigQty) & NotTooFar(certs, nbCertifs, proportionOfSentries) THEN
+				IF (nbCertifs >= B.pars.sigQty) & NotTooFar(certs, nbCertifs, princCertif, proportionOfSentries) THEN
 					INC(dNb);
 					NEW(d);
 					NEW(l.next); l := l.next;
 					l.cd := d;
+					d.princCertif := princCertif;
 					d.proportionOfSentries := proportionOfSentries;
-					b := S.IdHash(toHash, to, d.id, d.limit); ASSERT(b, 100);
+					b := S.IdHash(toHash, to, d.id, d.limit); ASSERT(b, 101);
 					NEW(d.certifs, nbCertifs);
 					j := 0;
 					pos := posI;
-					okP := pos.CertNextPos(from, to, toHash, exp); ASSERT(okP, 101);
+					okP := pos.CertNextPos(from, toHash); ASSERT(okP, 102);
 					REPEAT
+						b := S.Cert(from, toHash, to, exp); ASSERT(b, 103);
 						NEW(c);
-						b := B.IdPub(from, c.from, bnb); ASSERT(b, 102);
+						b := B.IdPub(from, c.from, hash, bnb); ASSERT(b, 104);
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
 						IF c.date <= c.limit THEN
 							d.certifs[j] := c;
 							INC(j);
 						END;
-						okP := pos.CertNextPos(from, to, toHash, exp);
+						okP := pos.CertNextPos(from, toHash);
 					UNTIL ~okP;
 				END;
 				ok := S.IdNextHash(FALSE, toHash);
@@ -835,22 +843,22 @@ MODULE DuniterWotWizard;
 			cNb := 0;
 			ok := S.CertNextTo(TRUE, pos);
 			WHILE ok DO
-				IF pos.CertNextPos(from, to, toHash, exp) & B.IdPub(to, uid, bnb) THEN
+				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) & B.IdPub(to, uid, hash, bnb) THEN
 					REPEAT
 						NEW(c);
-						b := B.IdPub(from, c.from, bnb); ASSERT(b, 103);
+						b := B.IdPub(from, c.from, hash, bnb); ASSERT(b, 105);
 						c.to := uid;
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
 						(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite *)
 						mt := 0;
-						b := B.TimeOf(B.LastBlock() - 1, mt, t); ASSERT(b OR (B.LastBlock() = 0), 104);
+						b := B.TimeOf(B.LastBlock() - 1, mt, t); ASSERT(b OR (B.LastBlock() = 0), 106);
 						IF (c.date <= c.limit) & (c.date > mt) THEN
 							INC(cNb);
 							NEW(l.next); l := l.next;
 							l.cd := c;
 						END;
-					UNTIL ~pos.CertNextPos(from, to, toHash, exp);
+					UNTIL ~(pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp));
 				END;
 				ok := S.CertNextTo(FALSE, pos);
 			END;
