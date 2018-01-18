@@ -1,5 +1,5 @@
 (* 
-Duniter: WotWizard.
+Duniter0: WotWizard.
 
 Copyright (C) 2017 GérardMeunier
 
@@ -10,11 +10,11 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 *)
 
-MODULE DuniterSandbox;
-	
-	
+MODULE Duniter0Sandbox;
 	
 	(* Put the Duniter sandbox in AVL trees to access quickly sandbox data *)
+	
+	
 
 	IMPORT
 		
@@ -22,7 +22,7 @@ MODULE DuniterSandbox;
 		StdLog,
 		*)
 		
-		A := UtilAvlTree, B := DuniterBlockchain, BA := DuniterBasic, L := DuniterLog, Services, S := SqlDB, Strings;
+		A := UtilAvlTree, B := Duniter0Blockchain, BA := Duniter0Basic, S := SqlDB, Strings;
 	
 	CONST
 		
@@ -716,28 +716,25 @@ MODULE DuniterSandbox;
 			
 			d: S.Database;
 			res: INTEGER;
-			t: LONGINT;
-			s: BA.TimeString;
 		
 		BEGIN (*Scan*)
-			L.log.Msg("Loading sandbox");
-			t := Services.Ticks();
 			S.OpenDatabase(driver, "", "", B.duniBase, S.sync, S.hideErrors, d, res); ASSERT(res = 0, 100);
 			Identities(d);
 			Memberships(d);
 			Certifications(d);
-			BA.TimeToString(Services.Ticks() - t, s);
-			L.log.Msg("End loading sandbox. Time spent: " + s);
 		END Scan;
 	
 	PROCEDURE Init;
 		
 		BEGIN (*Init*)
-			B.AddUpdateProc(Scan);
+			B.AddUpdateProc(Scan, TRUE);
+			B.AddUpdateProc(Scan, FALSE);
+			Scan;
 		END Init;
 	
-	BEGIN (*DuniterSandbox*)
+	BEGIN (*Duniter0Sandbox*)
 		Init;
 	CLOSE
-		B.RemoveUpdateProc(Scan);
-	END DuniterSandbox.
+		B.RemoveUpdateProc(Scan, TRUE);
+		B.RemoveUpdateProc(Scan, FALSE);
+	END Duniter0Sandbox.

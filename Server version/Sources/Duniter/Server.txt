@@ -22,7 +22,7 @@ MODULE DuniterServer;
 	
 	CONST
 		
-		version = "2.1.1";
+		version = "2.1.2";
 		
 		rsrcDir = "Duniter/Rsrc"; (* Directory for the two following files *)
 		maxStackLengthName = "WW_Max_Stack.txt"; (* File containing the greatest allowed allocated memory size *)

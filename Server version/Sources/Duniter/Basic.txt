@@ -1,7 +1,7 @@
 (* 
 Duniter: WotWizard.
 
-Copyright (C) 2017 Gérard Meunier
+Copyright (C) 2017 GérardMeunier
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
 
@@ -76,7 +76,7 @@ MODULE DuniterBasic;
 		
 		BEGIN (*TimestampToString*)
 			IF t = never THEN
-				Dialog.MapString("#Duniter0:Never", dt);
+				Dialog.MapString("#Duniter:Never", dt);
 			ELSE
 				TimestampToDate(t, date, time);
 				Dates.DateToString(date, Dates.short, da);

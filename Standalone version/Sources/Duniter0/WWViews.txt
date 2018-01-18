@@ -10,7 +10,7 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 *)
 
-MODULE DuniterWWViews;
+MODULE Duniter0WWViews;
 	
 	
 	
@@ -22,18 +22,18 @@ MODULE DuniterWWViews;
 		StdLog,
 		*)
 		
-		A := UtilAvlTree, BA := DuniterBasic, Containers, Controllers, Controls, DevSearch, Dialog, Documents, Files, Fonts, J := UtilJson, Models, Ports, Properties, Sequencers, Services, StdCmds, Stores, TextMappers, TextModels, TextRulers, TextViews, UtilExternal, Views, Windows;
+		A := UtilAvlTree, B := Duniter0Blockchain, BA := Duniter0Basic, Containers, Controllers, Controls, Converters, DevSearch, Dialog, Documents, Files, Fonts, J := UtilJson, Math, Models, Ports, Properties, Sequencers, Services, StdCmds, Stores, TextMappers, TextModels, TextRulers, TextViews, Views, W := Duniter0WotWizard, WP := Duniter0WotWizardPrint, Windows;
 	
 	CONST
 		
-		calculusPeriod = 5 * 60 * Services.resolution; (* Time between two executions of "WWServer.exe" *)
-		verifyPeriod = 5 * Services.resolution; (* Time between two verifications "WWServer.exe" has stopped *)
+		maxStackLengthDir = "Duniter0/Rsrc";
+		maxStackLengthName = "WW_Max_Stack.odc";
 		
 		rsrcDir = "Duniter/Rsrc"; (* Resources directory *)
-		runningName = "Running.odc"; (* Name of the (empty) file which exists while "WWServer.exe" is running *)
 		
-		textMeta = "WWMeta.json"; (* File produced by "WWServer.exe" containing metadata *)
-		textByDate = "WWByDate.json"; (* File produced by "WWServer.exe" containing entries data, sorted by dates *)
+		textMeta = "WWMeta.json"; (* File containing metadata *)
+		textByDate = "WWByDate.json"; (* File containing entries data, sorted by dates *)
+		textByName = "WWByName.json"; (* File containing entries data, sorted by names *)
 		
 		oldEntriesName = "WW_Old_Entries.odc"; (* File containing previous metadata output *)
 		oldMetaName = "WW_Old_Meta.odc"; (* File containing previous entries data output *)
@@ -66,14 +66,6 @@ MODULE DuniterWWViews;
 	
 	TYPE
 		
-		(* "WWServer.exe" iteration *)
-		NewCalculus = POINTER TO RECORD (Services.Action)
-		END;
-		
-		(* Iteration of the verification of the execution of "WWServer.exe" *)
-		VerifyCalcEnd = POINTER TO RECORD (Services.Action)
-		END;
-		
 		(* Type of the view which displays the WotWizard lists *)
 		View = POINTER TO LIMITED RECORD (Views.View)
 			nowS: BA.DateTime; (* Current date *)
@@ -87,70 +79,15 @@ MODULE DuniterWWViews;
 		FindMsg = RECORD (Views.Message)
 			v: View;
 		END;
-		
-		(* Entries sorted by date(s) *)
-		PropDate = POINTER TO RECORD (A.Elem)
-			id: J.StringP; (* uid of a candidate *)
-			date: LONGINT; (* A possible date of her entry *)
-			after: BOOLEAN; (* Incomplete calculus: the entry is at date or after *)
-			proba: INTEGER; (* Probability of this entry *)
-		END;
-		
-		(* Entries sorted by id(s) *)
-		PropName = POINTER TO RECORD (A.Elem)
-			id: J.StringP; (* uid of a candidate *)
-			date: LONGINT; (* A possible date of her entry *)
-			after: BOOLEAN; (* Incomplete calculus: the entry is at date or after *)
-			proba: INTEGER; (* Probability of this entry *)
-		END;
 	
 	VAR
-		
-		nC: NewCalculus;
-		vC: VerifyCalcEnd;
-		running: BOOLEAN; (* "WWServer.exe" is running *)
 		
 		dateNameMeta*: INTEGER; (* Sort of the output *)
 		
 		showOldEntries-: BOOLEAN;
-	
-	(* Comparison procedures for permutations of entries *)
-	
-	PROCEDURE (p1: PropDate) Compare (p2: A.Elem): BYTE;
 		
-		BEGIN (*Compare*)
-			WITH p2: PropDate DO
-				IF p1.date < p2.date THEN
-					RETURN A.lt;
-				END;
-				IF p1.date > p2.date THEN
-					RETURN A.gt;
-				END;
-				RETURN BA.CompP(p1.id, p2.id);
-			END;
-		END Compare;
-	
-	PROCEDURE (p1: PropName) Compare (p2: A.Elem): BYTE;
-		
-		VAR
-			
-			b: BYTE;
-		
-		BEGIN (*Compare*)
-			WITH p2: PropName DO
-				b := BA.CompP(p1.id, p2.id);
-				IF b # A.eq THEN
-					RETURN b;
-				END;
-				IF p1.date < p2.date THEN
-					RETURN A.lt;
-				END;
-				IF p1.date > p2.date THEN
-					RETURN A.gt;
-				END;
-				RETURN A.eq;
-			END;
-		END Compare;
+		maxStackLength*,
+		oldMaxStackLength: LONGINT;
 	
 	(* Find the first View *)
 	PROCEDURE FindFirst (): View;
@@ -203,8 +140,8 @@ MODULE DuniterWWViews;
 		PROCEDURE Equal (e1, e2: A.Elem): BOOLEAN;
 			
 			BEGIN (*Equal*)
-				WITH e1: PropDate DO
-					WITH e2: PropDate DO
+				WITH e1: W.PropDate DO
+					WITH e2: W.PropDate DO
 						RETURN (e1.id$ = e2.id$) & (e1.date = e2.date) & (e1.after = e2.after) & (e1.proba = e2.proba);
 					END;
 				END;
@@ -234,7 +171,7 @@ MODULE DuniterWWViews;
 			l := 0;
 			e := occurD.Next(NIL);
 			WHILE e # NIL DO
-				l := MAX(l, f.rider.attr.font.StringWidth(e(PropDate).id$ + '+ '));
+				l := MAX(l, f.rider.attr.font.StringWidth(e(W.PropDate).id$ + '+ '));
 				e := occurD.Next(e);
 			END;
 			r := TextRulers.dir.New(NIL);
@@ -247,13 +184,13 @@ MODULE DuniterWWViews;
 			date := - 1;
 			e := occurD.Next(NIL);
 			WHILE e # NIL DO
-				WITH e: PropDate DO
+				WITH e: W.PropDate DO
 					IF e.date # date THEN
 						date := e.date;
 						f.rider.SetAttr(TextModels.NewSize(f.rider.attr, headSize));
 						f.WriteLn; f.WritePara;
 						IF e.date = BA.never THEN
-							f.WriteMsg("#Duniter:Never");
+							f.WriteMsg("#Duniter0:Never");
 						ELSE
 							BA.TimestampToString(e.date, s);
 							f.WriteString(s);
@@ -266,8 +203,8 @@ MODULE DuniterWWViews;
 					f.rider.SetAttr(TextModels.NewSize(f.rider.attr, corpusSize));
 					f.WriteString(e.id);
 					f.WriteTab;
-					f.WriteString(": "); f.WriteMsg("#Duniter:Proba"); f.WriteString(" = ");
-					f.WriteIntForm(e.proba, 10, 3, "", FALSE); (* Digit space *)
+					f.WriteString(": "); f.WriteMsg("#Duniter0:Proba"); f.WriteString(" = ");
+					f.WriteIntForm(ENTIER(Math.Round(e.proba * 100)), 10, 3, " ", FALSE); (* Digit space *)
 					f.WriteString("%");
 					f.WriteLn;
 				END;
@@ -283,7 +220,7 @@ MODULE DuniterWWViews;
 			r: TextRulers.Ruler;
 			s: BA.DateTime;
 			e: A.Elem;
-			id: J.StringP;
+			id: B.String;
 			n, pos: INTEGER;
 		
 		BEGIN (*ByNames*)
@@ -303,7 +240,7 @@ MODULE DuniterWWViews;
 			NEW(id, 1); id^ := 0X;
 			e := occurN.Next(NIL);
 			WHILE e # NIL DO
-				WITH e: PropName DO
+				WITH e: W.PropName DO
 					IF e.id$ # id$ THEN
 						id := e.id;
 						INC(n);
@@ -314,7 +251,7 @@ MODULE DuniterWWViews;
 					END;
 					f.rider.SetAttr(TextModels.NewSize(f.rider.attr, corpusSize));
 					IF e.date = BA.never THEN
-						f.WriteMsg("#Duniter:Never");
+						f.WriteMsg("#Duniter0:Never");
 					ELSE
 						BA.TimestampToString(e.date, s);
 						f.WriteString(s);
@@ -323,8 +260,8 @@ MODULE DuniterWWViews;
 						END;
 					END;
 					f.WriteTab;
-					f.WriteString(": "); f.WriteMsg("#Duniter:Proba"); f.WriteString(" = ");
-					f.WriteIntForm(e.proba, 10, 3, "", FALSE); (* Digit space *)
+					f.WriteString(": "); f.WriteMsg("#Duniter0:Proba"); f.WriteString(" = ");
+					f.WriteIntForm(ENTIER(Math.Round(e.proba * 100)), 10, 3, " ", FALSE); (* Digit space *)
 					f.WriteString("%");
 					f.WriteLn;
 				END;
@@ -333,7 +270,7 @@ MODULE DuniterWWViews;
 			f.SetPos(pos);
 			f.rider.SetAttr(TextModels.NewSize(f.rider.attr, headSize));
 			f.WriteInt(n);
-			f.WriteMsg("#Duniter:newcomers");
+			f.WriteMsg("#Duniter0:newcomers");
 		END ByNames;
 	
 	(* Print the metadata m with the help of f *)
@@ -407,9 +344,9 @@ MODULE DuniterWWViews;
 				f.WriteView(r);
 				f.WriteTab;
 				InitProp(prop);
-				prop.link := "DuniterWWViews.dateNameMeta";
-				prop.label := "#Duniter:ByName";
-				prop.notifier := "DuniterWWViews.DateNameMetaNotifier";
+				prop.link := "Duniter0WWViews.dateNameMeta";
+				prop.label := "#Duniter0:ByName";
+				prop.notifier := "Duniter0WWViews.DateNameMetaNotifier";
 				prop.level := 1;
 				Dialog.MapString(prop.label, s);
 				c := Controls.dir.NewRadioButton(prop);
@@ -418,9 +355,9 @@ MODULE DuniterWWViews;
 				c.context.SetSize(c.font.StringWidth(s) + radioOffset, h);
 				f.WriteTab;
 				InitProp(prop);
-				prop.link := "DuniterWWViews.dateNameMeta";
-				prop.label := "#Duniter:Meta";
-				prop.notifier := "DuniterWWViews.DateNameMetaNotifier";
+				prop.link := "Duniter0WWViews.dateNameMeta";
+				prop.label := "#Duniter0:Meta";
+				prop.notifier := "Duniter0WWViews.DateNameMetaNotifier";
 				prop.level := 2;
 				Dialog.MapString(prop.label, s);
 				c := Controls.dir.NewRadioButton(prop);
@@ -429,9 +366,9 @@ MODULE DuniterWWViews;
 				c.context.SetSize(c.font.StringWidth(s) + radioOffset, h);
 				f.WriteTab;
 				InitProp(prop);
-				prop.link := "DuniterWWViews.dateNameMeta";
-				prop.label := "#Duniter:ByDate";
-				prop.notifier := "DuniterWWViews.DateNameMetaNotifier";
+				prop.link := "Duniter0WWViews.dateNameMeta";
+				prop.label := "#Duniter0:ByDate";
+				prop.notifier := "Duniter0WWViews.DateNameMetaNotifier";
 				prop.level := 0;
 				Dialog.MapString(prop.label, s);
 				c := Controls.dir.NewRadioButton(prop);
@@ -443,8 +380,8 @@ MODULE DuniterWWViews;
 				f.WriteTab;
 				IF v.modified THEN
 					InitProp(prop);
-					prop.link := "DuniterWWViews.Clear";
-					prop.label := "#Duniter:Check";
+					prop.link := "Duniter0WWViews.Clear";
+					prop.label := "#Duniter0:Check";
 					Dialog.MapString(prop.label, s);
 					c := Controls.dir.NewPushButton(prop);
 					f.WriteView(c);
@@ -453,9 +390,8 @@ MODULE DuniterWWViews;
 				END;
 				f.WriteTab; f.WriteTab;
 				InitProp(prop);
-				prop.link := "DuniterWWViews.UpdateAll";
-				prop.label := "#Duniter:Update";
-				prop.guard := "DuniterWWViews.UpdateAllGuard";
+				prop.link := "Duniter0Blockchain.UpdateAll";
+				prop.label := "#Duniter0:Update";
 				Dialog.MapString(prop.label, s);
 				c := Controls.dir.NewPushButton(prop);
 				f.WriteView(c);
@@ -532,7 +468,7 @@ MODULE DuniterWWViews;
 				f.WriteMsg(title);
 				f.WriteLn;
 				f.rider.SetAttr(TextModels.NewSize(f.rider.attr, headSize));
-				f.WriteMsg("#Duniter:PreviousDisplay");
+				f.WriteMsg("#Duniter0:PreviousDisplay");
 				f.WriteLn;
 				f.WriteLn;
 				r := TextRulers.dir.New(NIL);
@@ -542,7 +478,7 @@ MODULE DuniterWWViews;
 				f.WriteTab;
 				InitProp(prop);
 				prop.link := "DevSearch.Compare";
-				prop.label := "#Duniter:Compare";
+				prop.label := "#Duniter0:Compare";
 				Dialog.MapString(prop.label, s);
 				c := Controls.dir.NewPushButton(prop);
 				f.WriteView(c);
@@ -569,96 +505,195 @@ MODULE DuniterWWViews;
 			Views.RegisterView(v, loc, oldMetaName);
 		END OldResults;
 	
-	(* Extract now and build the permutations oD, sorted by dates, and oN, sorted by names, from j *)
-	PROCEDURE BuildOccurDN (j: J.Json; OUT now: BA.DateTime; OUT oD, oN: A.Tree);
+	(* Write the metadata duration, f, cNb & dNb with the help of fo, in json format; duration is the computation duration, f is the DuniterWotWizard.File structure, cNb and dNb are respectively the numbers of internal certifications and of external dossiers *)
+	PROCEDURE BuildMeta (duration: LONGINT; f: W.File; cNb, dNb: INTEGER): J.Json;
 		
 		VAR
 			
-			f1, f2, f3: J.Fields;
-			d, n: J.Values;
-			i, k, m: INTEGER;
-			pD: PropDate;
-			pM: PropName;
-			e: A.Elem;
-			b: BOOLEAN;
+			s: BA.DateTime;
+			ss: BA.TimeString;
+			sss: Dialog.String;
 		
-		BEGIN (*BuildOccurDN*)
-			A.New(oD); A.New(oN);
-			IF j = NIL THEN
-				now := "";
-			ELSE
-				WITH j: J.Object DO
-					f1 := j.fields;
-					ASSERT(f1[0].name$ = "now", 100);
-					ASSERT(f1[0].value IS J.String, 101);
-					now := f1[0].value(J.String).s$;
-					ASSERT(f1[1].name$ = "dates", 102);
-					ASSERT(f1[1].value IS J.JsonVal, 103);
-					ASSERT(f1[1].value(J.JsonVal).json IS J.Array, 104);
-					d := f1[1].value(J.JsonVal).json(J.Array).elements;
-					FOR i := 0 TO LEN(d) - 1 DO
-						ASSERT(d[i] IS J.JsonVal, 105);
-						ASSERT(d[i](J.JsonVal).json IS J.Object, 106);
-						f2 := d[i](J.JsonVal).json(J.Object).fields;
-						ASSERT(f2[0].name$ = "after", 107);
-						ASSERT(f2[0].value IS J.Bool, 108);
-						ASSERT(f2[1].name$ = "date", 109);
-						ASSERT(f2[1].value IS J.String, 110);
-						ASSERT(f2[2].name$ = "names", 111);
-						ASSERT(f2[2].value IS J.JsonVal, 112);
-						ASSERT(f2[2].value(J.JsonVal).json IS J.Array, 113);
-						n := f2[2].value(J.JsonVal).json(J.Array).elements;
-						FOR k := 0 TO LEN(n) - 1 DO
-							ASSERT(n[k] IS J.JsonVal, 114);
-							ASSERT(n[k](J.JsonVal).json IS J.Object, 115);
-							f3 := n[k](J.JsonVal).json(J.Object).fields;
-							ASSERT(f3[0].name$ = "name", 116);
-							ASSERT(f3[0].value IS J.String, 117);
-							ASSERT(f3[1].name$ = "proba", 118);
-							ASSERT(f3[1].value IS J.Integer, 119);
-							NEW(pD);
-							pD.after := f2[0].value(J.Bool).bool;
-							pD.date := BA.StringToTimestamp(f2[1].value(J.String).s$);
-							pD.id := f3[0].value(J.String).s;
-							pD.proba := SHORT(f3[1].value(J.Integer).n);
-							e := pD;
-							b := oD.SearchIns(e, m); ASSERT(~b, 120);
-							NEW(pM);
-							pM.after := pD.after;
-							pM.date := pD.date;
-							pM.id := pD.id;
-							pM.proba := pD.proba;
-							e := pM;
-							b := oN.SearchIns(e, m); ASSERT(~b, 121);
+		PROCEDURE BuildFile (f: W.File; withTo: BOOLEAN);
+			
+			VAR
+				
+				i: INTEGER;
+			
+			PROCEDURE BuildCertOrDoss (cd: W.CertOrDoss);
+				
+				PROCEDURE BuildCertOrDossEnd (cd: W.CertOrDoss);
+					
+					BEGIN (*BuildCertOrDossEnd*)
+						IF cd.date = BA.never THEN
+							Dialog.MapString("#Duniter0:Never", sss);
+							J.PushString(sss);
+						ELSE
+							BA.TimestampToString(cd.date, s);
+							J.PushString(s);
 						END;
+						J.BuildField("date");
+						BA.TimestampToString(cd.limit, s);
+						J.PushString(s);
+						J.BuildField("limit");
+					END BuildCertOrDossEnd;
+				
+				PROCEDURE BuildCertif (c: W.Certif);
+					
+					BEGIN (*BuildCertif*)
+						J.StartObject;
+						J.PushString(c.from);
+						J.BuildField("from");
+						IF withTo THEN
+							J.PushString(c.to);
+							J.BuildField("to");
+						END;
+						BuildCertOrDossEnd(c);
+						J.BuildObject;
+					END BuildCertif;
+				
+				PROCEDURE BuildDossier (d: W.Dossier);
+					
+					BEGIN (*BuildDossier*)
+						J.StartObject;
+						J.PushString(d.id);
+						J.BuildField("newcomer");
+						J.PushReal(Math.Round(10000. * d.proportionOfSentries) / 100.);
+						J.BuildField("percent_of_sentries");
+						BuildCertOrDossEnd(d);
+						BuildFile(d.certifs, FALSE);
+						J.BuildField("certifs");
+						J.BuildObject;
+					END BuildDossier;
+				
+				BEGIN (*BuildCertOrDoss*)
+					WITH
+						|cd: W.Certif DO
+							IF withTo THEN
+								J.StartObject;
+							END;
+							BuildCertif(cd);
+							IF withTo THEN
+								J.BuildField("certif");
+								J.BuildObject;
+							END;
+						|cd: W.Dossier DO
+							J.StartObject;
+							BuildDossier(cd);
+							J.BuildField("dossier");
+							J.BuildObject;
+					END;
+				END BuildCertOrDoss;
+			
+			BEGIN (*BuildFile*)
+				J.StartArray;
+				IF f # NIL THEN
+					FOR i := 0 TO LEN(f) - 1 DO
+						BuildCertOrDoss(f[i]);
 					END;
 				END;
-			END;
-		END BuildOccurDN;
+				J.BuildArray;
+			END BuildFile;
+		
+		BEGIN (*BuildMeta*)
+			J.StartObject;
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			BA.TimestampToString(B.Now(), s);
+			J.PushString(s);
+			J.BuildField("now");
+			BA.TimeToString(duration, ss);
+			J.PushString(ss);
+			J.BuildField("computation_duration");
+			J.PushInteger(cNb);
+			J.BuildField("certNb");
+			J.PushInteger(dNb);
+			J.BuildField("dossNb");
+			BuildFile(f, TRUE);
+			J.BuildField("certifs&dossiers");
+			J.BuildObject;
+			RETURN J.GetJson();
+		END BuildMeta;
 	
 	(* Test whether the WotWizard lists have changed *)
 	PROCEDURE (v: View) UpdateText, NEW;
 		
 		VAR
 			
-			occurD: A.Tree;
+			f: W.File;
+			cNb, dNb: INTEGER;
+			ti, duration: LONGINT;
+			occurD, occurN: A.Tree;
 			meta: J.Json;
 			b, oM: BOOLEAN;
 			nowS: BA.DateTime;
 		
 		BEGIN (*UpdateText*)
-			BuildOccurDN(J.Read("", textByDate), nowS, occurD, v.occurN);
-			BA.Collect;
-			meta := J.Read("", textMeta);
-			BA.Collect;
+			ti := Services.Ticks();
+			IF ~W.BuildEntries(f, cNb, dNb, occurD, occurN) THEN
+				A.New(occurD); A.New(occurN);
+			END;
+			duration := Services.Ticks() - ti;
+			meta := BuildMeta(duration, f, cNb, dNb);
+			BA.TimestampToString(B.Now(), nowS);
 			oM := v.modified;
 			b := ~OccursEqual(occurD, v.occurD);
 			v.modified := v.modified OR b;
 			IF b & ~oM THEN
 				OldResults(v.occurD, v.meta);
 			END;
-			v.nowS := nowS; v.occurD := occurD; v.meta := meta;
+			v.nowS := nowS; v.occurD := occurD; v.occurN := occurN; v.meta := meta;
 		END UpdateText;
+	
+	(* Save the WotWizard lists on disk, in files textByName and textByDate, whenever they have changed *)
+	PROCEDURE (v: View) StoreText, NEW;
+		
+		CONST
+			
+			textByName = "WWByName";
+			textByDate = "WWByDate";
+			textExt = "txt";
+			textConv = "CpcUtf8Conv.ExportUtf8";
+		
+		VAR
+			
+			loc: Files.Locator;
+			name: Files.Name;
+			conv: Converters.Converter;
+			res: INTEGER;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			nowS: BA.DateTime;
+		
+		BEGIN (*StoreText*)
+			IF v.modified THEN
+				loc := Files.dir.This(""); ASSERT(loc.res = 0);
+				conv := Converters.list;
+				WHILE (conv # NIL) & (conv.exp # textConv) DO
+					conv := conv.next;
+				END;
+				ASSERT(conv # NIL);
+				BA.TimestampToString(B.Now(), nowS);
+				t := TextModels.dir.New();
+				f.ConnectTo(t);
+				f.WriteString("    ");
+				f.WriteString(nowS);
+				f.WriteString(" (UTC+0)");
+				f.WriteLn;
+				WP.ByDates(f, v.occurD);
+				name := textByDate + '.' + textExt;
+				Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, conv, res); ASSERT(res = 0);
+				t := TextModels.dir.New();
+				f.ConnectTo(t);
+				f.WriteString("    ");
+				f.WriteString(nowS);
+				f.WriteString(" (UTC+0)");
+				f.WriteLn;
+				WP.ByNames(f, v.occurN);
+				name := textByName + '.' + textExt;
+				Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, conv, res); ASSERT(res = 0);
+			END;
+		END StoreText;
 	
 	PROCEDURE (v: View) InstallText, NEW;
 		
@@ -725,7 +760,7 @@ MODULE DuniterWWViews;
 		BEGIN (*HandleCtrlMsg*)
 			WITH
 				|msg: Controllers.PollOpsMsg DO
-					msg.type := "DuniterWWViews.View";
+					msg.type := "Duniter0WWViews.View";
 					IF v.text.ThisController().HasSelection() THEN
 						msg.valid := {Controllers.copy};
 					END;
@@ -891,6 +926,39 @@ MODULE DuniterWWViews;
 			showOldEntries := FALSE;
 		END HideOldEntries;
 	
+	PROCEDURE StoreMaxStackLength;
+		
+		VAR
+			
+			l: Files.Locator;
+			f: Files.File;
+			wr: Stores.Writer;
+			res: INTEGER;
+		
+		BEGIN (*StoreMaxStackLength*)
+			l := Files.dir.This(maxStackLengthDir); ASSERT(l.res = 0);
+			f := Files.dir.New(l, Files.dontAsk); ASSERT(f # NIL);
+			wr.ConnectTo(f);
+			wr.WriteLong(maxStackLength);
+			f.Register(maxStackLengthName, '', Files.dontAsk, res); ASSERT(res = 0);
+		END StoreMaxStackLength;
+	
+	PROCEDURE MaxStackLengthOK*;
+		
+		BEGIN (*MaxStackLengthOK*)
+			IF maxStackLength # oldMaxStackLength THEN
+				oldMaxStackLength := maxStackLength;
+				W.ChangeMaxStackLength(maxStackLength);
+				StoreMaxStackLength;
+			END;
+		END MaxStackLengthOK;
+	
+	PROCEDURE MaxStackLengthOKGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*MaxStackLengthOKGuard*)
+			par.disabled := maxStackLength = oldMaxStackLength;
+		END MaxStackLengthOKGuard;
+	
 	PROCEDURE New* (): Views.View;
 		
 		VAR
@@ -918,96 +986,45 @@ MODULE DuniterWWViews;
 			Views.OpenAux(New(), title);
 		END Open;
 	
-	PROCEDURE UpdateAll*;
-		
-		BEGIN (*UpdateAll*)
-			IF ~running THEN
-				Services.RemoveAction(nC);
-				Services.RemoveAction(vC);
-				Services.DoLater(nC, Services.now);
-			END;
-		END UpdateAll;
-	
-	PROCEDURE UpdateAllGuard* (VAR par: Dialog.Par);
-		
-		BEGIN (*UpdateAllGuard*)
-			par.disabled := running;
-		END UpdateAllGuard;
-	
-	PROCEDURE (c: NewCalculus) Do;
-		
-		PROCEDURE MarkRunning;
-			
-			VAR
-				
-				loc: Files.Locator;
-				f: Files.File;
-				res: INTEGER;
-			
-			BEGIN (*MarkRunning*)
-				loc := Files.dir.This(rsrcDir); ASSERT(loc.res = 0, 100);
-				f := Files.dir.New(loc, Files.dontAsk); ASSERT(loc.res = 0, 101);
-				f.Register(runningName, "", Files.dontAsk, res); ASSERT(res = 0, 102);
-				running := TRUE;
-			END MarkRunning;
-		
-		BEGIN (*Do*)
-			IF running THEN
-				Services.DoLater(c, Services.Ticks() + verifyPeriod); (* Risque de blocage ; à voir *)
-			ELSE
-				Services.DoLater(c, Services.Ticks() + calculusPeriod);
-				MarkRunning;
-				BA.Collect; (* Free the File in MarkRunning *)
-				UtilExternal.Start("WWServer.exe");
-				Services.DoLater(vC, Services.Ticks() + verifyPeriod);
-			END;
-		END Do;
-	
-	PROCEDURE (v: VerifyCalcEnd) Do;
+	PROCEDURE Init;
 		
 		VAR
 			
-			loc: Files.Locator;
+			l: Files.Locator;
 			f: Files.File;
-		
-		BEGIN (*Do*)
-			loc := Files.dir.This(rsrcDir); ASSERT(loc.res = 0, 100);
-			f := Files.dir.Old(loc, runningName, Files.exclusive);
-			IF f = NIL THEN
-				Update;
-				running := FALSE;
-			ELSE
-				f.Close;
-				Services.DoLater(v, Services.Ticks() + verifyPeriod);
-			END;
-		END Do;
-	
-	PROCEDURE Init;
+			rd: Stores.Reader;
 		
 		BEGIN (*Init*)
 			dateNameMeta := byName;
-			showOldEntries := TRUE;
-			NEW(vC);
-			NEW(nC);
-			running := FALSE;
-			UpdateAll;
+			showOldEntries := FALSE;
+			l := Files.dir.This(maxStackLengthDir);
+			f := Files.dir.Old(l, maxStackLengthName, Files.shared);
+			IF f = NIL THEN
+				maxStackLength := W.maxStackLength;
+				StoreMaxStackLength;
+			ELSE
+				rd.ConnectTo(f);
+				rd.ReadLong(maxStackLength);
+				W.ChangeMaxStackLength(maxStackLength);
+			END;
+			oldMaxStackLength := maxStackLength;
+			B.AddUpdateProc(Update, FALSE);
 		END Init;
 	
-	BEGIN (*DuniterWWViews*)
+	BEGIN (*Duniter0WWViews*)
 		Init;
 	CLOSE
-		Services.RemoveAction(nC);
-		Services.RemoveAction(vC);
-	END DuniterWWViews.
+		B.RemoveUpdateProc(Update, FALSE);
+	END Duniter0WWViews.
 
-"DuniterWWViews.Deposit;StdCmds.Open"
+"Duniter0WWViews.Deposit;StdCmds.Open"
 
-DuniterBlockchain.UpdateAll;
+Duniter0Blockchain.UpdateAll;
 
-DuniterWWViews.Clear;
+Duniter0WWViews.Clear;
 
-DuniterWWViews.SetModified;
+Duniter0WWViews.SetModified;
 
-DuniterWWViews.ShowOldEntries;
+Duniter0WWViews.ShowOldEntries;
 
-DuniterWWViews.HideOldEntries;
+Duniter0WWViews.HideOldEntries;

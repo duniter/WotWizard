@@ -10,7 +10,7 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 *)
 
-MODULE DuniterWotWizard;
+MODULE Duniter0WotWizard;
 	
 	(* For versions 1.4+ of Duniter *)
 	(* This version suppose equiprobable all external certifications (toward a non-member identity) which are concurrent at the same date, and process concurrent internal certifications (toward an already-member identity) afterwards *)
@@ -23,7 +23,7 @@ MODULE DuniterWotWizard;
 		StdLog,
 		**)
 		
-		A := UtilAvlTree, B := DuniterBlockchain, S := DuniterSandbox, BA := DuniterBasic, L := DuniterLog, Services, Strings;
+		A := UtilAvlTree, B := Duniter0Blockchain, S := Duniter0Sandbox, BA := Duniter0Basic;
 	
 	CONST
 		
@@ -54,7 +54,7 @@ MODULE DuniterWotWizard;
 		Dossier* = POINTER TO RECORD (CertOrDoss)
 			id-: B.String; (* Certified identity *)
 			pub: S.Pubkey;
-			princCertif: INTEGER; (* Rank of the certification whose entry date gives the entry date of the dossier (1 <= princCertif <= LEN(certifs) *)
+			princCertif-: INTEGER; (* Rank of the certification whose entry date gives the entry date of the dossier (1 <= princCertif <= LEN(certifs) *)
 			proportionOfSentries-: REAL; (* Proportion of sentries reachable through B.pars.stepMax steps *)
 			certifs-: File; (* Array of certifications *)
 		END;
@@ -68,14 +68,16 @@ MODULE DuniterWotWizard;
 		
 		(* AVL trees of Propagation are used in the main CalcPermutations procedure; trees of Propagation are sorted by id(s) first and then by date(s) *)
 		
-		Propagation = POINTER TO EXTENSIBLE RECORD (A.Elem)
-			id-: B.String; (* uid of a candidate *)
-			date-: LONGINT; (* A possible date of her entry *)
-			after-: BOOLEAN; (* after = TRUE if this entry can occur at the date date or after (uncertainty due to incomplete computation) *)
-			proba-: REAL; (* Probability of this entry *)
+		Propagation* = POINTER TO EXTENSIBLE RECORD (A.Elem)
+			id*: B.String; (* uid of a candidate *)
+			date*: LONGINT; (* A possible date of her entry *)
+			after*: BOOLEAN; (* after = TRUE if this entry can occur at the date date or after (uncertainty due to incomplete computation) *)
+			proba*: REAL; (* Probability of this entry *)
 		END;
 		
-		(* AVL tree of PropDate is the ouput format of procedures CalcEntries and BuildEntries *)
+		(* AVL trees of PropName and PropDate are the ouput formats of procedures CalcEntries and BuildEntries *)
+		PropName* = POINTER TO RECORD (Propagation)
+		END;
 		PropDate* = POINTER TO RECORD (Propagation)
 		END;
 		
@@ -158,7 +160,7 @@ MODULE DuniterWotWizard;
 			END;
 		END Get;
 	
-	(* Comparison procedures for Propagation, PropDate and Set *)
+	(* Comparison procedures for Propagation, PropName, PropDate and Set *)
 	
 	PROCEDURE CompareProp (p1, p2: A.Elem): BYTE;
 		
@@ -211,6 +213,28 @@ MODULE DuniterWotWizard;
 			RETURN CompareProp(p1, p2);
 		END Compare;
 	
+	PROCEDURE (p1: PropName) Compare- (p2: A.Elem): BYTE;
+		
+		VAR
+			
+			b: BYTE;
+		
+		BEGIN (*Compare*)
+			WITH p2: PropName DO
+				b := BA.CompP(p1.id, p2.id);
+				IF b # A.eq THEN
+					RETURN b;
+				END;
+				IF p1.date < p2.date THEN
+					RETURN A.lt;
+				END;
+				IF p1.date > p2.date THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
 	PROCEDURE (p1: PropDate) Compare- (p2: A.Elem): BYTE;
 		
 		BEGIN (*Compare*)
@@ -243,6 +267,36 @@ MODULE DuniterWotWizard;
 				RETURN b;
 			END;
 		END Compare;
+	
+	(* Copy procedures for Propagation and InvProp *)
+	
+	PROCEDURE (p: PropDate) Copy- (): A.Elem;
+		
+		VAR
+			
+			pp: PropDate;
+		
+		BEGIN (*Copy*)
+			NEW(pp);
+			pp.id := p.id;
+			pp.date := p.date;
+			pp.proba := p.proba;
+			RETURN pp;
+		END Copy;
+	
+	PROCEDURE (p: PropName) Copy- (): A.Elem;
+		
+		VAR
+			
+			pp: PropName;
+		
+		BEGIN (*Copy*)
+			NEW(pp);
+			pp.id := p.id;
+			pp.date := p.date;
+			pp.proba := p.proba;
+			RETURN pp;
+		END Copy;
 	
 	(* Copy f and return its copy; the copy is shallow for elements of ranks less than deepFrom, and deep afterwards; size is the size of the copy *)
 	PROCEDURE CopyFile (f: File; deepFrom: INTEGER; OUT size: LONGINT): File;
@@ -280,15 +334,19 @@ MODULE DuniterWotWizard;
 						INC(size, DS);
 						d^ := cd^;
 						g[i] := d;
-						NEW(h, LEN(cd.certifs));
-						INC(size, LEN(cd.certifs) * PTRS);
-						FOR j := 0 TO LEN(cd.certifs) - 1 DO
-							NEW(c);
-							INC(size, CS);
-							c^ := cd.certifs[j](Certif)^;
-							h[j] := c;
+						IF cd.certifs = NIL THEN
+							d.certifs := NIL;
+						ELSE
+							NEW(h, LEN(cd.certifs));
+							INC(size, LEN(cd.certifs) * PTRS);
+							FOR j := 0 TO LEN(cd.certifs) - 1 DO
+								NEW(c);
+								INC(size, CS);
+								c^ := cd.certifs[j](Certif)^;
+								h[j] := c;
+							END;
+							d.certifs := h;
 						END;
-						d.certifs := h;
 				END;
 			END;
 			RETURN g;
@@ -320,7 +378,7 @@ MODULE DuniterWotWizard;
 		END FixCertNextDate;
 	
 	(* Fix the disponibility dates of the elements of f, always after the current date *)
-PROCEDURE FileDates (f: File);
+	PROCEDURE FileDates (f: File; afterNow: BOOLEAN);
 		
 		VAR
 			
@@ -330,17 +388,33 @@ PROCEDURE FileDates (f: File);
 		
 		BEGIN (*FileDates*)
 			IF f # NIL THEN
-				now := B.Now();
+				IF afterNow THEN
+					now := B.Now();
+				END;
 				FOR i := 0 TO LEN(f) - 1 DO
 					cd := f[i];
-					WITH
+					WITH 
 						|cd: Dossier DO
-							cd.date := MAX(cd.certifs[cd.princCertif - 1].date, now);
+							IF cd.certifs = NIL THEN
+								IF afterNow THEN
+									cd.date := now;
+								ELSE
+									cd.date := 0;
+								END;
+							ELSE
+								IF afterNow THEN
+									cd.date := MAX(cd.certifs[cd.princCertif - 1].date, now);
+								ELSE
+									cd.date := cd.certifs[cd.princCertif - 1].date;
+								END;
+							END;
 							IF cd.date > cd.limit THEN
 								cd.date := BA.never;
 							END;
 						|cd: Certif DO
-							cd.date := MAX(cd.date, now);
+							IF afterNow THEN
+								cd.date := MAX(cd.date, now);
+							END;
 					END;
 				END;
 			END;
@@ -354,7 +428,7 @@ PROCEDURE FileDates (f: File);
 			cdx: CertOrDoss;
 			i, j: INTEGER;
 		
-		(* Dossiers and internal certifications are sorted by increasing dates; if a dossier and an internal certification have the same date, the dossier comes first *)
+		(* Dossiers with at least B.pars.sigQty certifications and internal certifications first; other dossiers last; dossiers are sorted by number of certifications first, then by dates; internal certifications are sorted by dates; if a dossier with at least B.pars.sigQty certifications and an internal certification have the same date, the dossier comes first *)
 		PROCEDURE Less (cd1, cd2: CertOrDoss): BOOLEAN;
 			
 			BEGIN (*Less*)
@@ -362,12 +436,17 @@ PROCEDURE FileDates (f: File);
 					|cd1: Dossier DO
 						WITH
 							|cd2: Dossier DO
-								RETURN cd1.date < cd2.date;
+								RETURN (cd2.princCertif < B.pars.sigQty) & (cd1.princCertif > cd2.princCertif) OR (cd1.princCertif >= B.pars.sigQty) & (cd2.princCertif >= B.pars.sigQty) & (cd1.date < cd2.date);
 							|cd2: Certif DO
-								RETURN cd1.date <= cd2.date;
+								RETURN (cd1.princCertif >= B.pars.sigQty) & (cd1.date <= cd2.date);
 						END;
 					|cd1: Certif DO
-						RETURN cd1.date < cd2.date;
+						WITH
+							|cd2: Dossier DO
+								RETURN (cd2.princCertif < B.pars.sigQty) OR (cd1.date < cd2.date);
+							|cd2: Certif DO
+								RETURN cd1.date < cd2.date;
+						END;
 				END;
 			END Less;
 		
@@ -384,8 +463,8 @@ PROCEDURE FileDates (f: File);
 			END;
 		END SortAll;
 	
-	(* Sort the end of f, starting at position i0; the dates of all Certification(s) must have been fixed before, but not those of Dossier(s); The Dossier dates are always put after the current date *)
-	PROCEDURE SortFile (f: File; i0: INTEGER);
+	(* Sort the end of f, starting at position i0; the dates of all Certification(s) must have been fixed before, but not those of Dossier(s); if afterNow, the disponibility dates are put after the current date *)
+	PROCEDURE SortFile (f: File; i0: INTEGER; afterNow: BOOLEAN);
 		
 		VAR
 			
@@ -401,7 +480,7 @@ PROCEDURE FileDates (f: File);
 					ELSE
 					END;
 				END;
-				FileDates(f);
+				FileDates(f, afterNow);
 				SortAll(f, i0);
 			END;
 		END SortFile;
@@ -453,7 +532,7 @@ PROCEDURE FileDates (f: File);
 									END;
 								END;
 							END;
-					END;
+						END;
 				END;
 			END IncDates;
 		
@@ -518,14 +597,14 @@ PROCEDURE FileDates (f: File);
 							cd.certifs := g;
 						END;
 				END;
-				SortFile(f, step + 1);
+				SortFile(f, step + 1, TRUE);
 				IF debug # NIL THEN
 					debug(f, step);
 				END;
 			END;
 		END Propagate;
 	
-	(* Say whether the list of certifiers' Pubkey(s) c verifies the Duniter's distance rule and gives, in proportionOfSentries the proportion of sentries members reachable in less than B.pars.stepMax steps *)
+	(* Say whether the list of certifiers' Pubkey(s) c verifies the Duniter's distance rule and gives, in proportionOfSentries the proportion of sentries members reachable in less than B.pars.stepMax steps  *)
 	PROCEDURE NotTooFar (c: PubList; n: INTEGER; OUT needed: INTEGER; OUT proportionOfSentries: REAL): BOOLEAN;
 		
 		VAR
@@ -536,29 +615,38 @@ PROCEDURE FileDates (f: File);
 			ok: BOOLEAN;
 		
 		BEGIN (*NotTooFar*)
-			ASSERT(n >= B.pars.sigQty, 20);
-			needed := B.pars.sigQty - 1;
-			REPEAT
-				INC(needed);
-				NEW(certifiers, needed);
-				cc := c;
-				FOR j := 0 TO needed - 1 DO
-					certifiers[j] := cc.pub;
-					cc := cc.next;
+			IF n < B.pars.sigQty THEN
+				NEW(certifiers, n);
+				FOR j := 0 TO n - 1 DO
+					certifiers[j] := c.pub;
+					c := c.next;
 				END;
+				needed := n;
 				proportionOfSentries := B.PercentOfSentries(certifiers);
 				ok := proportionOfSentries >= B.pars.xpercent;
-			UNTIL ok OR (needed = n);
+			ELSE
+				needed := B.pars.sigQty - 1;
+				REPEAT
+					INC(needed);
+					NEW(certifiers, needed);
+					cc := c;
+					FOR j := 0 TO needed - 1 DO
+						certifiers[j] := cc.pub;
+						cc := cc.next;
+					END;
+					proportionOfSentries := B.PercentOfSentries(certifiers);
+					ok := proportionOfSentries >= B.pars.xpercent;
+				UNTIL ok OR (needed = n);
+			END;
 			RETURN ok;
 		END NotTooFar;
-
+	
 	(* WotWizard main procedure; return in sets all the elements of type Set, i.e. all the possible permutations in the order of entries of the Dossier(s) in f, along with their probabilities *)
 	PROCEDURE CalcPermutations* (f: File; debug: Debug; OUT sets: A.Tree): BOOLEAN;
 		
 		VAR
 			
 			ok: BOOLEAN;
-			s: ARRAY 20 OF CHAR;
 		
 		(* Put into n.sets the set containing, as unique element, the list of entries in n.f *)
 		PROCEDURE Evaluate (n: Node);
@@ -632,7 +720,6 @@ PROCEDURE FileDates (f: File);
 				q1, q2: Queue;
 			
 			BEGIN (*CalcRec*)
-				L.log.Msg("Going down");
 				stackSize := 0;
 				q1.Init; q2.Init;
 				NEW(root);
@@ -677,10 +764,6 @@ PROCEDURE FileDates (f: File);
 						n.f := NIL;
 					END;
 				END;
-				L.log.Msg("End going down");
-				Strings.IntToString(stackSize, s);
-				L.log.Msg("Stack size: " + s);
-				L.log.Msg("Going up");
 				WHILE ~q2.IsEmpty() DO
 					q2.Get(m);
 					IF m.len2 # m.len THEN
@@ -697,7 +780,6 @@ PROCEDURE FileDates (f: File);
 						END;
 					END;
 				END;
-				L.log.Msg("End going up");
 				sets := root.sets;
 			END CalcRec;
 		
@@ -705,20 +787,13 @@ PROCEDURE FileDates (f: File);
 			IF f # NIL THEN
 				ok := TRUE;
 				CalcRec(f, sets);
-				Strings.IntToString(sets.NumberOfElems(), s);
-				L.log.Msg(s + " different permutations calculated");
-				IF ok THEN
-					L.log.Msg("Calculation completed");
-				ELSE
-					L.log.Msg("Stack size limit exceeded");
-				END;
 				RETURN TRUE;
 			END;
 			RETURN FALSE;
 		END CalcPermutations;
 	
-	(* Merge the Set(s) returned by CalcPermutations and combine their probabilities; return the list of entries sorted by date(s) in occurDate)  *)
-	PROCEDURE CalcEntries* (f: File; OUT occurDate: A.Tree): BOOLEAN;
+	(* Merge the Set(s) returned by CalcPermutations and combine their probabilities; return the list of entries sorted by date(s) (occurDate with elements of type PropDate) or by id(s) (occurName with elements of type PropName)  *)
+	PROCEDURE CalcEntries* (f: File; OUT occurDate, occurName: A.Tree): BOOLEAN;
 		
 		VAR
 			
@@ -728,6 +803,7 @@ PROCEDURE FileDates (f: File);
 			id: B.String;
 			b: BOOLEAN;
 			pD: PropDate;
+			pN: PropName;
 			pAfter: Propagation;
 			debug: Debug;
 		
@@ -776,8 +852,9 @@ PROCEDURE FileDates (f: File);
 					e := ee;
 				END;
 				
-				(* Propagation -> PropDate *)
+				(* Propagation -> PropDate & PropName *)
 				A.New(occurDate);
+				A.New(occurName);
 				e := occur.Next(NIL);
 				WHILE e # NIL DO
 					WITH e: Propagation DO
@@ -788,17 +865,23 @@ PROCEDURE FileDates (f: File);
 						pD.proba := e.proba;
 						ee := pD;
 						b := occurDate.SearchIns(ee, n); ASSERT(~b, 101);
+						NEW(pN);
+						pN.id := e.id;
+						pN.date := e.date;
+						pN.after := e.after;
+						pN.proba := e.proba;
+						ee := pN;
+						b := occurName.SearchIns(ee, n); ASSERT(~b, 102);
 					END;
 					e := occur.Next(e);
 				END;
-				
 				RETURN TRUE;
 			END;
 			RETURN FALSE;
 		END CalcEntries;
 	
-	(* Extract f from the blockchain (DuniterBlockchain) and the sandbox (DuniterSandbox) and sort it; keep only valid elements *)
-	PROCEDURE FillFile* (OUT f: File; OUT cNb, dNb: INTEGER);
+	(* Extract f from the blockchain (Duniter0Blockchain) and the sandbox (Duniter0Sandbox) and sort it; minCertifs is the minimum number of certifications by Dossier required (at least 1 if minCertifs < 1); keep only valid elements *)
+	PROCEDURE FillFile* (minCertifs: INTEGER; OUT f: File; OUT cNb, dNb: INTEGER);
 		
 		TYPE
 			
@@ -819,7 +902,6 @@ PROCEDURE FileDates (f: File);
 			c: Certif;
 			uid: B.String;
 			certs, cert: PubList;
-			s: ARRAY 11 OF CHAR;
 			cdL, l: CdList;
 			proportionOfSentries: REAL;
 		
@@ -844,11 +926,14 @@ PROCEDURE FileDates (f: File);
 						END;
 					UNTIL ~okP;
 				END;
-				IF (nbCertifs >= B.pars.sigQty) & NotTooFar(certs, nbCertifs, princCertif, proportionOfSentries) THEN
+				IF (nbCertifs >= minCertifs) & ((minCertifs < B.pars.sigQty) OR NotTooFar(certs, nbCertifs, princCertif, proportionOfSentries)) THEN
 					INC(dNb);
 					NEW(d);
 					NEW(l.next); l := l.next;
 					l.cd := d;
+					IF minCertifs < B.pars.sigQty THEN
+						b := NotTooFar(certs, nbCertifs, princCertif, proportionOfSentries);
+					END;
 					d.princCertif := princCertif;
 					d.proportionOfSentries := proportionOfSentries;
 					b := S.IdHash(toHash, d.pub, d.id, d.limit); ASSERT(b, 101);
@@ -881,7 +966,7 @@ PROCEDURE FileDates (f: File);
 						c.to := uid;
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
-						(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite *)
+						(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever (bug ?) ; il faut aussi l'enlever si elle a dépassé sa date limite *)
 						mt := 0;
 						b := B.TimeOf(B.LastBlock() - 1, mt, t); ASSERT(b OR (B.LastBlock() = 0), 106);
 						IF (c.date <= c.limit) & (c.date > mt) THEN
@@ -904,35 +989,21 @@ PROCEDURE FileDates (f: File);
 					INC(i);
 					cdL := cdL.next;
 				END;
-				SortFile(f, 0);
+				SortFile(f, 0, minCertifs >= B.pars.sigQty);
 			END;
-			Strings.IntToString(dNb, s);
-			L.log.Msg("There are " + s + " Dossier(s) in File");
-			Strings.IntToString(cNb, s);
-			L.log.Msg("There are " + s + " Certif(s) in File");
 		END FillFile;
 	
 	(* Calculate the current set of entries, sorted by dates (occur) and by names (invOccur) *)
-	PROCEDURE BuildEntries* (OUT f: File; OUT cNb, dNb: INTEGER; OUT occurDate: A.Tree): BOOLEAN;
+	PROCEDURE BuildEntries* (OUT f: File; OUT cNb, dNb: INTEGER; OUT occurDate, occurName: A.Tree): BOOLEAN;
 		
 		VAR
 			
 			b: BOOLEAN;
-			t: LONGINT;
-			ts: BA.TimeString;
 			n: LONGINT;
 		
 		BEGIN (*BuildEntries*)
-			L.log.Msg("Loading File of Dossier(s) and Certif(s)");
-			t := Services.Ticks();
-			FillFile(f, cNb, dNb);
-			BA.TimeToString(Services.Ticks() - t, ts);
-			L.log.Msg("End loading File of Dossier(s) and Certif(s). Time spent: " + ts);
-			L.log.Msg("Calculating entries");
-			t := Services.Ticks();
-			b := CalcEntries(CopyFile(f, 0, n), occurDate);
-			BA.TimeToString(Services.Ticks() - t, ts);
-			L.log.Msg("End calculating entries. Time spent: " + ts);
+			FillFile(B.pars.sigQty, f, cNb, dNb);
+			b := CalcEntries(CopyFile(f, 0, n), occurDate, occurName);
 			RETURN b;
 		END BuildEntries;
 	
@@ -942,9 +1013,9 @@ PROCEDURE FileDates (f: File);
 			maxStackLength := newMaxStackLength;
 		END ChangeMaxStackLength;
 	
-	BEGIN (*DuniterWotWizard*)
+	BEGIN (*Duniter0WotWizard*)
 		maxStackLength := maxStackLengthDef;
-		(**
+		(*
 		log.ConnectTo(StdLog.text);
-		**)
-	END DuniterWotWizard.
+		*)
+	END Duniter0WotWizard.
