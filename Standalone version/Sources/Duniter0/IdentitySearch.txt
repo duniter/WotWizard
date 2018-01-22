@@ -26,7 +26,7 @@ MODULE Duniter0IdentitySearch;
 		
 		maxItems = 100;
 		
-		nonEditableNb = 5;
+		nonEditableNb = 6;
 		
 		futureIcon = 'º';
 	
@@ -51,7 +51,7 @@ MODULE Duniter0IdentitySearch;
 		
 		identity*: RECORD
 			member-: BOOLEAN;
-			fields*: NonEditable; (* uid (0), pubkey (1), date (2) *)
+			fields*: NonEditable; (* uid (0), pubkey (1), date (2), date of received cert (3), date of sent cert (4), hash (5) *)
 		END;
 		
 		receivedCertsNb-,
@@ -135,8 +135,8 @@ MODULE Duniter0IdentitySearch;
 			ok := B.IdNextUid(FALSE, uid);
 			WHILE ok DO
 				ok := BA.Prefix(hintD, uid);
-				IF ok THEN
-					NEW(idE); idE.uid := uid; idE.hash := ""; idE.future := FALSE; e := idE;
+				IF ok & B.IdUid(uid, p, hash, bloc) THEN
+					NEW(idE); idE.uid := uid; idE.hash := hash; idE.future := FALSE; e := idE;
 					b := t.SearchIns(e, n); ASSERT(~b);
 					ok := B.IdNextUid(FALSE, uid);
 				END;
@@ -149,7 +149,7 @@ MODULE Duniter0IdentitySearch;
 					Strings.Find(p, hint, 0, pos);
 					ok := pos = 0;
 					IF ok & B.IdPub(p, uid, hash, bloc) THEN
-						NEW(idE); idE.uid := uid; idE.hash := ""; idE.future := FALSE; e := idE;
+						NEW(idE); idE.uid := uid; idE.hash := hash; idE.future := FALSE; e := idE;
 						b := t.SearchIns(e, n);
 						ok := B.IdNextPubkey(FALSE, p);
 					END;
@@ -405,15 +405,16 @@ MODULE Duniter0IdentitySearch;
 		VAR
 			
 			i: INTEGER;
-			hash: S.Hash;
+			hash: B.Hash;
 		
 		BEGIN (*Fix*)
 			hash := identityHash[identityList.index];
+			identity.fields[10] := hash$;
 			Get(hash, identity.fields[0], identity.fields[2], identity.fields[4], identity.member);
+			Certs(hash, identity.fields[2]$, identity.member);
 			FOR i := 0 TO nonEditableNb - 1 DO
 				identity.fields[2 * i + 1] := identity.fields[2 * i];
 			END;
-			Certs(hash, identity.fields[2]$, identity.member);
 			Dialog.Update(identity);
 		END Fix;
 	
@@ -440,9 +441,9 @@ MODULE Duniter0IdentitySearch;
 			e := t.Next(NIL);
 			WHILE e # NIL DO
 				WITH e: IdE DO
+					identityHash[i] := e.hash;
 					IF e.future THEN
 						identityList.SetItem(i, futureIcon + ' ' + e.uid$);
-						identityHash[i] := e.hash;
 					ELSE
 						identityList.SetItem(i, e.uid$);
 					END;
@@ -460,7 +461,7 @@ MODULE Duniter0IdentitySearch;
 				sentCertsFutNb := 0;
 				sentCerts.SetLen(0);
 				identity.member := FALSE;
-				FOR i := 0 TO nonEditableNb - 1 DO
+				FOR i := 0 TO 2 * nonEditableNb - 1 DO
 					identity.fields[i] := "";
 				END;
 				Dialog.UpdateInt(identityNb);
