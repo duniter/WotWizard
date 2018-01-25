@@ -27,7 +27,7 @@ MODULE DuniterWotWizard;
 	
 	CONST
 		
-		maxStackLengthDef = 800000000; (* Default value for the greatest allowed allocated memory size  *)
+		maxStackLengthDef = 600000000; (* Default value for the greatest allowed allocated memory size  *)
 		
 		(* Sizes of different types *)
 		INS = SIZE(INTEGER);
@@ -36,6 +36,8 @@ MODULE DuniterWotWizard;
 		PTRS = SIZE(ANYPTR);
 	
 	TYPE
+		
+		Pubkey = POINTER TO B.Pubkey;
 		
 		(* Internal certification, or dossier of external certifications toward the same identity *)
 		CertOrDoss* = POINTER TO ABSTRACT RECORD
@@ -53,7 +55,7 @@ MODULE DuniterWotWizard;
 		(* Dossier of external certifications *)
 		Dossier* = POINTER TO RECORD (CertOrDoss)
 			id-: B.String; (* Certified identity *)
-			pub: S.Pubkey;
+			pub: Pubkey;
 			princCertif: INTEGER; (* Rank of the certification whose entry date gives the entry date of the dossier (1 <= princCertif <= LEN(certifs) *)
 			proportionOfSentries-: REAL; (* Proportion of sentries reachable through B.pars.stepMax steps *)
 			certifs-: File; (* Array of certifications *)
@@ -62,7 +64,7 @@ MODULE DuniterWotWizard;
 	CONST
 		
 		CS = 2 * LIS + 2 * PTRS; (* Size of Certif *)
-		DS = 2 * LIS + 2 * PTRS + INS + RES; (* Size of Dossier *)
+		DS = 2 * LIS + 3 * PTRS + INS + RES; (* Size of Dossier *)
 	
 	TYPE
 		
@@ -88,7 +90,7 @@ MODULE DuniterWotWizard;
 		(* Chained list of Pubkey(s); used to test the distance rule in the procedure NotTooFar *)
 		PubList = POINTER TO RECORD
 			next: PubList;
-			pub: B.Pubkey;
+			pub: Pubkey;
 		END;
 		
 		(* The virtual stack elements (stored in a queue) used in the main procedure CalcPermutations and representing the tree of all possible permutations of Dossier(s) in the final order of the File f *)
@@ -467,7 +469,7 @@ PROCEDURE FileDates (f: File);
 					WHILE ok & (j < step) DO
 						cd2 := f[j];
 						WITH cd2: Dossier DO
-							ok := (cd2.id$ # cd.id$) & (cd2.pub # cd.pub);
+							ok := (cd2.id$ # cd.id$) & (cd2.pub$ # cd.pub$);
 						ELSE
 						END;
 						INC(j);
@@ -493,7 +495,7 @@ PROCEDURE FileDates (f: File);
 						IncDates(cd.from, newDate, step + 1);
 					|cd: Dossier DO
 						j := 0;
-						(* All certifs with the same date as cd must lead to updates and certifs with a date less than cd.date + B.pars.avgGenTime have more than 50% probabity to be inserted in the same block and, so, must lead to update too *)
+						(* All certifs with the same date as cd must lead to updates and certifs with a date less than cd.date + B.pars.avgGenTime have more than 50% probability to be inserted in the same block and, so, must lead to update too *)
 						WHILE (j < cd.princCertif) OR (j < LEN(cd.certifs)) & (cd.certifs[j].date < cd.date + B.pars.avgGenTime) DO
 							IncDates(cd.certifs[j](Certif).from, newDate, step + 1);
 							INC(j);
@@ -645,7 +647,7 @@ PROCEDURE FileDates (f: File);
 				q1.Put(root);
 				WHILE ~q1.IsEmpty() DO
 					q1.Get(n);
-					WHILE (n.step < LEN(n.f)) & (n.f[n.step].date # BA.never) & ((n.step >= LEN(n.f) - 1) OR (n.f[n.step] IS Certif) OR (n.f[n.step + 1] IS Certif) OR (n.f[n.step].date # n.f[n.step + 1].date)) DO
+					WHILE (n.step < LEN(n.f)) & (n.f[n.step].date # BA.never) & ((n.step >= LEN(n.f) - 1) OR (n.f[n.step] IS Certif) OR (n.f[n.step + 1] IS Certif) OR (n.f[n.step + 1].date - n.f[n.step].date >= B.pars.avgGenTime)) DO
 						Propagate(n.f, n.step, debug);
 						INC(n.step);
 					END;
@@ -654,9 +656,9 @@ PROCEDURE FileDates (f: File);
 						Evaluate(n);
 						q2.Put(n);
 					ELSE
-						(* Assertion: (n.step < LEN(n.f) - 1) & (n.f[n.step] IS Dossier) & (n.f[n.step + 1] IS Dossier) & (n.f[n.step].date = n.f[n.step + 1].date)) *)
+						(* Assertion: (n.step < LEN(n.f) - 1) & (n.f[n.step] IS Dossier) & (n.f[n.step + 1] IS Dossier) & (n.f[n.step + 1].date - n.f[n.step].date < B.pars.avgGenTime) *)
 						j := n.step + 2;
-						WHILE (j < LEN(n.f)) & (n.f[j] IS Dossier) & (n.f[j].date = n.f[n.step].date) DO
+						WHILE (j < LEN(n.f)) & (n.f[j] IS Dossier) & (n.f[j].date - n.f[n.step].date < B.pars.avgGenTime) DO
 							INC(j);
 						END;
 						n.len := j - n.step;
@@ -838,7 +840,7 @@ PROCEDURE FileDates (f: File);
 							FixCertNextDate(from, date);
 							IF date <= exp THEN (* Not-expired certification *)
 								INC(nbCertifs);
-								NEW(cert); cert.pub := from;
+								NEW(cert); NEW(cert.pub); cert.pub^ := from;
 								cert.next := certs; certs := cert;
 							END;
 						END;
@@ -846,7 +848,7 @@ PROCEDURE FileDates (f: File);
 				END;
 				IF (nbCertifs >= B.pars.sigQty) & NotTooFar(certs, nbCertifs, princCertif, proportionOfSentries) THEN
 					INC(dNb);
-					NEW(d);
+					NEW(d); NEW(d.pub);
 					NEW(l.next); l := l.next;
 					l.cd := d;
 					d.princCertif := princCertif;
@@ -881,7 +883,7 @@ PROCEDURE FileDates (f: File);
 						c.to := uid;
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
-						(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite *)
+						(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite ; peut-être inutile maintenant *)
 						mt := 0;
 						b := B.TimeOf(B.LastBlock() - 1, mt, t); ASSERT(b OR (B.LastBlock() = 0), 106);
 						IF (c.date <= c.limit) & (c.date > mt) THEN
