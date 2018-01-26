@@ -27,7 +27,7 @@ MODULE DuniterWotWizard;
 	
 	CONST
 		
-		maxStackLengthDef = 600000000; (* Default value for the greatest allowed allocated memory size  *)
+		maxStackLengthDef = 450000000; (* Default value for the greatest allowed allocated memory size  *)
 		
 		(* Sizes of different types *)
 		INS = SIZE(INTEGER);
@@ -247,7 +247,7 @@ MODULE DuniterWotWizard;
 		END Compare;
 	
 	(* Copy f and return its copy; the copy is shallow for elements of ranks less than deepFrom, and deep afterwards; size is the size of the copy *)
-	PROCEDURE CopyFile (f: File; deepFrom: INTEGER; OUT size: LONGINT): File;
+	PROCEDURE CopyFile (f: File; deepFrom: INTEGER; VAR size: LONGINT): File;
 		
 		VAR
 			
@@ -258,7 +258,6 @@ MODULE DuniterWotWizard;
 			i, j, len: INTEGER;
 		
 		BEGIN (*CopyFile*)
-			size := 0;
 			IF f = NIL THEN
 				RETURN NIL;
 			END;
@@ -474,7 +473,7 @@ PROCEDURE FileDates (f: File);
 						END;
 						INC(j);
 					END;
-					IF ~ok THEN
+					IF ~ok THEN (* Small decrease in allocated size, not recorded *)
 						NEW(g, LEN(f) - 1);
 						FOR j := 0 TO step - 1 DO
 							g[j] := f[j];
@@ -501,7 +500,7 @@ PROCEDURE FileDates (f: File);
 							INC(j);
 						END;
 						nc := LEN(cd.certifs) - j;
-						IF nc > 0 THEN
+						IF nc > 0 THEN (* No change in size; just transfers *)
 							n1 := LEN(f); n2 := n1 + nc;
 							NEW(g, n2);
 							FOR m := 0 TO n1 - 1 DO
@@ -627,8 +626,8 @@ PROCEDURE FileDates (f: File);
 			
 			VAR
 				
-				j: INTEGER;
-				stackSize, size: LONGINT;
+				j, k, collect: INTEGER;
+				stackSize: LONGINT;
 				cd: CertOrDoss;
 				root, n, m: Node;
 				q1, q2: Queue;
@@ -636,6 +635,7 @@ PROCEDURE FileDates (f: File);
 			BEGIN (*CalcRec*)
 				L.log.Msg("Going down");
 				stackSize := 0;
+				collect := 0;
 				q1.Init; q2.Init;
 				NEW(root);
 				INC(stackSize, NS);
@@ -668,20 +668,24 @@ PROCEDURE FileDates (f: File);
 							m.len := 0;
 							m.len2 := 0;
 							m.stack := n;
-							m.f := CopyFile(n.f, n.step, size);
-							INC(stackSize, size);
+							m.f := CopyFile(n.f, n.step, stackSize);
 							cd := m.f[j]; m.f[j] := m.f[n.step]; m.f[n.step] := cd;
 							Propagate(m.f, n.step, debug);
 							m.step := n.step + 1;
 							m.sets := NIL;
 							q1.Put(m);
+							k := SHORT(stackSize DIV 800000H);
+							IF k > collect THEN
+								collect := k;
+								BA.Collect;
+								Strings.IntToString(stackSize, s);
+								L.log.Msg("Stack size: " + s);
+							END;
 						END;
 						n.f := NIL;
 					END;
 				END;
 				L.log.Msg("End going down");
-				Strings.IntToString(stackSize, s);
-				L.log.Msg("Stack size: " + s);
 				L.log.Msg("Going up");
 				WHILE ~q2.IsEmpty() DO
 					q2.Get(m);
@@ -932,6 +936,7 @@ PROCEDURE FileDates (f: File);
 			L.log.Msg("End loading File of Dossier(s) and Certif(s). Time spent: " + ts);
 			L.log.Msg("Calculating entries");
 			t := Services.Ticks();
+			n := 0;
 			b := CalcEntries(CopyFile(f, 0, n), occurDate);
 			BA.TimeToString(Services.Ticks() - t, ts);
 			L.log.Msg("End calculating entries. Time spent: " + ts);

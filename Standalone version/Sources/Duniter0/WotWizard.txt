@@ -27,7 +27,7 @@ MODULE Duniter0WotWizard;
 	
 	CONST
 		
-		maxStackLengthDef = 600000000; (* Default value for the greatest allowed allocated memory size  *)
+		maxStackLengthDef = 450000000; (* Default value for the greatest allowed allocated memory size  *)
 		
 		(* Sizes of different types *)
 		INS = SIZE(INTEGER);
@@ -301,7 +301,7 @@ MODULE Duniter0WotWizard;
 		END Copy;
 	
 	(* Copy f and return its copy; the copy is shallow for elements of ranks less than deepFrom, and deep afterwards; size is the size of the copy *)
-	PROCEDURE CopyFile (f: File; deepFrom: INTEGER; OUT size: LONGINT): File;
+	PROCEDURE CopyFile (f: File; deepFrom: INTEGER; VAR size: LONGINT): File;
 		
 		VAR
 			
@@ -312,7 +312,6 @@ MODULE Duniter0WotWizard;
 			i, j, len: INTEGER;
 		
 		BEGIN (*CopyFile*)
-			size := 0;
 			IF f = NIL THEN
 				RETURN NIL;
 			END;
@@ -553,7 +552,7 @@ MODULE Duniter0WotWizard;
 						END;
 						INC(j);
 					END;
-					IF ~ok THEN
+					IF ~ok THEN (* Small decrease in allocated size, not recorded *)
 						NEW(g, LEN(f) - 1);
 						FOR j := 0 TO step - 1 DO
 							g[j] := f[j];
@@ -580,7 +579,7 @@ MODULE Duniter0WotWizard;
 							INC(j);
 						END;
 						nc := LEN(cd.certifs) - j;
-						IF nc > 0 THEN
+						IF nc > 0 THEN (* No change in size; just transfers *)
 							n1 := LEN(f); n2 := n1 + nc;
 							NEW(g, n2);
 							FOR m := 0 TO n1 - 1 DO
@@ -716,7 +715,7 @@ MODULE Duniter0WotWizard;
 			VAR
 				
 				j: INTEGER;
-				stackSize, size: LONGINT;
+				stackSize: LONGINT;
 				cd: CertOrDoss;
 				root, n, m: Node;
 				q1, q2: Queue;
@@ -755,8 +754,7 @@ MODULE Duniter0WotWizard;
 							m.len := 0;
 							m.len2 := 0;
 							m.stack := n;
-							m.f := CopyFile(n.f, n.step, size);
-							INC(stackSize, size);
+							m.f := CopyFile(n.f, n.step, stackSize);
 							cd := m.f[j]; m.f[j] := m.f[n.step]; m.f[n.step] := cd;
 							Propagate(m.f, n.step, debug);
 							m.step := n.step + 1;
@@ -1005,6 +1003,7 @@ MODULE Duniter0WotWizard;
 		
 		BEGIN (*BuildEntries*)
 			FillFile(B.pars.sigQty, f, cNb, dNb);
+			n := 0;
 			b := CalcEntries(CopyFile(f, 0, n), occurDate, occurName);
 			RETURN b;
 		END BuildEntries;
