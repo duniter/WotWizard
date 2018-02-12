@@ -42,7 +42,7 @@ MODULE DuniterBlockchain;
 		
 		hashLen* = 64;
 		
-		secureGap = 6; (* Number of last blocks to be read again at every update, since they could have changed; change for 3? *)
+		secureGap = 6; (* Number of last blocks to be read again at every update, since they could have changed *)
 		
 		dBase = "Duniter\DBase.data"; (* Name of the WotWizard database, in the WotWizard.exe directory *)
 		
@@ -120,6 +120,7 @@ MODULE DuniterBlockchain;
 			(* timeList -> Time; joinList, leaveList -> Identity; certAddList, certRemoveList -> Certification *)
 			ref,
 			aux: INTEGER;
+			auxL: LONGINT;
 		END;
 		
 		ListFac = POINTER TO RECORD (B.DataFac) (* Factory of List *)
@@ -148,7 +149,8 @@ MODULE DuniterBlockchain;
 			pubkey: Pubkey;
 			uid: String;
 			hash: Hash;
-			block_number: INTEGER; (* Where the identity is written *)
+			block_number: INTEGER; (* Where the Identity is written *)
+			expires_on: LONGINT;
 		END;
 		
 		IdentityFac = POINTER TO RECORD (B.DataFac) (* Factory of Identity *)
@@ -157,7 +159,7 @@ MODULE DuniterBlockchain;
 		Certification = POINTER TO RECORD (B.Data)
 			from,
 			to: Pubkey;
-			block_number: INTEGER; (* Where the identity is written *)
+			block_number: INTEGER; (* Where the Certification is written *)
 			expires_on: LONGINT;
 		END;
 		
@@ -331,6 +333,7 @@ MODULE DuniterBlockchain;
 			r.InChars(id.uid);
 			r.InChars(id.hash);
 			id.block_number := r.InInt();
+			id.expires_on := r.InLInt();
 		END Read;
 	
 	PROCEDURE (id: Identity) Write (VAR w: B.Writer);
@@ -340,6 +343,7 @@ MODULE DuniterBlockchain;
 			w.OutChars(id.uid);
 			w.OutChars(id.hash);
 			w.OutInt(id.block_number);
+			w.OutLInt(id.expires_on);
 		END Write;
 	
 	PROCEDURE (idf: IdentityFac) New (size: INTEGER): Identity;
@@ -389,6 +393,7 @@ MODULE DuniterBlockchain;
 			l.type := r.InByte();
 			l.ref := r.InInt();
 			l.aux := r.InInt();
+			l.auxL := r.InLInt();
 		END Read;
 	
 	PROCEDURE (l: List) Write (VAR w: B.Writer);
@@ -398,6 +403,7 @@ MODULE DuniterBlockchain;
 			w.OutByte(l.type);
 			w.OutInt(l.ref);
 			w.OutInt(l.aux);
+			w.OutLInt(l.auxL);
 		END Write;
 	
 	PROCEDURE (lf: ListFac) New (size: INTEGER): List;
@@ -746,7 +752,7 @@ MODULE DuniterBlockchain;
 		END JLNextPubkey;
 	
 	(* Pubkey -> Identity *)
-	PROCEDURE IdPub* (IN pubkey: Pubkey; OUT uid: String; OUT hash: Hash; OUT block_number: INTEGER): BOOLEAN;
+	PROCEDURE IdPub* (IN pubkey: Pubkey; OUT uid: String; OUT hash: Hash; OUT block_number: INTEGER; OUT expires_on: LONGINT): BOOLEAN;
 		
 		VAR
 			
@@ -761,13 +767,14 @@ MODULE DuniterBlockchain;
 				uid := id.uid;
 				hash := id.hash;
 				block_number := id.block_number;
+				expires_on := id.expires_on;
 				RETURN TRUE;
 			END;
 			RETURN FALSE;
 		END IdPub;
 	
 	(* uid -> Identity *)
-	PROCEDURE IdUid* (IN uid: ARRAY OF CHAR; OUT pubkey: Pubkey; OUT hash: Hash; OUT block_number: INTEGER): BOOLEAN;
+	PROCEDURE IdUid* (IN uid: ARRAY OF CHAR; OUT pubkey: Pubkey; OUT hash: Hash; OUT block_number: INTEGER; OUT expires_on: LONGINT): BOOLEAN;
 		
 		VAR
 			
@@ -782,6 +789,7 @@ MODULE DuniterBlockchain;
 				pubkey := id.pubkey;
 				hash := id.hash;
 				block_number := id.block_number;
+				expires_on := id.expires_on;
 				RETURN TRUE;
 			END;
 			RETURN FALSE;
@@ -1025,7 +1033,7 @@ MODULE DuniterBlockchain;
 			RETURN TRUE;
 		END CertNextTo;
 	
-	PROCEDURE IsSentry* (pubkey: Pubkey): BOOLEAN;
+	PROCEDURE IsSentry* (IN pubkey: Pubkey): BOOLEAN;
 		
 		VAR
 			
@@ -1071,7 +1079,7 @@ MODULE DuniterBlockchain;
 			
 			set, newSet: A.Tree;
 			sE: SentriesE;
-			e, ee: A.Elem;
+			e, ee, eee: A.Elem;
 			i, j, n: INTEGER;
 			b: BOOLEAN;
 			pos: CertPos;
@@ -1087,16 +1095,12 @@ MODULE DuniterBlockchain;
 			END;
 			FOR i := 1 TO pars.stepMax - 1 DO
 				A.New(newSet);
-				FOR j := 0 TO LEN(pubkeys) - 1 DO
-					NEW(sE);
-					sE.pubkey := pubkeys[j];
-					e := sE;
-					b := newSet.SearchIns(e, n); ASSERT(~b, 101);
-				END;
 				e := set.Next(NIL);
 				WHILE e # NIL DO
+					eee := set.Next(e);
+					b := newSet.SearchIns(e, n);
 					WITH e: SentriesE DO
-						b := CertTo(e.pubkey, pos); ASSERT(b, 102);
+						b := CertTo(e.pubkey, pos); ASSERT(b, 101);
 						WHILE pos.CertNextPos(from, to) DO
 							NEW(sE);
 							sE.pubkey := from;
@@ -1104,7 +1108,7 @@ MODULE DuniterBlockchain;
 							b := newSet.SearchIns(ee, n);
 						END;
 					END;
-					e := set.Next(e);
+					e := eee;
 				END;
 				set := newSet;
 			END;
@@ -1172,36 +1176,36 @@ MODULE DuniterBlockchain;
 			i: INTEGER;
 		
 		BEGIN (*Params*)
-			t := d.NewTable(); ASSERT(t # NIL, 101);
+			t := d.NewTable(); ASSERT(t # NIL, 100);
 			REPEAT
 				t.Exec("SELECT parameters FROM block WHERE number = 0 AND NOT fork");
-				ASSERT(t.res IN {0, 6}, 100);
+				ASSERT(t.res IN {0, 6}, 101);
 			UNTIL t.res = 0;
-			ASSERT(t.columns = 1, 103); ASSERT(t.rows = 1, 104);
+			ASSERT(t.columns = 1, 102); ASSERT(t.rows = 1, 103);
 			 t.Read(0, cur);
 			ss := cur.fields[0];
 			ss[LEN(ss$)] := ':';
 			i := 0;
-			ScanS(ss, ':', s, i); Strings.StringToReal(s, pars.c, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.dt, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.ud0, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.sigPeriod, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.sigStock, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.sigWindow, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.sigValidity, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.sigQty, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.idtyWindow, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.msWindow, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToReal(s, pars.xpercent, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.msValidity, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.stepMax, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.medianTimeBlocks, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.avgGenTime, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.dtDiffEval, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToReal(s, pars.percentRot, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.udTime0, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.udReevalTime0, res); ASSERT(res = 0, 106);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.dtReeval, res); ASSERT(res = 0, 106);
+			ScanS(ss, ':', s, i); Strings.StringToReal(s, pars.c, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.dt, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.ud0, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.sigPeriod, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.sigStock, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.sigWindow, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.sigValidity, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.sigQty, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.idtyWindow, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.msWindow, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToReal(s, pars.xpercent, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.msValidity, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.stepMax, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.medianTimeBlocks, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.avgGenTime, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.dtDiffEval, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToReal(s, pars.percentRot, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.udTime0, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.udReevalTime0, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.dtReeval, res); ASSERT(res = 0, 104);
 			pars.txWindow := txWindow;
 			pars.msPeriod := pars.msWindow;
 		END Params;
@@ -1219,13 +1223,13 @@ MODULE DuniterBlockchain;
 		
 		BEGIN (*Times*)
 			NEW(t);
-			Strings.StringToInt(s1, t.bnb, res); ASSERT(res = 0);
-			Strings.StringToLInt(s2, t.mTime, res); ASSERT(res = 0);
-			Strings.StringToLInt(s3, t.time, res); ASSERT(res = 0);
+			Strings.StringToInt(s1, t.bnb, res); ASSERT(res = 0, 100);
+			Strings.StringToLInt(s2, t.mTime, res); ASSERT(res = 0, 101);
+			Strings.StringToLInt(s3, t.time, res); ASSERT(res = 0, 102);
 			lastBlock := t.bnb;
 			tRef := timeMan.WriteAllocateData(t);
 			NEW(i); i.ref := t.bnb;
-			b := timeT.SearchIns(i); ASSERT(~b);
+			b := timeT.SearchIns(i); ASSERT(~b, 103);
 			timeT.WriteValue(tRef);
 			IF withList THEN
 				NEW(tL); tL.ref := tRef; tL.type := timeList; tL.next := list;
@@ -1240,7 +1244,8 @@ MODULE DuniterBlockchain;
 		
 		VAR
 			
-			i, idRef, jlRef, cRef, indRef, ind2Ref, res: INTEGER;
+			i, idRef, jlRef, cRef, indRef, ind2Ref, n, res: INTEGER;
+			tt: LONGINT;
 			s: ARRAY 101 OF CHAR;
 			b: BOOLEAN;
 			id: Identity;
@@ -1259,6 +1264,9 @@ MODULE DuniterBlockchain;
 				NEW(id);
 				ScanS(ssJ, ':', id.pubkey, i);
 				SkipS(ssJ, ':', i);
+				ScanS(ssJ, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 100);
+				b := TimeOf(n, id.expires_on, tt); ASSERT(b, 101);
+				INC(id.expires_on, pars.msValidity);
 				SkipS(ssJ, ':', i);
 				SkipS(ssJ, ':', i);
 				ScanS(ssJ, '"', s, i); NEW(id.uid, LEN(s$) + 1); id.uid^ := s$;
@@ -1266,29 +1274,31 @@ MODULE DuniterBlockchain;
 					INC(i);
 				END;
 				REPEAT
-					t.Exec("SELECT hash FROM i_index WHERE pub = '" + id.pubkey + "'");
-					ASSERT(t.res IN {0, 6}, 100);
+					t.Exec("SELECT hash FROM i_index WHERE pub = '" + id.pubkey + "' ORDER BY writtenOn ASC");
+					ASSERT(t.res IN {0, 6}, 102);
 				UNTIL t.res = 0;
-				ASSERT((t.rows = 0) OR (t.rows = 1) & (t.columns = 1), 101);
-				IF t.rows = 1 THEN
-					t.Read(0, cur);
-					id.hash := cur.fields[0]$;
-				ELSE
-					id.hash := "";
+				ASSERT((t.rows = 0) OR (t.columns = 1), 103);
+				id.hash := "";
+				FOR n := 0 TO t.rows - 1 DO
+					t.Read(n, cur);
+					IF (cur.fields[0] # NIL) & (cur.fields[0]$ # "") THEN
+						id.hash := cur.fields[0]$;
+					END;
 				END;
-				Strings.StringToInt(nb, id.block_number, res); ASSERT(res = 0, 102);
+				ASSERT(id.hash # "", 104);
+				Strings.StringToInt(nb, id.block_number, res); ASSERT(res = 0, 105);
 				idRef := idMan.WriteAllocateData(id);
 				NEW(idP); idP.ref := id.pubkey;
-				b := idPubT.SearchIns(idP); ASSERT(~b, 103);
+				b := idPubT.SearchIns(idP); ASSERT(~b, 106);
 				idPubT.WriteValue(idRef);
 				NEW(idU); NEW(idU.c, LEN(id.uid$) + 1); idU.c^ := id.uid$;
-				b := idUidT.SearchIns(idU); ASSERT(~b, 104);
+				b := idUidT.SearchIns(idU); ASSERT(~b, 107);
 				idUidT.WriteValue(idRef);
 				NEW(jl);
 				jl.pubkey := id.pubkey;
 				jl.joiningBlock := id.block_number;
 				jl.leavingBlock := hasNotLeaved;
-				b := joinAndLeaveT.SearchIns(idP); ASSERT(~b, 105);
+				b := joinAndLeaveT.SearchIns(idP); ASSERT(~b, 108);
 				joinAndLeaveT.WriteValue(joinAndLeaveMan.WriteAllocateData(jl));
 				IF withList THEN
 					NEW(idL); idL.ref := idRef; idL.type := joinList; idL.next := list;
@@ -1300,19 +1310,23 @@ MODULE DuniterBlockchain;
 				INC(i);
 				NEW(idP);
 				ScanS(ssA, ':', idP.ref, i);
+				SkipS(ssA, ':', i);
+				ScanS(ssA, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 109);
 				SkipS(ssA, '"', i);
 				IF ssA[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 106);
+				b := idPubT.Search(idP); ASSERT(b, 110);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
 				IF withList THEN
-					NEW(idL); idL.ref := idRef; idL.aux := id.block_number;
+					NEW(idL); idL.ref := idRef; idL.aux := id.block_number; idL.auxL := id.expires_on;
 					idL.type := activeList; idL.next := list;
 					list := listMan.WriteAllocateData(idL);
 				END;
-				Strings.StringToInt(nb, id.block_number, res); ASSERT(res = 0, 107);
+				Strings.StringToInt(nb, id.block_number, res); ASSERT(res = 0, 111);
+				b := TimeOf(n, id.expires_on, tt); ASSERT(b, 112);
+				INC(id.expires_on, pars.msValidity);
 				idMan.WriteData(idRef, id);
 			END;
 			i := 1;
@@ -1324,7 +1338,7 @@ MODULE DuniterBlockchain;
 				IF ssL[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 108);
+				b := idPubT.Search(idP); ASSERT(b, 113);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
 				IF withList THEN
@@ -1333,13 +1347,13 @@ MODULE DuniterBlockchain;
 				ELSE
 					idMan.EraseData(idRef);
 				END;
-				b := idPubT.Erase(idP); ASSERT(b, 109);
+				b := idPubT.Erase(idP); ASSERT(b, 114);
 				NEW(idU); idU.c := id.uid;
-				b := idUidT.Erase(idU); ASSERT(b, 110);
-				b := joinAndLeaveT.Search(idP); ASSERT(b, 111);
+				b := idUidT.Erase(idU); ASSERT(b, 115);
+				b := joinAndLeaveT.Search(idP); ASSERT(b, 116);
 				jlRef := joinAndLeaveT.ReadValue();
 				jl := joinAndLeaveMan.ReadData(jlRef)(JoinAndLeave);
-				Strings.StringToInt(nb, jl.leavingBlock, res); ASSERT(res = 0, 112);
+				Strings.StringToInt(nb, jl.leavingBlock, res); ASSERT(res = 0, 117);
 				joinAndLeaveMan.WriteData(jlRef, jl);
 				
 				(* Remove certifications from and to suppressed identities *)
@@ -1357,21 +1371,21 @@ MODULE DuniterBlockchain;
 							certMan.EraseData(cRef);
 						END;
 						idP2 := ind.CurrentKey()(PubKey);
-						b := certToT.Search(idP2); ASSERT(b, 113);
+						b := certToT.Search(idP2); ASSERT(b, 118);
 						ind2Ref := certToT.ReadValue();
 						ind2 := database.OpenIndex(ind2Ref, pubKeyMan, pubKeyFac);
-						b := ind2.Erase(idP); ASSERT(b, 114);
+						b := ind2.Erase(idP); ASSERT(b, 119);
 						b := ind2.NumberOfKeys() = 0;
 						ind2.Close;
 						IF b THEN
 							database.DeleteIndex(ind2Ref);
-							b := certToT.Erase(idP2); ASSERT(b, 115);
+							b := certToT.Erase(idP2); ASSERT(b, 120);
 						END;
 						ind.Next;
 					END;
 					ind.Close;
 					database.DeleteIndex(indRef);
-					b := certFromT.Erase(idP); ASSERT(b, 116);
+					b := certFromT.Erase(idP); ASSERT(b, 1);
 				END;
 				IF certToT.Search(idP) THEN
 					indRef := certToT.ReadValue();
@@ -1380,31 +1394,32 @@ MODULE DuniterBlockchain;
 					ind.Next;
 					WHILE ind.PosSet() DO
 						idP2 := ind.CurrentKey()(PubKey);
-						b := certFromT.Search(idP2); ASSERT(b, 117);
+						b := certFromT.Search(idP2); ASSERT(b, 2);
 						ind2Ref := certFromT.ReadValue();
 						ind2 := database.OpenIndex(ind2Ref, pubKeyMan, pubKeyFac);
-						b := ind2.Erase(idP); ASSERT(b, 118);
+						b := ind2.Erase(idP); ASSERT(b, 3);
 						b := ind2.NumberOfKeys() = 0;
 						ind2.Close;
 						IF b THEN
 							database.DeleteIndex(ind2Ref);
-							b := certFromT.Erase(idP2); ASSERT(b, 119);
+							b := certFromT.Erase(idP2); ASSERT(b, 4);
 						END;
 						ind.Next;
 					END;
 					ind.Close;
 					database.DeleteIndex(indRef);
-					b := certToT.Erase(idP); ASSERT(b, 120);
+					b := certToT.Erase(idP); ASSERT(b, 5);
 				END;
 			END;
 		END Identities;
 	
 	(* Add certificatoins of one block in certFromT, certToT and certTimeT *)
-	PROCEDURE Certifications (withList: BOOLEAN; IN ss, nb, time: ARRAY OF CHAR);
+	PROCEDURE Certifications (withList: BOOLEAN; IN ss, nb: ARRAY OF CHAR);
 		
 		VAR
 			
 			i, n, res, bnb, pC: INTEGER;
+			exp: LONGINT;
 			b: BOOLEAN;
 			c: Certification;
 			idP: PubKey;
@@ -1413,6 +1428,7 @@ MODULE DuniterBlockchain;
 			hash: Hash;
 			ind: B.Index;
 			iK: IntKey;
+			s: ARRAY 11 OF CHAR;
 		
 		BEGIN (*Certifications*)
 			i := 1;
@@ -1421,13 +1437,15 @@ MODULE DuniterBlockchain;
 				NEW(c);
 				ScanS(ss, ':', c.from, i);
 				ScanS(ss, ':', c.to, i);
+				ScanS(ss, ':', s, i);
 				SkipS(ss, '"', i);
 				IF ss[i] # ']' THEN
 					INC(i);
 				END;
-				IF IdPub(c.from, uid, hash, bnb) & IdPub(c.to, uid, hash, bnb) THEN
+				IF IdPub(c.from, uid, hash, bnb, exp) & IdPub(c.to, uid, hash, bnb, exp) THEN
 					Strings.StringToInt(nb, c.block_number, res); ASSERT(res = 0, 100);
-					Strings.StringToLInt(time, c.expires_on, res); ASSERT(res = 0, 101);
+					Strings.StringToInt(s, n, res); ASSERT(res = 0, 101);
+					b := TimeOf(n, c.expires_on, exp); ASSERT(b, 102);
 					INC(c.expires_on, pars.sigValidity);
 					pC := certMan.WriteAllocateData(c);
 					NEW(idP);
@@ -1440,7 +1458,7 @@ MODULE DuniterBlockchain;
 					END;
 					idP.ref := c.to;
 					ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
-					b := ind.SearchIns(idP); ASSERT(~b, 102);
+					b := ind.SearchIns(idP); ASSERT(~b, 103);
 					ind.WriteValue(pC);
 					ind.Close;
 					IF certToT.SearchIns(idP) THEN
@@ -1451,11 +1469,11 @@ MODULE DuniterBlockchain;
 					END;
 					idP.ref := c.from;
 					ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
-					b := ind.SearchIns(idP); ASSERT(~b, 103);
+					b := ind.SearchIns(idP); ASSERT(~b, 104);
 					ind.WriteValue(pC);
 					ind.Close;
 					NEW(iK); iK.ref := pC;
-					b := certTimeT.SearchIns(iK); ASSERT(~b, 104);
+					b := certTimeT.SearchIns(iK); ASSERT(~b, 105);
 					IF withList THEN
 						NEW(cL); cL.ref := pC; cL.type := certAddList; cL.next := list;
 						list := listMan.WriteAllocateData(cL);
@@ -1571,6 +1589,7 @@ MODULE DuniterBlockchain;
 					|activeList:
 						id := idMan.ReadData(l.ref)(Identity);
 						id.block_number := l.aux;
+						id.expires_on := l.auxL;
 						idMan.WriteData(l.ref, id);
 					|leaveList:
 						id := idMan.ReadData(l.ref)(Identity);
@@ -1656,7 +1675,7 @@ MODULE DuniterBlockchain;
 				ELSE
 					Identities(withList, cur.fields[3], cur.fields[7], cur.fields[5], cur.fields[0], tt);
 				END;
-				Certifications(withList, cur.fields[6], cur.fields[0], cur.fields[1]);
+				Certifications(withList, cur.fields[6], cur.fields[0]);
 			END;
 			IF t.rows > 0 THEN
 				t.Read(t.rows - 1, cur);

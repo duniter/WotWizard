@@ -550,7 +550,7 @@ MODULE Duniter0Sandbox;
 			hE: IdHashE;
 			e: A.Elem;
 			b: BOOLEAN;
-			now: LONGINT;
+			now, exp: LONGINT;
 			hash: Hash;
 			r: S.Row;
 			pub: Pubkey;
@@ -568,7 +568,7 @@ MODULE Duniter0Sandbox;
 			A.New(idHashT);
 			FOR i := 0 TO t.rows - 1 DO
 				t.Read(i, cur);
-				IF ((cur.revocation_sig = NIL) OR (cur.revocation_sig$ = "")) & (now <= cur.expires_on) & ~B.IdUid(cur.uid, pub, hash, bnb) & ~B.IdPub(cur.pubkey, uid, hash, bnb) THEN
+				IF ((cur.revocation_sig = NIL) OR (cur.revocation_sig$ = "")) & (now <= cur.expires_on) & ~B.IdUid(cur.uid, pub, hash, bnb, exp) & ~B.IdPub(cur.pubkey, uid, hash, bnb, exp) THEN
 					NEW(id);
 					b := ExtractBlockId(cur.buid, id.bid, hash); ASSERT(b, 104);
 					REPEAT
@@ -685,7 +685,7 @@ MODULE Duniter0Sandbox;
 			A.New(certFromT); A.New(certToT);
 			FOR i := 0 TO t.rows - 1 DO
 				t.Read(i, cur);
-				IF ~B.Cert(cur.from, cur.to, bnb, exp) & (now <= cur.expires_on) & (IdHash(cur.toHash, pubkey, uid, exp) OR B.IdPub(cur.to, uid, hash, bnb) & (hash = cur.toHash)) THEN (* If already in BC, no more in sandbox *)
+				IF ~B.Cert(cur.from, cur.to, bnb, exp) & (now <= cur.expires_on) & (IdHash(cur.toHash, pubkey, uid, exp) OR B.IdPub(cur.to, uid, hash, bnb, exp) & (hash = cur.toHash)) THEN (* If already in BC, no more in sandbox *)
 					NEW(c);
 					c.from := cur.from;
 					c.to := cur.to;

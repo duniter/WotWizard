@@ -1,0 +1,59 @@
+WotWizard : Mode d'emploi
+Version autonome
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
+
+WotWizard construit, à partir de la chaîne de blocs et de la piscine de Duniter, une prédiction des futures entrées des candidats dans la toile de confiance (Wot) de Duniter. Il utilise pour cela une simulation du mécanisme de Duniter. Lorsque plusieurs dates d'entrées sont possibles pour la même personne, chacune est affectée d'une probabilité. La liste affichée est mise à jour automatiquement toutes les cinq minutes, et tout changement est signalé par une marque visible.
+Comment l'utiliser ?
+Ce programme doit être utilisé sur un ordinateur faisant tourner un nœud Duniter.
+Ce programme tourne nativement sous Windows. Si votre ordinateur tourne sous Linux, installez d'abord "wine", et, dans un terminal, lancez "winecfg" et configurez les lecteurs de façon à pouvoir atteindre sans problème la base de données de Duniter (voir ci-dessous).
+Copiez le fichier "WotWizard.exe" dans un répertoire vide, placez la dll Windows "sqlite3.dll" dans le même répertoire et lancez WotWizard en double-cliquant dessus ou avec la commande en ligne :
+	
+	$wine WotWizard.exe
+
+La dll peut être téléchargée à l'adresse :
+	
+	https://www.sqlite.org/2015/sqlite-dll-win32-x86-3081002.zip
+Choisissez votre langue dans "Édition -> Préférences...".
+Ouvrez WotWizard avec "Duniter -> Nouvelle fenêtre WotWizard". Lorsque cette commande est utilisée pour la première fois, WotWizard demande où se trouve la base de données de Duniter. Une première fenêtre s'ouvre avec le texte "Ouvrez la base de données Duniter". Cliquez sur "OK". Une autre fenêtre s'ouvre alors et permet de naviguer jusqu'au fichier de la base. Par exemple, sur Linux, le chemin de ce fichier est :
+	
+	~/.config/duniter/duniter_default/duniter.db
+Lors de la première ouverture de WotWizard, une partie des données de Duniter sont recopiées pour accélérer ensuite leur traitement. Cette opération peut être assez longue, et on peut voir, en bas de l'application, défiler les numéros des blocs copiés.
+Vous pouvez :
+	- choisir la façon dont la liste est affichée (par noms ou par dates)
+	- mettre à jour la liste manuellement (elle est mise à jour automatiquement toutes les cinq minutes)
+Lorque la liste change, deux astérisques apparaissent, une de chaque côté du titre, et un nouveau bouton "Vérifier" est créé. En cliquant sur le bouton, on fait disparaître les marques et on peut comparer les anciennes et nouvelles listes (par dates et métadonnées) en cliquant sur le bouton "Comparer", ou en utilsant la commande de menu "Èdition -> Comparer les textes". 
+Vous pouvez changer la mémoire maximale allouée par WotWizard. Plus elle est grande, plus les prévisions de WotWizard seront précises, mais si elle est trop grande, WotWizard peut se bloquer. Par défaut, elle vaut 800000000 octets. Pour la changer, utilisez la commande de menu "Édition -> Changer la taille maximale de la pile".
+Dans de rares cas, on peut vouloir changer le chemin vers la base de données de Duniter. Utiliser alors "Édition -> Changer la base de données Duniter".
+On peut aussi, rarement, vouloir remettre à zéro la base de données que WotWizard construit à partir de celle de Duniter. Dans ce cas, on utilise "Édition -> Réinitialiser la base de données de WotWizard". Attention : cette opération peut être longue.
+Explorateur de toile de confiance
+Ouvrez l'explorateur avec la commande de menu "Toile de confiance -> chercher une identité".
+
+Voir la carte de l'explorateur.
+On peut chercher n'importe quelle identité dans la chaîne de blocs ou dans la piscine en tapant ses premiers caractères ou les premiers caractères de sa clé publique dans le premier champ en haut de la fenêtre et en cliquant sur le bouton "Chercher". Les identités correspondantes s'affichent dans la liste en bas de la fenêtre : choisissez celle qui vous intéresse. Des informations apparaissent dans le cadre "Identité", ainsi que les certifications reçues et envoyées dans le cadre "Certifications". Il est possible de copier l'identité d'un émetteur ou d'un récepteur de certification dans le champ de recherche en cliquant sur bouton "Copier" correspondant.
+Toutes les dates affichées sont des dates limites d'expiration, sauf la date de disponibilité de la prochaine certification émise, dans le champ "Disponibilité" ; si cette dernière est déjà disponible, elle est précédée d'un point d'exclamation (!).
+Outils
+Paramètres : Affiche les paramètres de base de la monnaie.
+Imprimer les identités : Affiche toutes les identités présentes dans la chaîne de blocs, avec leurs clés publiques et la date de leurs derniers renouvellements de membre.
+Certifications depuis... : Affiche toutes les certifications présentes dans la chaîne de blocs, triées par émetteurs, avec leurs dates d'inscription.
+Certifications vers... : Affiche toutes les certifications présentes dans la chaîne de blocs, triées par récepteurs, avec leurs dates d'inscription.
+Membres référents : Affiche les identités des membres référents.
+Piscine : Affiche les identités et les certifications présentes dans la piscine ;
+					1) Identités triées par leurs hashs, avec hash, clé publique, id et date d'expiration
+					2) Identités triées par leurs clés publiques, avec clé publique et hash
+					3) Identités triées par leurs ids, avec id et hash
+					4) Certifications triées par les clés publiques de leurs émetteurs, avec date d'expiration
+					5) Certifications triées par les clés publiques de leurs récepteurs, avec date d'expiration
+Horloge : Donne l'heure UTC+0 de sa dernière mise à jour, ainsi que les champs "medianTime" et "Time" du bloc précédent.
+Nombre de membres : Affiche la liste des numéros des jours et des nombres de membres corrspondants depuis le début de la monnaie.
+Certificateurs : Affiche les nombres de certifications par émetteur dans la chaîne de blocs, triés par nombres de certifications émises.
+Dates : Transforme les horodatages de la chaîne de blocs en dates et heures.
+
+Use it and enjoy! - ¡Úsalos y disfrútalos! - Bonne utilisation - Приятного использованияn - Powodzenia - Viel Spaß
+
+Gérard Meunier

@@ -126,6 +126,12 @@ MODULE DuniterWWViews;
 				IF p1.date > p2.date THEN
 					RETURN A.gt;
 				END;
+				IF ~p1.after & p2.after THEN
+					RETURN A.lt;
+				END;
+				IF p1.after & ~p2.after THEN
+					RETURN A.gt;
+				END;
 				RETURN BA.CompP(p1.id, p2.id);
 			END;
 		END Compare;
@@ -228,6 +234,7 @@ MODULE DuniterWWViews;
 			e: A.Elem;
 			l: INTEGER;
 			date: LONGINT;
+			after: BOOLEAN;
 		
 		BEGIN (*ByDates*)
 			f.rider.SetAttr(TextModels.NewSize(f.rider.attr, corpusSize));
@@ -248,8 +255,8 @@ MODULE DuniterWWViews;
 			e := occurD.Next(NIL);
 			WHILE e # NIL DO
 				WITH e: PropDate DO
-					IF e.date # date THEN
-						date := e.date;
+					IF (e.date # date) OR (e.after # after) THEN
+						date := e.date; after := e.after;
 						f.rider.SetAttr(TextModels.NewSize(f.rider.attr, headSize));
 						f.WriteLn; f.WritePara;
 						IF e.date = BA.never THEN

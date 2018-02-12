@@ -28,7 +28,7 @@ MODULE Duniter0IdentitiesPrint;
 			bnb: INTEGER;
 			ok, b: BOOLEAN;
 			n: INTEGER;
-			mt, t: LONGINT;
+			mt, t, exp: LONGINT;
 			s: BA.DateTime;
 			ss: Dialog.String;
 		
@@ -38,10 +38,13 @@ MODULE Duniter0IdentitiesPrint;
 			ok := B.IdNextPubkey(TRUE, pubkey);
 			WHILE ok DO
 				StdLog.String(pubkey); StdLog.Tab;
-				b := B.IdPub(pubkey, uid, hash, bnb); ASSERT(b);
+				b := B.IdPub(pubkey, uid, hash, bnb, exp); ASSERT(b);
 				StdLog.String(uid); StdLog.Tab;
 				b := B.TimeOf(bnb, mt, t); ASSERT(b);
 				BA.TimestampToString(mt, s);
+				StdLog.String(s);
+				StdLog.String(" -> ");
+				BA.TimestampToString(exp, s);
 				StdLog.String(s);
 				StdLog.Ln;
 				ok := B.IdNextPubkey(FALSE, pubkey);
@@ -52,10 +55,13 @@ MODULE Duniter0IdentitiesPrint;
 			WHILE ok DO
 				INC(n);
 				StdLog.String(uid); StdLog.Tab;
-				b := B.IdUid(uid, pubkey, hash, bnb); ASSERT(b);
+				b := B.IdUid(uid, pubkey, hash, bnb, exp); ASSERT(b);
 				StdLog.String(pubkey); StdLog.Tab;
 				b := B.TimeOf(bnb, mt, t); ASSERT(b);
 				BA.TimestampToString(mt, s);
+				StdLog.String(s);
+				StdLog.String(" -> ");
+				BA.TimestampToString(exp, s);
 				StdLog.String(s);
 				StdLog.Ln;
 				ok := B.IdNextUid(FALSE, uid);

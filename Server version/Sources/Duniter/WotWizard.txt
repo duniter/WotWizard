@@ -27,7 +27,7 @@ MODULE DuniterWotWizard;
 	
 	CONST
 		
-		maxStackLengthDef = 450000000; (* Default value for the greatest allowed allocated memory size  *)
+		maxStackLengthDef = 430000000; (* Default value for the greatest allowed allocated memory size  *)
 		
 		(* Sizes of different types *)
 		INS = SIZE(INTEGER);
@@ -223,6 +223,12 @@ MODULE DuniterWotWizard;
 				IF p1.date > p2.date THEN
 					RETURN A.gt;
 				END;
+				IF ~p1.after & p2.after THEN
+					RETURN A.lt;
+				END;
+				IF p1.after & ~p2.after THEN
+					RETURN A.gt;
+				END;
 				RETURN BA.CompP(p1.id, p2.id);
 			END;
 		END Compare;
@@ -312,7 +318,7 @@ MODULE DuniterWotWizard;
 				ok := pos.CertNextPos(from, to);
 				WHILE ok DO
 					b := B.Cert(from, to, block_number, exp); ASSERT(b, 100);
-					b := B.TimeOf(block_number, tm, t);
+					b := B.TimeOf(block_number, tm, t); ASSERT(b, 101);
 					d := MAX(d, tm);
 					ok := pos.CertNextPos(from, to);
 				END;
@@ -321,7 +327,7 @@ MODULE DuniterWotWizard;
 		END FixCertNextDate;
 	
 	(* Fix the disponibility dates of the elements of f, always after the current date *)
-PROCEDURE FileDates (f: File);
+	PROCEDURE FileDates (f: File);
 		
 		VAR
 			
@@ -820,7 +826,7 @@ PROCEDURE FileDates (f: File);
 			from, to: B.Pubkey;
 			toHash, hash: S.Hash;
 			i, j, bnb, nbCertifs, princCertif: INTEGER;
-			exp, date, mt, t: LONGINT;
+			exp, exp2, date, mt, t: LONGINT;
 			d: Dossier;
 			c: Certif;
 			uid: B.String;
@@ -840,7 +846,7 @@ PROCEDURE FileDates (f: File);
 					REPEAT
 						okP := pos.CertNextPos(from, toHash);
 						IF okP THEN
-							b := S.Cert(from, toHash, to, exp); ASSERT(b, 100);
+							b := S.Cert(from, toHash, to, exp) ; ASSERT(b, 100);
 							FixCertNextDate(from, date);
 							IF date <= exp THEN (* Not-expired certification *)
 								INC(nbCertifs);
@@ -865,7 +871,7 @@ PROCEDURE FileDates (f: File);
 					REPEAT
 						b := S.Cert(from, toHash, to, exp); ASSERT(b, 103);
 						NEW(c);
-						b := B.IdPub(from, c.from, hash, bnb); ASSERT(b, 104);
+						b := B.IdPub(from, c.from, hash, bnb, exp2); ASSERT(b, 104);
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
 						IF c.date <= c.limit THEN
@@ -880,10 +886,10 @@ PROCEDURE FileDates (f: File);
 			cNb := 0;
 			ok := S.CertNextTo(TRUE, pos);
 			WHILE ok DO
-				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) & B.IdPub(to, uid, hash, bnb) THEN
+				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) & B.IdPub(to, uid, hash, bnb, exp2) THEN
 					REPEAT
 						NEW(c);
-						b := B.IdPub(from, c.from, hash, bnb); ASSERT(b, 105);
+						b := B.IdPub(from, c.from, hash, bnb, exp2); ASSERT(b, 105);
 						c.to := uid;
 						FixCertNextDate(from, c.date);
 						c.limit := exp;

@@ -1,0 +1,60 @@
+WotWizard Manual
+Standalone version
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
+
+WotWizard builds, from the blockchain and sandbox of Duniter, a prediction of the future entries of candidates into the Duniter Web of Trust (WOT). It uses a simulation of the Duniter mechanism. When several possibilities may happen, each one is listed with its probabilities. The published lists are automatically updated every five minutes, and any change is signalled visually.
+
+How to use it?
+This program needs a Duniter node running on the same computer.
+This program runs natively on Windows. If your computer runs on Linux, install "wine" first, and, in a terminal, run "winecfg" and configure the drives to be sure that the Duniter database (see below) can be reached.
+Put the file "WotWizard.exe" into an empty directory, put the Windows dll "sqlite3.dll" into the same directory and run WotWizard with a double-click or with the line command:
+	
+	$wine WotWizard.exe
+
+The dll can be found at the address:
+	
+	https://www.sqlite.org/2015/sqlite-dll-win32-x86-3081002.zip
+Choose your language in "Edit -> Preferences...".
+Open WordWizard with "Duniter -> New WotWizard View". When this command is used for the first time, WotWizard asks you where the Duniter database lies. A first window pops up with the text "Choose Duniter Database". Click on "OK". Then, a new window lets you navigate to the database file. E.g. on Linux, the path of this file is:
+	
+	~/.config/duniter/duniter_default/duniter.db
+You can:
+	- choose the way the list is displayed (by names or by dates, or metadata)
+	- manually update the list (it's automatically updated every five minutes)
+After the first opening of WotWizard, a part of Duniter data is copied into a new database, to accelerate their future use. This operation may take a rather long time, and you'll can see, at the bottom of the application, the block numbers pass before your eyes.
+When the list has changed, two asterisks appear, one on each side of the title, and a new button "Check" is created. Click on the button to make the marks disappear. You can then compare the new and old lists (by Dates and Metadata) by clicking on the button "Compare", or by using the menu item "Edit -> Compare Texts".
+You can change the largest memory size in bytes (approximatively) WotWizard is allowed to allocate. The larger it is, the better are the previsions, but if it's too big, WotWizard may crash. By default, it's 800000000 bytes. You may change it with the menu command "Edit -> Change maximum stack length".
+In rare cases, you may want to change the path to the Duniter database. Use "Edit -> Change Duniter Database".
+You may, rarely too, want to reset the database WotWizard builds from Duniter. In this case, use "Edit -> Reset WotWizard Database". Warning: this operation may be long.
+Web of Trust Explorer
+Open the WoT Explorer with the menu command "Web of Trust -> Explorer".
+
+See the explorer map.
+You can search any identity in the blockchain or the sandbox by typing its first characters or the first characters of its public key into the first top field and by clicking on the "Search" button. The possible identities appear in the list at the bottom: choose the one you want look at. Some informations appear in the "Identity" frame, and the certifications, received and sent, in the "Certifications" frame. You can copy one of the sender or receiver identities in the Search field by clicking on the corresponding "Copy" button.
+All displayed dates are expiration dates, except the availability date of the next sent certification in the field "Availability" (if already available, this date comes after an exclamation mark "!").
+Tools
+Parameters: Display the basic parameters of the money.
+Print Identities: Display all identities in the blockchain with their public keys and last membership renewals.
+Certifications From...: Display all certifications in the blockchain, sorted by senders, with their inscription dates.
+Certifications To...: Display all certifications in the blockchain, sorted by receivers, with their inscription dates.
+Sentries: Display the identities of the sentries.
+Sandbox: Display identities and certifications in sandbox;
+					1) Identities sorted by hashes, with hash, public key, id & expiration date
+					2) Identities sorted by public keys, with public key & hash
+					3) Identities sorted by ids, with id & hash
+					4) Certifications sorted by senders' public keys
+					5) Certifications sorted by receivers' hashes with expiration date
+Clock: Give the UTC+0 time of its last update, the blockchain median time and time of the previous block.
+Members' Number: Give the list of day numbers and corresponding members' number since the beginning of the money.
+Certifiers: Give the number of certifications by sender in the blockchain, sorted by number of certifications.
+Dates: Translate timestamps of the blockchain to date and time strings.
+
+Use it and enjoy! - ¡Úsalos y disfrútalos! - Bonne utilisation - Приятного использованияn - Powodzenia - Viel Spaß
+
+Gérard Meunier

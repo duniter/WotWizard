@@ -55,9 +55,9 @@ MODULE Duniter0WotWizardPrint;
 			
 			s: BA.DateTime;
 			certifiers: POINTER TO ARRAY OF B.Pubkey;
-			j: INTEGER;
+			j, bnb: INTEGER;
+			exp: LONGINT;
 			b: BOOLEAN;
-			bnb: INTEGER;
 			percent: REAL;
 			hash: B.Hash;
 		
@@ -73,7 +73,7 @@ MODULE Duniter0WotWizardPrint;
 			IF d.certifs # NIL THEN
 				NEW(certifiers, LEN(d.certifs));
 				FOR j := 0 TO LEN(d.certifs) - 1 DO
-					b := B.IdUid(d.certifs[j](W.Certif).from, certifiers[j], hash, bnb); ASSERT(b);
+					b := B.IdUid(d.certifs[j](W.Certif).from, certifiers[j], hash, bnb, exp); ASSERT(b);
 				END;
 				percent := B.PercentOfSentries(certifiers);
 				fo.WriteRealForm(percent * 100, 16, 1, - 2, " ");
@@ -191,13 +191,14 @@ MODULE Duniter0WotWizardPrint;
 		END PrintPermutations;
 	
 	(* Print the entries sorted by dates *)
-	PROCEDURE ByDates* (fo: TextMappers.Formatter; occur: A.Tree);
+	PROCEDURE ByDates* (IN fo: TextMappers.Formatter; occur: A.Tree);
 		
 		VAR
 			
 			l, i: INTEGER;
 			e: A.Elem;
 			date: LONGINT;
+			after: BOOLEAN;
 			s: BA.DateTime;
 		
 		BEGIN (*ByDates*)
@@ -211,8 +212,8 @@ MODULE Duniter0WotWizardPrint;
 			e := occur.Next(NIL);
 			WHILE e # NIL DO
 				WITH e: W.PropDate DO
-					IF e.date # date THEN
-						date := e.date;
+					IF (e.date # date) OR (e.after # after) THEN
+						date := e.date; after := e.after;
 						fo.WriteString("    "); fo.WriteLn;
 						fo.WriteString("    ");
 						BA.TimestampToString(e.date, s);
@@ -237,7 +238,7 @@ MODULE Duniter0WotWizardPrint;
 		END ByDates;
 	
 	(* Print the entries sorted by names *)
-	PROCEDURE ByNames* (fo: TextMappers.Formatter; invOccur: A.Tree);
+	PROCEDURE ByNames* (IN fo: TextMappers.Formatter; invOccur: A.Tree);
 		
 		VAR
 			

@@ -27,7 +27,7 @@ MODULE Duniter0WotWizard;
 	
 	CONST
 		
-		maxStackLengthDef = 450000000; (* Default value for the greatest allowed allocated memory size  *)
+		maxStackLengthDef = 430000000; (* Default value for the greatest allowed allocated memory size  *)
 		
 		(* Sizes of different types *)
 		INS = SIZE(INTEGER);
@@ -247,6 +247,12 @@ MODULE Duniter0WotWizard;
 				IF p1.date > p2.date THEN
 					RETURN A.gt;
 				END;
+				IF ~p1.after & p2.after THEN
+					RETURN A.lt;
+				END;
+				IF p1.after & ~p2.after THEN
+					RETURN A.gt;
+				END;
 				RETURN BA.CompP(p1.id, p2.id);
 			END;
 		END Compare;
@@ -370,7 +376,7 @@ MODULE Duniter0WotWizard;
 				ok := pos.CertNextPos(from, to);
 				WHILE ok DO
 					b := B.Cert(from, to, block_number, exp); ASSERT(b, 100);
-					b := B.TimeOf(block_number, tm, t);
+					b := B.TimeOf(block_number, tm, t); ASSERT(b, 101);
 					d := MAX(d, tm);
 					ok := pos.CertNextPos(from, to);
 				END;
@@ -897,7 +903,7 @@ MODULE Duniter0WotWizard;
 			from, to: B.Pubkey;
 			toHash, hash: S.Hash;
 			i, j, bnb, nbCertifs, princCertif: INTEGER;
-			exp, date, mt, t: LONGINT;
+			exp, exp2, date, mt, t: LONGINT;
 			d: Dossier;
 			c: Certif;
 			uid: B.String;
@@ -916,7 +922,7 @@ MODULE Duniter0WotWizard;
 					REPEAT
 						okP := pos.CertNextPos(from, toHash);
 						IF okP THEN
-							b := S.Cert(from, toHash, to, exp); ASSERT(b, 100);
+							b := S.Cert(from, toHash, to, exp) ; ASSERT(b, 100);
 							FixCertNextDate(from, date);
 							IF date <= exp THEN (* Not-expired certification *)
 								INC(nbCertifs);
@@ -944,7 +950,7 @@ MODULE Duniter0WotWizard;
 					REPEAT
 						b := S.Cert(from, toHash, to, exp); ASSERT(b, 103);
 						NEW(c);
-						b := B.IdPub(from, c.from, hash, bnb); ASSERT(b, 104);
+						b := B.IdPub(from, c.from, hash, bnb, exp2); ASSERT(b, 104);
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
 						IF c.date <= c.limit THEN
@@ -959,10 +965,10 @@ MODULE Duniter0WotWizard;
 			cNb := 0;
 			ok := S.CertNextTo(TRUE, pos);
 			WHILE ok DO
-				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) & B.IdPub(to, uid, hash, bnb) THEN
+				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) & B.IdPub(to, uid, hash, bnb, exp2) THEN
 					REPEAT
 						NEW(c);
-						b := B.IdPub(from, c.from, hash, bnb); ASSERT(b, 105);
+						b := B.IdPub(from, c.from, hash, bnb, exp2); ASSERT(b, 105);
 						c.to := uid;
 						FixCertNextDate(from, c.date);
 						c.limit := exp;

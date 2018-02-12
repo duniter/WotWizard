@@ -39,13 +39,13 @@ MODULE Duniter0CertificationsPrint;
 			StdLog.String(s); StdLog.Ln; StdLog.Ln;
 			ok := B.IdNextUid(TRUE, uid);
 			WHILE ok DO
-				b := B.IdUid(uid, from, hash, bnb); ASSERT(b);
+				b := B.IdUid(uid, from, hash, bnb, exp); ASSERT(b);
 				IF B.CertFrom(from, pos) THEN
 					StdLog.String(uid); StdLog.String(" ->"); StdLog.Ln;
 					okP := pos.CertNextPos(from, to);
 					WHILE okP DO
 						b := B.Cert(from, to, block, exp); ASSERT(b);
-						b := B.IdPub(to, uid, hash, bnb); ASSERT(b);
+						b := B.IdPub(to, uid, hash, bnb, exp); ASSERT(b);
 						StdLog.Tab; StdLog.String(uid);
 						StdLog.Tab; 
 						b := B.TimeOf(block, mt, t);
@@ -80,13 +80,13 @@ MODULE Duniter0CertificationsPrint;
 			StdLog.String(s); StdLog.Ln; StdLog.Ln;
 			ok := B.IdNextUid(TRUE, uid);
 			WHILE ok DO
-				b := B.IdUid(uid, to, hash, bnb); ASSERT(b);
+				b := B.IdUid(uid, to, hash, bnb, exp); ASSERT(b);
 				IF B.CertTo(to, pos) THEN
 					StdLog.String(uid); StdLog.String(" <-"); StdLog.Ln;
 					okP := pos.CertNextPos(from, to);
 					WHILE okP DO
 						b := B.Cert(from, to, block, exp);
-						b := B.IdPub(from, uid, hash, bnb); ASSERT(b);
+						b := B.IdPub(from, uid, hash, bnb, exp); ASSERT(b);
 						StdLog.Tab; StdLog.String(uid);
 						StdLog.Tab; 
 						b := B.TimeOf(block, mt, t);
