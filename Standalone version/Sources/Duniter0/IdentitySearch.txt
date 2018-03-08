@@ -26,7 +26,7 @@ MODULE Duniter0IdentitySearch;
 		
 		maxItems = 100;
 		
-		nonEditableNb = 8;
+		nonEditableNb = 10;
 		
 		futureIcon = 'º';
 	
@@ -39,10 +39,24 @@ MODULE Duniter0IdentitySearch;
 		END;
 		
 		NonEditable* = ARRAY 2 * nonEditableNb OF Dialog.String;
+		
+		Ring = POINTER TO ABSTRACT RECORD
+			next, prev: Ring;
+			item: B.String;
+		END;
+		
+		RingHd = POINTER TO RECORD (Ring)
+			pos: Ring;
+		END;
+		
+		RingEl = POINTER TO RECORD (Ring)
+		END;
 	
 	VAR
 		
 		hint*: Dialog.Combo;
+		
+		ring: RingHd;
 		
 		identityNb-,
 		identityFutNb-: INTEGER;
@@ -54,7 +68,7 @@ MODULE Duniter0IdentitySearch;
 			sentry-,
 			calcDist*,
 			distanceOK-: BOOLEAN;
-			fields*: NonEditable; (* uid (0), pubkey (1), limit date (2), limit date of received cert (3), limit date of sent cert (4), hash (5), proportionOfSentries (6), availability (7) *)
+			fields*: NonEditable; (* uid (0), pubkey (1), limit date (2), limit date of received cert (3), limit date of sent cert (4), hash (5), proportionOfSentries (6), availability (7), inscriptionBlock (8), inscriptionDate (9) *)
 		END;
 		
 		receivedCertsNb-,
@@ -87,6 +101,76 @@ MODULE Duniter0IdentitySearch;
 				RETURN A.eq;
 			END;
 		END Compare;
+	
+	PROCEDURE InitRing (OUT ring: RingHd);
+		
+		BEGIN (*InitRing*)
+			NEW(ring);
+			ring.next := ring; ring.prev := ring;
+			ring.pos := ring;
+			NEW(ring.item, 1); ring.item^ := "";
+		END InitRing;
+	
+	PROCEDURE (ring: RingHd) First (OUT item: POINTER TO ARRAY OF CHAR), NEW;
+		
+		BEGIN (*First*)
+			ring.pos := ring;
+			item := ring.item;
+		END First;
+	
+	PROCEDURE (ring: RingHd) BackEmpty(): BOOLEAN, NEW;
+		
+		BEGIN (*BackEmpty*)
+			RETURN ring.pos = ring;
+		END BackEmpty;
+	
+	PROCEDURE (ring: RingHd) ForthEmpty(): BOOLEAN, NEW;
+		
+		BEGIN (*ForthEmpty*)
+			RETURN ring.pos.next = ring;
+		END ForthEmpty;
+	
+	PROCEDURE (ring: RingHd) Push (IN item: ARRAY OF CHAR), NEW;
+		
+		VAR
+			
+			r: RingEl;
+		
+		BEGIN (*Push*)
+			NEW(r);
+			r.next := ring; r.prev := ring.pos;
+			ring.prev := r; ring.pos.next := r;
+			ring.pos := r;
+			NEW(r.item, LEN(item$) + 1); r.item^ := item$;
+		END Push;
+	
+	PROCEDURE (ring: RingHd) Change (IN item: ARRAY OF CHAR), NEW;
+		
+		BEGIN (*Change*)
+			NEW(ring.pos.item, LEN(item$) + 1); ring.pos.item^ := item$;
+		END Change;
+	
+	PROCEDURE (ring: RingHd) Back (OUT item: POINTER TO ARRAY OF CHAR): BOOLEAN, NEW;
+		
+		BEGIN (*Back*)
+			IF ring.pos = ring THEN
+				RETURN FALSE;
+			END;
+			ring.pos := ring.pos.prev;
+			item := ring.pos.item;
+			RETURN TRUE;
+		END Back;
+	
+	PROCEDURE (ring: RingHd) Forth (OUT item: POINTER TO ARRAY OF CHAR): BOOLEAN, NEW;
+		
+		BEGIN (*Forth*)
+			IF ring.pos.next = ring THEN
+				RETURN FALSE;
+			END;
+			ring.pos := ring.pos.next;
+			item := ring.pos.item;
+			RETURN TRUE;
+		END Forth;
 	
 	PROCEDURE UpdateCombo (VAR c: Dialog.Combo; maxItems: INTEGER);
 		
@@ -378,12 +462,12 @@ MODULE Duniter0IdentitySearch;
 			identity.fields[7] := identity.fields[6];
 		END Certs;
 	
-	PROCEDURE Get (IN hash: S.Hash; IN uid: ARRAY OF CHAR; OUT pubkey, date: ARRAY OF CHAR; OUT member: BOOLEAN);
+	PROCEDURE Get (IN hash: S.Hash; IN uid: ARRAY OF CHAR; OUT bloc, blocDate, pubkey, limitDate: ARRAY OF CHAR; OUT member: BOOLEAN);
 		
 		VAR
 			
-			bloc: INTEGER;
-			exp: LONGINT;
+			bnb: INTEGER;
+			exp, mt, t: LONGINT;
 			uid2: BA.String;
 			p: B.Pubkey;
 			h: S.Hash;
@@ -391,13 +475,20 @@ MODULE Duniter0IdentitySearch;
 			b: BOOLEAN;
 		
 		BEGIN (*Get*)
-			member := B.IdUid(uid, p, h, bloc, exp);
-			IF ~member THEN
+			member := B.IdUid(uid, p, h, bnb, exp);
+			IF member THEN
+				Strings.IntToString(bnb, bloc);
+				b := B.TimeOf(bnb, mt, t); ASSERT(b);
+				BA.TimestampToString(mt, d);
+			ELSE
 				b := S.IdHash(hash, p, uid2, exp); ASSERT(b);
+				bloc := "";
+				d := "";
 			END;
+			blocDate := d$;
 			BA.TimestampToString(exp, d);
 			pubkey := p$;
-			date := d$;
+			limitDate := d$;
 		END Get;
 	
 	PROCEDURE NotTooFar (member: BOOLEAN; OUT proportionOfSentries: ARRAY OF CHAR): BOOLEAN;
@@ -487,12 +578,13 @@ MODULE Duniter0IdentitySearch;
 			hash: B.Hash;
 		
 		BEGIN (*Fix*)
+			ring.Change(identity.fields[0]);
 			hash := identityHash[identityList.index];
 			identity.fields[10] := hash$;
-			Get(hash, identity.fields[0], identity.fields[2], identity.fields[4], identity.member);
-			Certs(hash, identity.fields[2]$, identity.member);
+			Get(hash, identity.fields[0], identity.fields[16], identity.fields[18], identity.fields[2], identity.fields[4], identity.member);
 			identity.sentry := identity.member & B.IsSentry(identity.fields[2]$);
 			FixCertNextDate(identity.member, identity.fields[2]$, identity.fields[14]);
+			Certs(hash, identity.fields[2]$, identity.member);
 			IF identity.calcDist THEN
 				identity.distanceOK := NotTooFar(identity.member, identity.fields[12]);
 			END;
@@ -502,7 +594,7 @@ MODULE Duniter0IdentitySearch;
 			Dialog.Update(identity);
 		END Fix;
 	
-	PROCEDURE Search*;
+	PROCEDURE DoSearch;
 		
 		VAR
 			
@@ -510,9 +602,14 @@ MODULE Duniter0IdentitySearch;
 			e: A.Elem;
 			i: INTEGER;
 		
-		BEGIN (*Search*)
-			UpdateCombo(hint, maxItems);
-			t := Find(hint.item, identityNb, identityFutNb);
+		BEGIN (*DoSearch*)
+			IF ring.BackEmpty() THEN
+				A.New(t);
+				identityNb := 0; identityFutNb := 0;
+			ELSE
+				UpdateCombo(hint, maxItems);
+				t := Find(hint.item, identityNb, identityFutNb);
+			END;
 			Dialog.UpdateInt(identityNb);
 			Dialog.UpdateInt(identityFutNb);
 			identityList.SetLen(identityNb + identityFutNb);
@@ -562,7 +659,69 @@ MODULE Duniter0IdentitySearch;
 				FilterItem(identity.fields[0]);
 				Fix;
 			END;
+		END DoSearch;
+	
+	PROCEDURE Search*;
+		
+		BEGIN (*Search*)
+			ring.Push(hint.item);
+			DoSearch;
 		END Search;
+	
+	PROCEDURE First*;
+		
+		VAR
+			
+			item: POINTER TO ARRAY OF CHAR;
+		
+		BEGIN (*First*)
+			IF ~ring.BackEmpty() THEN
+				ring.First(item);
+				hint.item := item$;
+				Dialog.Update(hint);
+				DoSearch;
+			END;
+		END First;
+	
+	PROCEDURE Backward*;
+		
+		VAR
+			
+			item: POINTER TO ARRAY OF CHAR;
+		
+		BEGIN (*Backward*)
+			IF ring.Back(item) THEN
+				hint.item := item$;
+				Dialog.Update(hint);
+				DoSearch;
+			END;
+		END Backward;
+	
+	PROCEDURE Forward*;
+		
+		VAR
+			
+			item: POINTER TO ARRAY OF CHAR;
+		
+		BEGIN (*Forward*)
+			IF ring.Forth(item) THEN
+				hint.item := item$;
+				Dialog.Update(hint);
+				DoSearch;
+			END;
+		END Forward;
+	
+	PROCEDURE BackwardGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*BackwardGuard*)
+			par.disabled := ring.BackEmpty();
+		END BackwardGuard;
+	
+	PROCEDURE ForwardGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*ForwardGuard*)
+			par.disabled := ring.ForthEmpty();
+		END ForwardGuard;
 	
 	PROCEDURE DistanceGuard* (VAR par: Dialog.Par);
 		
@@ -662,4 +821,5 @@ MODULE Duniter0IdentitySearch;
 	
 	BEGIN (*Duniter0IdentitySearch*)
 		identity.calcDist := TRUE;
+		InitRing(ring);
 	END Duniter0IdentitySearch.

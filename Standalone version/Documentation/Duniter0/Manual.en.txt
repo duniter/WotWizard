@@ -37,7 +37,7 @@ Open the WoT Explorer with the menu command "Web of Trust -> Explorer".
 
 See the explorer map.
 You can search any identity in the blockchain or the sandbox by typing its first characters or the first characters of its public key into the first top field and by clicking on the "Search" button. The possible identities appear in the list at the bottom: choose the one you want look at. Some informations appear in the "Identity" frame, and the certifications, received and sent, in the "Certifications" frame. You can copy one of the sender or receiver identities in the Search field by clicking on the corresponding "Copy" button.
-All displayed dates are expiration dates, except the availability date of the next sent certification in the field "Availability" (if already available, this date comes after an exclamation mark "!").
+Displayed dates are member's registration date into the blockchain, expiration dates, of member's membership and of her certifications, and the availability date of the next sent certification in the field "Availability" (if already available, this date comes after an exclamation mark "!").
 Tools
 Parameters: Display the basic parameters of the money.
 Print Identities: Display all identities in the blockchain with their public keys and last membership renewals.

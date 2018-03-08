@@ -36,7 +36,7 @@ Ouvrez l'explorateur avec la commande de menu "Toile de confiance -> chercher un
 
 Voir la carte de l'explorateur.
 On peut chercher n'importe quelle identité dans la chaîne de blocs ou dans la piscine en tapant ses premiers caractères ou les premiers caractères de sa clé publique dans le premier champ en haut de la fenêtre et en cliquant sur le bouton "Chercher". Les identités correspondantes s'affichent dans la liste en bas de la fenêtre : choisissez celle qui vous intéresse. Des informations apparaissent dans le cadre "Identité", ainsi que les certifications reçues et envoyées dans le cadre "Certifications". Il est possible de copier l'identité d'un émetteur ou d'un récepteur de certification dans le champ de recherche en cliquant sur bouton "Copier" correspondant.
-Toutes les dates affichées sont des dates limites d'expiration, sauf la date de disponibilité de la prochaine certification émise, dans le champ "Disponibilité" ; si cette dernière est déjà disponible, elle est précédée d'un point d'exclamation (!).
+Les dates affichées sont la date d'enregistrement du membre dans la chaîne de blocs, les dates limites d'expiration, pour l'inscription du membre et pour ses certifications, et la date de disponibilité de la prochaine certification émise dans le champ "Disponibilité" ; si cette dernière est déjà disponible, elle est précédée d'un point d'exclamation (!).
 Outils
 Paramètres : Affiche les paramètres de base de la monnaie.
 Imprimer les identités : Affiche toutes les identités présentes dans la chaîne de blocs, avec leurs clés publiques et la date de leurs derniers renouvellements de membre.

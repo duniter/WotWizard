@@ -19,9 +19,9 @@ MODULE Duniter0WotWizard;
 
 	IMPORT
 		
-		(**
+		(*
 		StdLog,
-		**)
+		*)
 		
 		A := UtilAvlTree, B := Duniter0Blockchain, S := Duniter0Sandbox, BA := Duniter0Basic;
 	
@@ -93,6 +93,7 @@ MODULE Duniter0WotWizard;
 		PubList = POINTER TO RECORD
 			next: PubList;
 			pub: Pubkey;
+			date: LONGINT;
 		END;
 		
 		(* The virtual stack elements (stored in a queue) used in the main procedure CalcPermutations and representing the tree of all possible permutations of Dossier(s) in the final order of the File f *)
@@ -359,6 +360,30 @@ MODULE Duniter0WotWizard;
 			RETURN g;
 		END CopyFile;
 	
+	PROCEDURE CalcPrinc (certifs: File; OUT princCertif: INTEGER);
+		
+		VAR
+			
+			certifiers: POINTER TO ARRAY OF B.Pubkey;
+			j, n, bnb: INTEGER;
+			ok, b: BOOLEAN;
+			h: B.Hash;
+			exp: LONGINT;
+		
+		BEGIN (*CalcPrinc*)
+			n := LEN(certifs);
+			princCertif := B.pars.sigQty - 1;
+			REPEAT
+				INC(princCertif);
+				NEW(certifiers, princCertif);
+				FOR j := 0 TO princCertif - 1 DO
+					b := B.IdUid(certifs[j](Certif).from, certifiers[j], h, bnb, exp); ASSERT(b, 100);
+				END;
+				ok := B.DistanceRuleOk(certifiers);
+			UNTIL ok OR (princCertif = n);
+			ASSERT(ok, 60);
+		END CalcPrinc;
+	
 	(* Fix the next possible date d of a certification from p *)
 	PROCEDURE FixCertNextDate (IN p: B.Pubkey; OUT d: LONGINT);
 		
@@ -428,7 +453,7 @@ MODULE Duniter0WotWizard;
 		END FileDates;
 	
 	(* Sort, by insertion, the end of f, starting at position i0; all the dates must have been fixed before *)
-	PROCEDURE SortAll (f: File; i0: INTEGER);
+	PROCEDURE SortAll (f: File; i0, critical: INTEGER; OUT modif: BOOLEAN);
 		
 		VAR
 			
@@ -458,12 +483,14 @@ MODULE Duniter0WotWizard;
 			END Less;
 		
 		BEGIN (*SortAll*)
+			modif := FALSE;
 			IF f # NIL THEN
 				FOR i := i0 + 1 TO LEN(f) - 1 DO
 					j := i; cdx := f[j];
 					WHILE (j > i0) & Less(cdx, f[j - 1]) DO (* No sentinel; inefficient *)
 						f[j] := f[j - 1];
 						DEC(j);
+						modif := modif OR (j = critical);
 					END;
 					f[j] := cdx;
 				END;
@@ -477,18 +504,22 @@ MODULE Duniter0WotWizard;
 			
 			i: INTEGER;
 			cd: CertOrDoss;
+			modif: BOOLEAN;
 		
 		BEGIN (*SortFile*)
 			IF f # NIL THEN
 				FOR i := i0 TO LEN(f) - 1 DO
 					cd := f[i];
 					WITH cd: Dossier DO
-						SortAll(cd.certifs, 0);
+						SortAll(cd.certifs, 0, cd.princCertif, modif);
+						IF modif THEN
+							CalcPrinc(cd.certifs, cd.princCertif);
+						END;
 					ELSE
 					END;
 				END;
 				FileDates(f, afterNow);
-				SortAll(f, i0);
+				SortAll(f, i0, 0, modif);
 			END;
 		END SortFile;
 	
@@ -611,8 +642,43 @@ MODULE Duniter0WotWizard;
 			END;
 		END Propagate;
 	
+	(* Sort by selection *)
+	PROCEDURE SortPubList (VAR c: PubList);
+		
+		VAR
+			
+			c0, c1, c2: PubList;
+		
+		PROCEDURE Least (c: PubList): PubList;
+			
+			VAR
+				
+				cc: PubList;
+			
+			BEGIN (*Least*)
+				cc := c; c := c.next;
+				WHILE c.next # NIL DO
+					IF c.next.date < cc.next.date THEN
+						cc := c;
+					END;
+					c := c.next;
+				END;
+				RETURN cc;
+			END Least;
+		
+		BEGIN (*SortPubList*)
+			NEW(c0); c0.next := c; c := c0;
+			WHILE c.next # NIL DO
+				c1 := Least(c);
+				c2 := c1.next; c1.next := c2.next;
+				c2.next := c.next; c.next := c2;
+				c := c2;
+			END;
+			c := c0.next;
+		END SortPubList;
+	
 	(* Say whether the list of certifiers' Pubkey(s) c verifies the Duniter's distance rule and gives, in proportionOfSentries the proportion of sentries members reachable in less than B.pars.stepMax steps  *)
-	PROCEDURE NotTooFar (c: PubList; n: INTEGER; OUT needed: INTEGER; OUT proportionOfSentries: REAL): BOOLEAN;
+	PROCEDURE NotTooFar (VAR c: PubList; n: INTEGER; OUT needed: INTEGER; OUT proportionOfSentries: REAL): BOOLEAN;
 		
 		VAR
 			
@@ -632,6 +698,7 @@ MODULE Duniter0WotWizard;
 				proportionOfSentries := B.PercentOfSentries(certifiers);
 				ok := proportionOfSentries >= B.pars.xpercent;
 			ELSE
+				SortPubList(c);
 				needed := B.pars.sigQty - 1;
 				REPEAT
 					INC(needed);
@@ -926,7 +993,7 @@ MODULE Duniter0WotWizard;
 							FixCertNextDate(from, date);
 							IF date <= exp THEN (* Not-expired certification *)
 								INC(nbCertifs);
-								NEW(cert); NEW(cert.pub); cert.pub^ := from;
+								NEW(cert); NEW(cert.pub); cert.pub^ := from; cert.date := date;
 								cert.next := certs; certs := cert;
 							END;
 						END;

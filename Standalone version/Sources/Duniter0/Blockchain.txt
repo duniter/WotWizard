@@ -39,7 +39,7 @@ MODULE Duniter0Blockchain;
 		
 		hashLen* = 64;
 		
-		secureGap = 6; (* Number of last blocks to be read again at every update, since they could have changed *)
+		secureGap = 100; (* Number of last blocks to be read again at every update, since they could have changed *)
 		
 		dBase = "Duniter0\DBase.data"; (* Name of the WotWizard database, in the WotWizard.exe directory *)
 		
@@ -115,12 +115,12 @@ MODULE Duniter0Blockchain;
 		
 		(* Chained list of the operations to be undone before every update *)
 		List = POINTER TO RECORD (B.Data)
+			dataType: BYTE;
 			next: INTEGER;
 			type: BYTE;
-			(* timeList -> Time; joinList, leaveList -> Identity; certAddList, certRemoveList -> Certification *)
-			ref,
-			aux: INTEGER;
-			auxL: LONGINT;
+			(* timeList -> Time; joinList, activeList, leaveList -> Identity; certAddList, certRemoveList -> Certification *)
+			ref: INTEGER;
+			aux: LONGINT;
 		END;
 		
 		ListFac = POINTER TO RECORD (B.DataFac) (* Factory of List *)
@@ -128,6 +128,7 @@ MODULE Duniter0Blockchain;
 		
 		(* Blocks and their times *)
 		Time = POINTER TO RECORD (B.Data)
+			dataType: BYTE;
 			bnb: INTEGER;
 			mTime,
 			time: LONGINT;
@@ -137,6 +138,7 @@ MODULE Duniter0Blockchain;
 		END;
 		
 		JoinAndLeave = POINTER TO RECORD (B.Data)
+			dataType: BYTE;
 			pubkey: Pubkey;
 			joiningBlock, (* Block numbers *)
 			leavingBlock: INTEGER;
@@ -146,6 +148,7 @@ MODULE Duniter0Blockchain;
 		END;
 		
 		Identity = POINTER TO RECORD (B.Data)
+			dataType: BYTE;
 			pubkey: Pubkey;
 			uid: String;
 			hash: Hash;
@@ -157,6 +160,7 @@ MODULE Duniter0Blockchain;
 		END;
 		
 		Certification = POINTER TO RECORD (B.Data)
+			dataType: BYTE;
 			from,
 			to: Pubkey;
 			block_number: INTEGER; (* Where the Certification is written *)
@@ -168,6 +172,7 @@ MODULE Duniter0Blockchain;
 		
 		(* Integer index key *)
 		IntKey = POINTER TO RECORD (B.Data)
+			dataType: BYTE;
 			ref: INTEGER;
 		END;
 		
@@ -179,6 +184,7 @@ MODULE Duniter0Blockchain;
 		
 		(* Pubkey index key *)
 		PubKey = POINTER TO RECORD (B.Data)
+			dataType: BYTE;
 			ref: Pubkey;
 		END;
 		
@@ -209,6 +215,15 @@ MODULE Duniter0Blockchain;
 		END;
 	
 	CONST
+		
+		(* Types of Data *)
+		listType = 1;
+		timeType = 2;
+		joinAndLeaveType = 3;
+		identityType = 4;
+		certificationType = 5;
+		intKeyType = 6;
+		pubKeyType = 7;
 		
 		minDelay = 2 * 60 * Services.resolution; (* Minimum delay between two updates *)
 		
@@ -279,6 +294,7 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (t: Time) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
+			t.dataType := r.InByte(); ASSERT(t.dataType = timeType, 100);
 			t.bnb := r.InInt();
 			t.mTime := r.InLInt();
 			t.time := r.InLInt();
@@ -287,6 +303,7 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (t: Time) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
+			t.dataType := timeType; w.OutByte(t.dataType);
 			w.OutInt(t.bnb);
 			w.OutLInt(t.mTime);
 			w.OutLInt(t.time);
@@ -306,6 +323,7 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (jl: JoinAndLeave) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
+			jl.dataType := r.InByte(); ASSERT(jl.dataType = joinAndLeaveType, 100);
 			r.InChars(jl.pubkey);
 			jl.joiningBlock := r.InInt();
 			jl.leavingBlock := r.InInt();
@@ -314,6 +332,7 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (jl: JoinAndLeave) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
+			jl.dataType := joinAndLeaveType; w.OutByte(jl.dataType);
 			w.OutChars(jl.pubkey);
 			w.OutInt(jl.joiningBlock);
 			w.OutInt(jl.leavingBlock);
@@ -333,6 +352,7 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (id: Identity) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
+			id.dataType := r.InByte(); ASSERT(id.dataType = identityType, 100);
 			r.InChars(id.pubkey);
 			NEW(id.uid, r.InCharsLen() + 1);
 			r.InChars(id.uid);
@@ -344,6 +364,7 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (id: Identity) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
+			id.dataType := identityType; w.OutByte(id.dataType);
 			w.OutChars(id.pubkey);
 			w.OutChars(id.uid);
 			w.OutChars(id.hash);
@@ -365,6 +386,7 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (c: Certification) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
+			c.dataType := r.InByte(); ASSERT(c.dataType = certificationType, 100);
 			r.InChars(c.from);
 			r.InChars(c.to);
 			c.block_number := r.InInt();
@@ -374,6 +396,7 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (c: Certification) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
+			c.dataType := certificationType; w.OutByte(c.dataType);
 			w.OutChars(c.from);
 			w.OutChars(c.to);
 			w.OutInt(c.block_number);
@@ -394,21 +417,21 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (l: List) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
+			l.dataType := r.InByte(); ASSERT(l.dataType = listType, 100);
 			l.next := r.InInt();
 			l.type := r.InByte();
 			l.ref := r.InInt();
-			l.aux := r.InInt();
-			l.auxL := r.InLInt();
+			l.aux := r.InLInt();
 		END Read;
 	
 	PROCEDURE (l: List) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
+			l.dataType := listType; w.OutByte(l.dataType);
 			w.OutInt(l.next);
 			w.OutByte(l.type);
 			w.OutInt(l.ref);
-			w.OutInt(l.aux);
-			w.OutLInt(l.auxL);
+			w.OutLInt(l.aux);
 		END Write;
 	
 	PROCEDURE (lf: ListFac) New (size: INTEGER): List;
@@ -425,12 +448,14 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (i: IntKey) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
+			i.dataType := r.InByte(); ASSERT(i.dataType = intKeyType, 100);
 			i.ref := r.InInt();
 		END Read;
 	
 	PROCEDURE (i: IntKey) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
+			i.dataType := intKeyType; w.OutByte(i.dataType);
 			w.OutInt(i.ref);
 		END Write;
 	
@@ -441,7 +466,7 @@ MODULE Duniter0Blockchain;
 			i: IntKey;
 		
 		BEGIN (*New*)
-			ASSERT((size = 0) OR (size = B.INS), 20);
+			ASSERT((size = 0) OR (size = B.BYS + B.INS), 20);
 			IF size = 0 THEN
 				RETURN NIL;
 			END;
@@ -452,12 +477,14 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (pub: PubKey) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
+			pub.dataType := r.InByte(); ASSERT(pub.dataType = pubKeyType, 100);
 			r.InChars(pub.ref);
 		END Read;
 	
 	PROCEDURE (pub: PubKey) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
+			pub.dataType := pubKeyType; w.OutByte(pub.dataType);
 			w.OutChars(pub.ref);
 		END Write;
 	
@@ -922,6 +949,7 @@ MODULE Duniter0Blockchain;
 				ind.Close;
 				RETURN TRUE;
 			END;
+			pos.posRef := -1;
 			RETURN FALSE;
 		END CertFrom;
 	
@@ -944,6 +972,7 @@ MODULE Duniter0Blockchain;
 				ind.Close;
 				RETURN TRUE;
 			END;
+			pos.posRef := -1;
 			RETURN FALSE;
 		END CertTo;
 	
@@ -956,6 +985,9 @@ MODULE Duniter0Blockchain;
 			n: INTEGER;
 		
 		BEGIN (*CertPosLen*)
+			IF pos.posRef < 0 THEN
+				RETURN 0;
+			END;
 			ind := database.OpenIndex(pos.posRef, pubKeyMan, pubKeyFac);
 			n := ind.NumberOfKeys();
 			ind.Close;
@@ -972,6 +1004,9 @@ MODULE Duniter0Blockchain;
 			c: Certification;
 		
 		BEGIN (*CertNextPos*)
+			IF pos.posRef < 0 THEN
+				RETURN FALSE;
+			END;
 			ind := database.OpenIndex(pos.posRef, pubKeyMan, pubKeyFac);
 			ind.SetCurrPos(pos.posCur);
 			ind.Next;
@@ -1085,7 +1120,7 @@ MODULE Duniter0Blockchain;
 			set, newSet: A.Tree;
 			sE: SentriesE;
 			e, ee, eee: A.Elem;
-			i, j, n: INTEGER;
+			i, n: INTEGER;
 			b: BOOLEAN;
 			pos: CertPos;
 			from, to: Pubkey;
@@ -1237,7 +1272,7 @@ MODULE Duniter0Blockchain;
 			b := timeT.SearchIns(i); ASSERT(~b, 103);
 			timeT.WriteValue(tRef);
 			IF withList THEN
-				NEW(tL); tL.ref := tRef; tL.type := timeList; tL.next := list;
+				NEW(tL); tL.next := list; tL.type := timeList; tL.ref := tRef; tL.aux := 0;
 				list := listMan.WriteAllocateData(tL);
 			END;
 			now := MAX(now, t.mTime);
@@ -1256,11 +1291,14 @@ MODULE Duniter0Blockchain;
 			id: Identity;
 			idP, idP2: PubKey;
 			idU: B.String;
-			idL: List;
+			idL, (* joinList, activeList, leaveList *)
 			cL: List; (* certRemoveList *)
 			ind, ind2: B.Index;
 			jl: JoinAndLeave;
 			cur: S.Row;
+			(**)
+			iK: IntKey;
+			(**)
 		
 		BEGIN (*Identities*)
 			i := 1;
@@ -1306,7 +1344,7 @@ MODULE Duniter0Blockchain;
 				b := joinAndLeaveT.SearchIns(idP); ASSERT(~b, 108);
 				joinAndLeaveT.WriteValue(joinAndLeaveMan.WriteAllocateData(jl));
 				IF withList THEN
-					NEW(idL); idL.ref := idRef; idL.type := joinList; idL.next := list;
+					NEW(idL); idL.next := list; idL.type := joinList; idL.ref := idRef; idL.aux := 0;
 					list := listMan.WriteAllocateData(idL);
 				END;
 			END;
@@ -1325,11 +1363,9 @@ MODULE Duniter0Blockchain;
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
 				IF withList THEN
-					NEW(idL); idL.ref := idRef; idL.aux := id.block_number; idL.auxL := id.expires_on;
-					idL.type := activeList; idL.next := list;
+					NEW(idL); idL.next := list; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
 					list := listMan.WriteAllocateData(idL);
 				END;
-				Strings.StringToInt(nb, id.block_number, res); ASSERT(res = 0, 111);
 				b := TimeOf(n, id.expires_on, tt); ASSERT(b, 112);
 				INC(id.expires_on, pars.msValidity);
 				idMan.WriteData(idRef, id);
@@ -1347,7 +1383,7 @@ MODULE Duniter0Blockchain;
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
 				IF withList THEN
-					NEW(idL); idL.ref := idRef; idL.type := leaveList; idL.next := list;
+					NEW(idL); idL.next := list; idL.type := leaveList; idL.ref := idRef; idL.aux := 0;
 					list := listMan.WriteAllocateData(idL);
 				ELSE
 					idMan.EraseData(idRef);
@@ -1362,6 +1398,7 @@ MODULE Duniter0Blockchain;
 				joinAndLeaveMan.WriteData(jlRef, jl);
 				
 				(* Remove certifications from and to suppressed identities *)
+				(*Faut-il enlever les certifications émises par les identités supprimées ?*)
 				IF certFromT.Search(idP) THEN
 					indRef := certFromT.ReadValue();
 					ind := database.OpenIndex(indRef, pubKeyMan, pubKeyFac);
@@ -1370,9 +1407,13 @@ MODULE Duniter0Blockchain;
 					WHILE ind.PosSet() DO
 						cRef := ind.ReadValue();
 						IF withList THEN
-							NEW(cL); cL.ref := cRef; cL.type := certRemoveList; cL.next := list;
+							NEW(cL); cL.next := list; cL.type := certRemoveList; cL.ref := cRef; cL.aux := 0;
 							list := listMan.WriteAllocateData(cL);
 						ELSE
+							(**)
+							NEW(iK); iK.ref := cRef;
+							b := certTimeT.Erase(iK); ASSERT(b);
+							(**)
 							certMan.EraseData(cRef);
 						END;
 						idP2 := ind.CurrentKey()(PubKey);
@@ -1480,7 +1521,7 @@ MODULE Duniter0Blockchain;
 					NEW(iK); iK.ref := pC;
 					b := certTimeT.SearchIns(iK); ASSERT(~b, 105);
 					IF withList THEN
-						NEW(cL); cL.ref := pC; cL.type := certAddList; cL.next := list;
+						NEW(cL); cL.next := list; cL.type := certAddList; cL.ref := pC; cL.aux := 0;
 						list := listMan.WriteAllocateData(cL);
 					END;
 				END;
@@ -1534,6 +1575,9 @@ MODULE Duniter0Blockchain;
 			b: BOOLEAN;
 			pC: INTEGER;
 			cL: List; (* certRemoveList *)
+			(**)
+			iK: IntKey;
+			(**)
 		
 		BEGIN (*RemoveExpiredCerts*)
 			NEW(c); c.expires_on := now; c.from := "";
@@ -1543,15 +1587,19 @@ MODULE Duniter0Blockchain;
 			certMan.EraseData(pC);
 			WHILE certTimeT.PosSet() DO
 				pC := certTimeT.CurrentKey()(IntKey).ref;
+				certTimeT.Next;
 				c := certMan.ReadData(pC)(Certification);
 				RemoveCert(c);
 				IF c.expires_on > secureNow THEN
-					NEW(cL); cL.ref := pC; cL.type := certRemoveList; cL.next := list;
+					NEW(cL); cL.next := list; cL.type := certRemoveList; cL.ref := pC; cL.aux := 0;
 					list := listMan.WriteAllocateData(cL);
 				ELSE
+					(**)
+					NEW(iK); iK.ref := pC;
+					b := certTimeT.Erase(iK); ASSERT(b);
+					(**)
 					certMan.EraseData(pC);
 				END;
-				certTimeT.Next;
 			END;
 		END RemoveExpiredCerts;
 	
@@ -1593,8 +1641,7 @@ MODULE Duniter0Blockchain;
 						b := joinAndLeaveT.Erase(p); ASSERT(b, 104);
 					|activeList:
 						id := idMan.ReadData(l.ref)(Identity);
-						id.block_number := l.aux;
-						id.expires_on := l.auxL;
+						id.expires_on := l.aux;
 						idMan.WriteData(l.ref, id);
 					|leaveList:
 						id := idMan.ReadData(l.ref)(Identity);
