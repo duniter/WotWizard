@@ -1,5 +1,7 @@
 BABEL UtilJson;
 
+
+
 DEFINITION
 
 digit =  ['0'-'9']  ;
@@ -20,7 +22,7 @@ rBracket = "]" ;
 lBrace = "{" ;
 rBrace = "}" ;
 
-string =  '"' ([#20H-#0FFFFH^'"','\'] | '\"' | '\\' | '\/' | '\b' | '\f' | '\n' | '\r' | '\t' | '\u' hexa<4,4>)* '"'  ;
+string =  '"' ([#20H-#0FFFFH^'"','\'] | '\"' {quotation mark} | '\\' {reverse solidus} | '\/' {solidus} | '\b' {backspace} | '\f' {formfeed} | '\n' {newline} | '\r' {carriage return} | '\t' {horizontal tab} | '\u' hexa<4,4> {unicode character})* '"'  ;
 number =  '-'? ('0' | ['1'-'9'] digit*) ('.' digit*)? (['E','e'] ['+','-']? digit*)?  ;
 
 DECLARATION

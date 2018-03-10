@@ -22,10 +22,10 @@ MODULE DuniterServer;
 	
 	CONST
 		
-		version = "2.2.0se";
+		version = "2.2.3se";
 		
 		rsrcDir = "Duniter/Rsrc"; (* Directory for the two following files *)
-		maxStackLengthName = "WW_Max_Stack.txt"; (* File containing the greatest allowed allocated memory size *)
+		parametersName = "Parameters.txt"; (* File containing the greatest allowed allocated memory size and the longest run time for W.CalcPermutations *)
 		runningName = "Running.odc"; (* File whose existence shows that WWServer.exe is running *)
 		
 		textMeta = "WWMeta.json"; (* Json file containing metadata *)
@@ -34,7 +34,8 @@ MODULE DuniterServer;
 	
 	VAR
 		
-		maxStackLength: LONGINT; (* Greatest allowed allocated memory size *)
+		maxSize, (* Greatest allowed allocated memory size *)
+		maxTime: LONGINT; (* Greatest allowed run time for W.CalcPermutations *)
 	
 	(* Write the metadata duration, f, cNb & dNb with the help of fo, in json format; duration is the computation duration, f is the DuniterWotWizard.File structure, cNb and dNb are respectively the numbers of internal certifications and of external dossiers *)
 	PROCEDURE WriteMeta (IN fo: TextMappers.Formatter; duration: LONGINT; f: W.File; cNb, dNb: INTEGER);
@@ -93,6 +94,8 @@ MODULE DuniterServer;
 						J.StartObject;
 						J.PushString(d.id);
 						J.BuildField("newcomer");
+						J.PushInteger(d.princCertif);
+						J.BuildField("main_certifs");
 						Strings.RealToStringForm(100 * d.proportionOfSentries, 16, 1, - 2, " ", s);
 						J.PushString(s);
 						J.BuildField("percent_of_sentries");
@@ -292,7 +295,7 @@ MODULE DuniterServer;
 			HostMenus.Exit;  (* End of WWServer.exe *)
 		END Start;
 	
-	PROCEDURE StoreMaxStackLength;
+	PROCEDURE StoreParameters;
 		
 		VAR
 			
@@ -302,15 +305,17 @@ MODULE DuniterServer;
 			t: TextModels.Model;
 			name: Files.Name;
 		
-		BEGIN (*StoreMaxStackLength*)
+		BEGIN (*StoreParameters*)
 			l := Files.dir.This(rsrcDir); L.log.Err(l.res, rsrcDir);
 			t := TextModels.dir.New();
 			f.ConnectTo(t);
-			f.WriteInt(maxStackLength);
-			name := maxStackLengthName;
+			f.WriteInt(maxSize);
+			f.WriteLn;
+			f.WriteInt(maxTime);
+			name := parametersName;
 			Views.Register(TextViews.dir.New(t), Views.dontAsk, l, name, BA.utf8Conv, res); 
 			L.log.Err(res, name);
-		END StoreMaxStackLength;
+		END StoreParameters;
 	
 	PROCEDURE Init;
 		
@@ -325,21 +330,26 @@ MODULE DuniterServer;
 		BEGIN (*Init*)
 			HostFiles.IgnoreAsk;
 			l := Files.dir.This(rsrcDir); L.log.Err(l.res, rsrcDir);
-			name := maxStackLengthName;
+			name := parametersName;
 			v := Views.Old(Views.dontAsk, l, name, BA.utf8Conv);
 			IF v = NIL THEN
-				maxStackLength := W.maxStackLength;
-				StoreMaxStackLength;
+				maxSize := W.maxSize;
+				maxTime := W.maxTime DIV Services.resolution;
+				StoreParameters;
 			ELSE
 				ASSERT(v IS TextViews.View, 100);
 				sc.ConnectTo(v(TextViews.View).ThisModel());
 				sc.Scan; ASSERT((sc.type = TextMappers.int) OR (sc.type = TextMappers.lint), 101);
-				maxStackLength := sc.lint;
-				W.ChangeMaxStackLength(maxStackLength);
+				maxSize := sc.lint;
+				sc.Scan; ASSERT((sc.type = TextMappers.int) OR (sc.type = TextMappers.lint), 101);
+				maxTime := sc.lint;
+				W.ChangeParameters(maxSize, maxTime * Services.resolution);
 			END;
 			L.log.Msg("Version " + version);
-			Strings.IntToString(maxStackLength, s);
-			L.log.Msg("Stack length limit for calculating entries: " + s);
+			Strings.IntToString(maxSize, s);
+			L.log.Msg("Memory size limit for calculating entries: " + s);
+			Strings.IntToString(maxTime, s);
+			L.log.Msg("Run time limit for calculating entries: " + s);
 			B.AddUpdateProc(StoreText);
 		END Init;
 	

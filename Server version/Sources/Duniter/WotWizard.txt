@@ -19,21 +19,24 @@ MODULE DuniterWotWizard;
 
 	IMPORT
 		
-		(**
-		StdLog,
-		**)
+		(*
+		L := StdLog,
+		*)
 		
 		A := UtilAvlTree, B := DuniterBlockchain, S := DuniterSandbox, BA := DuniterBasic, L := DuniterLog, Services, Strings;
 	
 	CONST
 		
-		maxStackLengthDef = 430000000; (* Default value for the greatest allowed allocated memory size  *)
+		maxSizeDef = 430000000; (* Default value for the greatest allowed allocated memory size  *)
+		maxTimeDef = 90 * Services.resolution; (* Default value for the greatest allowed run time for CalcPermutations  *)
 		
 		(* Sizes of different types *)
 		INS = SIZE(INTEGER);
 		LIS = SIZE(LONGINT);
 		RES = SIZE(REAL);
 		PTRS = SIZE(ANYPTR);
+		
+		unknownId = "***";
 	
 	TYPE
 		
@@ -56,7 +59,7 @@ MODULE DuniterWotWizard;
 		Dossier* = POINTER TO RECORD (CertOrDoss)
 			id-: B.String; (* Certified identity *)
 			pub: Pubkey;
-			princCertif: INTEGER; (* Rank of the certification whose entry date gives the entry date of the dossier (1 <= princCertif <= LEN(certifs) *)
+			princCertif-: INTEGER; (* Rank of the certification whose entry date gives the entry date of the dossier (1 <= princCertif <= LEN(certifs) *)
 			proportionOfSentries-: REAL; (* Proportion of sentries reachable through B.pars.stepMax steps *)
 			certifs-: File; (* Array of certifications *)
 		END;
@@ -91,6 +94,7 @@ MODULE DuniterWotWizard;
 		PubList = POINTER TO RECORD
 			next: PubList;
 			pub: Pubkey;
+			date: LONGINT;
 		END;
 		
 		(* The virtual stack elements (stored in a queue) used in the main procedure CalcPermutations and representing the tree of all possible permutations of Dossier(s) in the final order of the File f *)
@@ -117,7 +121,10 @@ MODULE DuniterWotWizard;
 	
 	VAR
 		
-		maxStackLength-: LONGINT; (* Maximum allowed virtual stack length for the execution of CalcPermutations *)
+		unknown: B.String;
+		
+		maxSize-: LONGINT; (* Maximum allowed memory size for the execution of CalcPermutations *)
+		maxTime-: LONGINT; (* Maximum allowed run time for the execution of CalcPermutations *)
 		(*
 		log: TextMappers.Formatter;
 		*)
@@ -301,6 +308,30 @@ MODULE DuniterWotWizard;
 			RETURN g;
 		END CopyFile;
 	
+	PROCEDURE CalcPrinc (certifs: File; OUT princCertif: INTEGER);
+		
+		VAR
+			
+			certifiers: POINTER TO ARRAY OF B.Pubkey;
+			j, n, bnb: INTEGER;
+			ok, b: BOOLEAN;
+			h: B.Hash;
+			exp: LONGINT;
+		
+		BEGIN (*CalcPrinc*)
+			n := LEN(certifs);
+			princCertif := B.pars.sigQty - 1;
+			REPEAT
+				INC(princCertif);
+				NEW(certifiers, princCertif);
+				FOR j := 0 TO princCertif - 1 DO
+					b := B.IdUid(certifs[j](Certif).from, certifiers[j], h, bnb, exp); ASSERT(b, 100);
+				END;
+				ok := B.DistanceRuleOk(certifiers);
+			UNTIL ok OR (princCertif = n);
+			ASSERT(ok, 60);
+		END CalcPrinc;
+	
 	(* Fix the next possible date d of a certification from p *)
 	PROCEDURE FixCertNextDate (IN p: B.Pubkey; OUT d: LONGINT);
 		
@@ -354,7 +385,7 @@ MODULE DuniterWotWizard;
 		END FileDates;
 	
 	(* Sort, by insertion, the end of f, starting at position i0; all the dates must have been fixed before *)
-	PROCEDURE SortAll (f: File; i0: INTEGER);
+	PROCEDURE SortAll (f: File; i0, critical: INTEGER; OUT modif: BOOLEAN);
 		
 		VAR
 			
@@ -379,12 +410,14 @@ MODULE DuniterWotWizard;
 			END Less;
 		
 		BEGIN (*SortAll*)
+			modif := FALSE;
 			IF f # NIL THEN
 				FOR i := i0 + 1 TO LEN(f) - 1 DO
 					j := i; cdx := f[j];
 					WHILE (j > i0) & Less(cdx, f[j - 1]) DO (* No sentinel; inefficient *)
 						f[j] := f[j - 1];
 						DEC(j);
+						modif := modif OR (j = critical);
 					END;
 					f[j] := cdx;
 				END;
@@ -398,18 +431,22 @@ MODULE DuniterWotWizard;
 			
 			i: INTEGER;
 			cd: CertOrDoss;
+			modif: BOOLEAN;
 		
 		BEGIN (*SortFile*)
 			IF f # NIL THEN
 				FOR i := i0 TO LEN(f) - 1 DO
 					cd := f[i];
 					WITH cd: Dossier DO
-						SortAll(cd.certifs, 0);
+						SortAll(cd.certifs, 0, cd.princCertif, modif);
+						IF modif THEN
+							CalcPrinc(cd.certifs, cd.princCertif);
+						END;
 					ELSE
 					END;
 				END;
 				FileDates(f);
-				SortAll(f, i0);
+				SortAll(f, i0, 0, modif);
 			END;
 		END SortFile;
 	
@@ -532,8 +569,43 @@ MODULE DuniterWotWizard;
 			END;
 		END Propagate;
 	
+	(* Sort by selection *)
+	PROCEDURE SortPubList (VAR c: PubList);
+		
+		VAR
+			
+			c0, c1, c2: PubList;
+		
+		PROCEDURE Least (c: PubList): PubList;
+			
+			VAR
+				
+				cc: PubList;
+			
+			BEGIN (*Least*)
+				cc := c; c := c.next;
+				WHILE c.next # NIL DO
+					IF c.next.date < cc.next.date THEN
+						cc := c;
+					END;
+					c := c.next;
+				END;
+				RETURN cc;
+			END Least;
+		
+		BEGIN (*SortPubList*)
+			NEW(c0); c0.next := c; c := c0;
+			WHILE c.next # NIL DO
+				c1 := Least(c);
+				c2 := c1.next; c1.next := c2.next;
+				c2.next := c.next; c.next := c2;
+				c := c2;
+			END;
+			c := c0.next;
+		END SortPubList;
+	
 	(* Say whether the list of certifiers' Pubkey(s) c verifies the Duniter's distance rule and gives, in proportionOfSentries the proportion of sentries members reachable in less than B.pars.stepMax steps *)
-	PROCEDURE NotTooFar (c: PubList; n: INTEGER; OUT needed: INTEGER; OUT proportionOfSentries: REAL): BOOLEAN;
+	PROCEDURE NotTooFar (VAR c: PubList; n: INTEGER; OUT needed: INTEGER; OUT proportionOfSentries: REAL): BOOLEAN;
 		
 		VAR
 			
@@ -544,6 +616,7 @@ MODULE DuniterWotWizard;
 		
 		BEGIN (*NotTooFar*)
 			ASSERT(n >= B.pars.sigQty, 20);
+			SortPubList(c);
 			needed := B.pars.sigQty - 1;
 			REPEAT
 				INC(needed);
@@ -565,6 +638,7 @@ MODULE DuniterWotWizard;
 		VAR
 			
 			ok: BOOLEAN;
+			tMax: LONGINT;
 			s: ARRAY 20 OF CHAR;
 		
 		(* Put into n.sets the set containing, as unique element, the list of entries in n.f *)
@@ -657,7 +731,7 @@ MODULE DuniterWotWizard;
 						Propagate(n.f, n.step, debug);
 						INC(n.step);
 					END;
-					ok := ok & (stackSize <= maxStackLength);
+					ok := ok & (stackSize <= maxSize) & (Services.Ticks() <= tMax);
 					IF (n.step >= LEN(n.f)) OR (n.f[n.step].date = BA.never) OR ~ok THEN
 						Evaluate(n);
 						q2.Put(n);
@@ -715,6 +789,7 @@ MODULE DuniterWotWizard;
 		
 		BEGIN (*CalcPermutations*)
 			IF f # NIL THEN
+				tMax := Services.Ticks() + maxTime;
 				ok := TRUE;
 				CalcRec(f, sets);
 				Strings.IntToString(sets.NumberOfElems(), s);
@@ -722,7 +797,7 @@ MODULE DuniterWotWizard;
 				IF ok THEN
 					L.log.Msg("Calculation completed");
 				ELSE
-					L.log.Msg("Stack size limit exceeded");
+					L.log.Msg("Limits exceeded");
 				END;
 				RETURN TRUE;
 			END;
@@ -850,7 +925,7 @@ MODULE DuniterWotWizard;
 							FixCertNextDate(from, date);
 							IF date <= exp THEN (* Not-expired certification *)
 								INC(nbCertifs);
-								NEW(cert); NEW(cert.pub); cert.pub^ := from;
+								NEW(cert); NEW(cert.pub); cert.pub^ := from; cert.date := date;
 								cert.next := certs; certs := cert;
 							END;
 						END;
@@ -871,7 +946,9 @@ MODULE DuniterWotWizard;
 					REPEAT
 						b := S.Cert(from, toHash, to, exp); ASSERT(b, 103);
 						NEW(c);
-						b := B.IdPub(from, c.from, hash, bnb, exp2); ASSERT(b, 104);
+						IF ~B.IdPub(from, c.from, hash, bnb, exp2) THEN
+							c.from := unknown;
+						END;
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
 						IF c.date <= c.limit THEN
@@ -889,7 +966,9 @@ MODULE DuniterWotWizard;
 				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) & B.IdPub(to, uid, hash, bnb, exp2) THEN
 					REPEAT
 						NEW(c);
-						b := B.IdPub(from, c.from, hash, bnb, exp2); ASSERT(b, 105);
+						IF ~B.IdPub(from, c.from, hash, bnb, exp2) THEN
+							c.from := unknown;
+						END;
 						c.to := uid;
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
@@ -949,14 +1028,17 @@ MODULE DuniterWotWizard;
 			RETURN b;
 		END BuildEntries;
 	
-	PROCEDURE ChangeMaxStackLength* (newMaxStackLength: LONGINT);
+	PROCEDURE ChangeParameters* (newMaxSize, newMaxTime: LONGINT);
 		
-		BEGIN (*ChangeMaxStackLength*)
-			maxStackLength := newMaxStackLength;
-		END ChangeMaxStackLength;
+		BEGIN (*ChangeParameters*)
+			maxSize := newMaxSize;
+			maxTime := newMaxTime;
+		END ChangeParameters;
 	
 	BEGIN (*DuniterWotWizard*)
-		maxStackLength := maxStackLengthDef;
+		NEW(unknown, LEN(unknownId) + 1); unknown^ := unknownId;
+		maxSize := maxSizeDef;
+		maxTime := maxTimeDef;
 		(**
 		log.ConnectTo(StdLog.text);
 		**)
