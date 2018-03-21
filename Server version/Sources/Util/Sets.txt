@@ -1,0 +1,627 @@
+(* 
+Util: Utility tools.
+
+Copyright (C) 2001…2006 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE UtilSets;
+	
+	(**)
+	
+	(* The module UtilSets implements the type Set, a set of non-negative integers, represented by intervals. *)
+	
+	CONST
+		
+		sMin* = 0; (* The smallest integer in sets. *)
+		sMax* = MAX(INTEGER)- 1; (* The largest integer in sets. *)
+		
+		taSet = sMax - sMin + 1;
+	
+	TYPE
+		
+		Doublet = ARRAY 2 OF INTEGER;
+		
+		Segment = POINTER TO RECORD
+			suivant,
+			precedent: Segment;
+			largeurs: Doublet;
+		END;
+		
+		Set* = POINTER TO LIMITED RECORD (* Set of non-negative integers. *)
+			nbElems-, (* Number of elements in the set. *)
+			pos, posE: INTEGER;
+			elems, cour: Segment;
+		END;
+		
+		TableVer = ARRAY 2, 2 OF BYTE;
+
+	PROCEDURE InsereSegment (apresSeg: Segment; plein, vide: INTEGER);
+		
+		VAR
+			
+			s: Segment;
+		
+		BEGIN (*InsereSegment*)
+			NEW(s);
+			s.suivant := apresSeg.suivant;
+			s.precedent := apresSeg;
+			s.largeurs[1] := plein;
+			s.largeurs[0] := vide;
+			apresSeg.suivant.precedent := s;
+			apresSeg.suivant := s;
+		END InsereSegment;
+	
+	(* Empties the set s. *)
+	PROCEDURE (s: Set) Empty*, NEW;
+		
+		BEGIN (*Empty*)
+			s.nbElems := 0;
+			s.elems.largeurs[0] := taSet;
+			s.elems.suivant := s.elems;
+			s.elems.precedent := s.elems;
+			s.cour := NIL;
+		END Empty;
+
+	(* Creates and returns a new empty set. *)
+	PROCEDURE NewSet* (): Set;
+		
+		VAR
+			
+			s: Set;
+		
+		BEGIN (*NewSet*)
+			NEW(s);
+			NEW(s.elems);
+			s.Empty;
+			RETURN s;
+		END NewSet;
+	
+	(* Returns in s the largest set available: sMin..sMax. *)
+	PROCEDURE (s: Set) Full*, NEW;
+		
+		BEGIN (*Full*)
+			s.Empty;
+			s.nbElems := taSet;
+			s.elems.largeurs[0] := 0;
+			InsereSegment(s.elems, taSet, 0);
+		END Full;
+
+	(* Sets s to the interval min..max. *)
+	PROCEDURE (s: Set) Interval* (min, max: INTEGER), NEW;
+
+		BEGIN (*Interval*)
+			ASSERT((min >= sMin) & (min <= sMax) & (max >= sMin) & (max <= sMax), 20);
+			s.Empty;
+			IF min <= max THEN
+				s.nbElems := max - min + 1;
+				s.elems.largeurs[0] := min;
+				InsereSegment(s.elems, s.nbElems, taSet - max - 1);
+			END;
+		END Interval;
+	
+	(* Tests whether s is empty. *)
+	PROCEDURE (s: Set) IsEmpty* (): BOOLEAN, NEW;
+
+		BEGIN (*IsEmpty*)
+			RETURN s.elems.suivant = s.elems;
+		END IsEmpty;
+	
+	PROCEDURE (s: Set) Trans (src: Set), NEW;
+		
+		BEGIN (*Trans*)
+			s.nbElems := src.nbElems;
+			s.elems := src.elems;
+			s.cour := NIL;
+		END Trans;
+
+	(* Creates and returns a copy of s.*)
+	PROCEDURE (s: Set) Copy* (): Set, NEW;
+
+		VAR
+
+			p: Segment;
+			f: Set;
+
+		BEGIN (*Copy*)
+			f := NewSet();
+			f.nbElems := s.nbElems;
+			f.elems.largeurs[0] := s.elems.largeurs[0];
+			p := s.elems.suivant;
+			WHILE p # s.elems DO
+				InsereSegment(f.elems.precedent, p.largeurs[1], p.largeurs[0]);
+				p := p.suivant;
+			END;
+			RETURN f;
+		END Copy;
+	
+	PROCEDURE (s1: Set) Melange (s2: Set; IN combi: TableVer): Set, NEW;
+		
+		VAR
+			
+			s: Set;
+		
+		(*
+		PROCEDURE Combine (c1, c2, c: Segment);
+			
+			VAR
+				
+				s1, s2: Segment;
+				fin: BOOLEAN;
+				plein1, plein2, plein3,
+				h1, h2, h3, long, larg: INTEGER;
+			
+			BEGIN (*Combine*)
+				s1 := c1; plein1 := 0;
+				s2 := c2; plein2 := 0;
+				plein3 := 0;
+				fin := FALSE;
+				h1 := 0; h2 := 0; h3 := 0;
+				larg := 0;
+				LOOP
+					IF (combi[plein1, plein2] = plein3) & ~fin THEN
+						long := MIN(h1 + s1.largeurs[plein1], h2 + s2.largeurs[plein2]);
+						IF h1 + s1.largeurs[plein1] = long THEN
+							h1 := long;
+							plein1 := 1 - plein1;
+							IF plein1 # 0 THEN
+								s1 := s1.suivant;
+								fin := s1 = c1;
+							END;
+						END;
+						IF h2 + s2.largeurs[plein2] = long THEN
+							h2 := long;
+							plein2 := 1 - plein2;
+							IF plein2 # 0 THEN
+								s2 := s2.suivant;
+								(*
+								ASSERT(fin = (s2 = c2));
+								*)
+							END;
+						END;
+						INC(larg, long - h3);
+						h3 := long;
+					ELSE
+						IF plein3 = 0 THEN
+							c.precedent.largeurs[plein3] := larg;
+						ELSE
+							InsereSegment(c.precedent, larg, 0);
+							INC(s.nbElems, larg);
+						END;
+						IF fin THEN
+							EXIT;
+						END;
+						larg := 0;
+						plein3 := 1 - plein3;
+					END;
+				END;
+			END Combine;
+		*)
+		
+		PROCEDURE Combine (c1, c2, c: Segment);
+			
+			VAR
+				
+				s1, s2: Segment;
+				fin: BOOLEAN;
+				plein1, plein2, plein3,
+				h1, h2, h3, long1, long2, larg: INTEGER;
+			
+			BEGIN (*Combine*)
+				s1 := c1; plein1 := 0;
+				s2 := c2; plein2 := 0;
+				plein3 := 0;
+				fin := FALSE;
+				h1 := 0; h2 := 0; h3 := 0;
+				larg := 0;
+				LOOP
+					IF (combi[plein1, plein2] = plein3) & ~fin THEN
+						long1 := h1 + s1.largeurs[plein1]; long2 := h2 + s2.largeurs[plein2];
+						IF long1 <= long2 THEN
+							h1 := long1;
+							plein1 := 1 - plein1;
+							IF plein1 # 0 THEN
+								s1 := s1.suivant;
+								fin := s1 = c1;
+							END;
+							INC(larg, long1 - h3);
+							h3 := long1;
+						END;
+						IF long2 <= long1 THEN
+							h2 := long2;
+							plein2 := 1 - plein2;
+							IF plein2 # 0 THEN
+								s2 := s2.suivant;
+							END;
+							INC(larg, long2 - h3);
+							h3 := long2;
+						END;
+					ELSE
+						IF plein3 = 0 THEN
+							c.precedent.largeurs[plein3] := larg;
+						ELSE
+							InsereSegment(c.precedent, larg, 0);
+							INC(s.nbElems, larg);
+						END;
+						IF fin THEN
+							EXIT;
+						END;
+						larg := 0;
+						plein3 := 1 - plein3;
+					END;
+				END;
+			END Combine;
+		
+		BEGIN (*Melange*)
+			s := NewSet();
+			Combine(s1.elems, s2.elems, s.elems);
+			RETURN s;
+		END Melange;
+
+	(* Returns the union of s1 and s2. *)
+	PROCEDURE (s1: Set) Union* (s2: Set): Set, NEW;
+		
+		VAR
+			
+			verite: TableVer;
+			s: Set;
+		
+		BEGIN (*Union*)
+			ASSERT(s2 # NIL, 20);
+			IF s1.IsEmpty() THEN
+				s := s2.Copy();
+			ELSIF s2.IsEmpty() THEN
+				s := s1.Copy();
+			ELSE
+				verite[0, 0] := 0;
+				verite[0, 1] := 1;
+				verite[1, 0] := 1;
+				verite[1, 1] := 1;
+				s := s1.Melange(s2, verite);
+			END;
+			RETURN s;
+		END Union;
+
+	(* Returns the intersection of s1 and s2. *)
+	PROCEDURE (s1: Set) Inter* (s2: Set): Set, NEW;
+		
+		VAR
+			
+			verite: TableVer;
+			s: Set;
+		
+		BEGIN (*Inter*)
+			ASSERT(s2 # NIL, 20);
+			IF s1.IsEmpty() OR s2.IsEmpty() THEN
+				s := NewSet();
+			ELSE
+				verite[0, 0] := 0;
+				verite[0, 1] := 0;
+				verite[1, 0] := 0;
+				verite[1, 1] := 1;
+				s := s1.Melange(s2, verite);
+			END;
+			RETURN s;
+		END Inter;
+
+	(* Returns the difference between s1 and s2. *)
+	PROCEDURE (s1: Set) Diff* (s2: Set): Set, NEW;
+		
+		VAR
+			
+			verite: TableVer;
+			s: Set;
+		
+		BEGIN (*Diff*)
+			ASSERT(s2 # NIL, 20);
+			IF s2.IsEmpty() THEN
+				s := s1.Copy();
+			ELSIF s1.IsEmpty() THEN
+				s := NewSet();
+			ELSE
+				verite[0, 0] := 0;
+				verite[0, 1] := 0;
+				verite[1, 0] := 1;
+				verite[1, 1] := 0;
+				s := s1.Melange(s2, verite);
+			END;
+			RETURN s;
+		END Diff;
+
+	(* Returns the exclusive union of s1 and s2. *)
+	PROCEDURE (s1: Set) XOR* (s2: Set): Set, NEW;
+		
+		VAR
+			
+			verite: TableVer;
+			s: Set;
+		
+		BEGIN (*XOR*)
+			ASSERT(s2 # NIL, 20);
+			IF s1.IsEmpty() THEN
+				s := s2.Copy();
+			ELSIF s2.IsEmpty() THEN
+				s := s1.Copy();
+			ELSE
+				verite[0, 0] := 0;
+				verite[0, 1] := 1;
+				verite[1, 0] := 1;
+				verite[1, 1] := 0;
+				s := s1.Melange(s2, verite);
+			END;
+			RETURN s;
+		END XOR;
+	
+	(* Includes the integer e in the set s.*)
+	PROCEDURE (s: Set) Incl* (e: INTEGER), NEW;
+		
+		VAR
+			
+			ss: Set;
+		
+		BEGIN (*Incl*)
+			ss := NewSet();
+			ss.Interval(e, e);
+			ss := s.Union(ss);
+			s.Trans(ss);
+		END Incl;
+	
+	(* Excludes the integer e from the set s.*)
+	PROCEDURE (s: Set) Excl* (e: INTEGER), NEW;
+		
+		VAR
+			
+			ss: Set;
+		
+		BEGIN (*Excl*)
+			ss := NewSet();
+			ss.Interval(e, e);
+			ss := s.Diff(ss);
+			s.Trans(ss);
+		END Excl;
+	
+	(* Adds the interval min..max to the set s. *)
+	PROCEDURE (s: Set) Fill* (min, max: INTEGER), NEW;
+		
+		VAR
+			
+			ss: Set;
+		
+		BEGIN (*Fill*)
+			ss := NewSet();
+			ss.Interval(min, max);
+			ss := s.Union(ss);
+			s.Trans(ss);
+		END Fill;
+	
+	(* Removes the interval min..max from the set s. *)
+	PROCEDURE (s: Set) Clear* (min, max: INTEGER), NEW;
+		
+		VAR
+			
+			ss: Set;
+		
+		BEGIN (*Clear*)
+			ss := NewSet();
+			ss.Interval(min, max);
+			ss := s.Diff(ss);
+			s.Trans(ss);
+		END Clear;
+	
+	(* Sets s to the Component Pascal SET se. *)
+	PROCEDURE (s: Set) Small* (se: SET), NEW;
+		
+		VAR
+			
+			e: INTEGER;
+		
+		BEGIN (*Small*)
+			s.Empty;
+			FOR e := MIN(SET) TO MAX(SET) DO
+				IF e IN se THEN
+					s.Incl(e);
+				END;
+			END;
+		END Small;
+	
+	(* Tests whether the integer e is in the set s. *)
+	PROCEDURE (s: Set) In* (e: INTEGER): BOOLEAN, NEW;
+
+		VAR
+			
+			se: Segment;
+			plein: INTEGER;
+		
+		BEGIN (*In*)
+			IF (e < sMin) OR (e > sMax) THEN
+				RETURN FALSE;
+			END;
+			se := s.elems;
+			plein := 0;
+			LOOP
+				IF e < se.largeurs[plein] THEN
+					RETURN plein # 0;
+				ELSE
+					DEC(e, se.largeurs[plein]);
+				END;
+				plein := 1 - plein;
+				IF plein # 0 THEN
+					se := se.suivant;
+				END;
+			END;
+		END In;
+	
+	(* Tests whether s1= s2. *)
+	PROCEDURE (s1: Set) Equal* (s2: Set): BOOLEAN, NEW;
+		
+		BEGIN (*Equal*)
+			RETURN s1.XOR(s2).IsEmpty();
+		END Equal;
+	
+	(* Tests whether s1 is a subset of s2. *)
+	PROCEDURE (s1: Set) Subset* (s2: Set): BOOLEAN, NEW;
+		
+		BEGIN (*Subset*)
+			RETURN s1.Diff(s2).IsEmpty();
+		END Subset;
+	
+	(* Replaces e by the next integer e' of s. If inc= TRUE, e'> e; otherwise, e'< e. e may be outside of the interval sMin..sMax, but e' is inside it. Returns TRUE if there is such a successor of e, otherwise e is unchanged. Usage: e:= -1; WHILE s.NextElem(TRUE, e) DO ... END; *)
+	PROCEDURE (s: Set) NextElem* (inc: BOOLEAN; VAR e: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			ancE, h: INTEGER;
+			se, t: Segment;
+		
+		BEGIN (*NextElem*)
+			IF s.IsEmpty() THEN
+				RETURN FALSE;
+			END;
+			ancE := e;
+			IF inc & (e < sMin) THEN
+				e := sMin;
+			ELSIF ~inc & (e > sMax) THEN
+				e := sMax;
+			ELSIF inc THEN
+				INC(e);
+			ELSE
+				DEC(e);
+			END;
+			IF inc & (e > sMax) OR ~inc & (e < sMin) THEN
+				e := ancE;
+				RETURN FALSE;
+			END;
+			se := s.elems;
+			IF inc THEN
+				t := se;
+				h := sMin;
+				LOOP
+					INC(h, se.largeurs[0]);
+					se := se.suivant;
+					IF se = t THEN
+						EXIT;
+					END;
+					IF e < h + se.largeurs[1] THEN
+						IF e < h THEN
+							e := h;
+						END;
+						EXIT;
+					END;
+					INC(h, se.largeurs[1]);
+				END;
+			ELSE
+				t := se;
+				se := se.precedent;
+				h := sMax;
+				LOOP
+					DEC(h, se.largeurs[0]);
+					IF e > h - se.largeurs[1] THEN
+						IF e > h THEN
+							e := h;
+						END;
+						EXIT;
+					END;
+					DEC(h, se.largeurs[1]);
+					se := se.precedent;
+					IF se = t THEN
+						EXIT;
+					END;
+				END;
+			END;
+			IF se = t THEN
+				e := ancE;
+			END;
+			RETURN se # t;
+		END NextElem;
+	
+		(* On return, min and max contain the first interval of the set s. Returns TRUE if such an interval exists. Usage: ok:= s.First(a, b); WHILE ok DO ... ok:= s.Next(a, b) END; *)
+	PROCEDURE (s: Set) First* (OUT min, max: INTEGER): BOOLEAN, NEW;
+		
+		BEGIN (*First*)
+			IF s.IsEmpty() THEN
+				RETURN FALSE;
+			END;
+			s.cour := s.elems.suivant;
+			s.pos := sMin + s.elems.largeurs[0];
+			min := s.pos;
+			max := min + s.cour.largeurs[1] - 1;
+			RETURN TRUE;
+		END First;
+	
+		(* On return, min and max contain the next interval of the set s. Returns TRUE if such an interval exists. s.First must have been called once before s.Next. Usage: ok:= s.First(a, b); WHILE ok DO ... ok:= s.Next(a, b) END; *)
+	PROCEDURE (s: Set) Next* (OUT min, max: INTEGER): BOOLEAN, NEW;
+		
+		BEGIN (*Next*)
+			ASSERT(s.cour # NIL, 20);
+			s.pos := s.pos + s.cour.largeurs[1] + s.cour.largeurs[0];
+			s.cour := s.cour.suivant;
+			IF s.cour = s.elems THEN
+				s.cour := NIL;
+				RETURN FALSE;
+			END;
+			min := s.pos;
+			max := min + s.cour.largeurs[1] - 1;
+			RETURN TRUE;
+		END Next;
+	
+	PROCEDURE (s: Set) FirstE* (OUT e: INTEGER): BOOLEAN, NEW;
+		
+		BEGIN (*FirstE*)
+			IF s.IsEmpty() THEN
+				RETURN FALSE;
+			END;
+			s.cour := s.elems.suivant;
+			s.pos := sMin + s.elems.largeurs[0];
+			s.posE := s.pos;
+			e := s.pos;
+			RETURN TRUE;
+		END FirstE;
+	
+	PROCEDURE (s: Set) NextE* (OUT e: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			max: INTEGER;
+		
+		BEGIN (*NextE*)
+			ASSERT(s.cour # NIL, 20);
+			max := s.pos + s.cour.largeurs[1] - 1;
+			IF s.posE < max THEN
+				INC(s.posE);
+				e := s.posE;
+				RETURN TRUE;
+			END;
+			s.pos := s.pos + s.cour.largeurs[1] + s.cour.largeurs[0];
+			s.cour := s.cour.suivant;
+			IF s.cour = s.elems THEN
+				s.cour := NIL;
+				RETURN FALSE;
+			END;
+			s.posE := s.pos;
+			e := s.posE;
+			RETURN TRUE;
+		END NextE;
+	
+	PROCEDURE (s: Set) NbOfElems* (): INTEGER, NEW;
+		
+		VAR
+			
+			n, min, max: INTEGER;
+			ok: BOOLEAN;
+		
+		BEGIN (*NbOfElems*)
+			n := 0;
+			ok := s.First(min, max);
+			WHILE ok DO
+				INC(n, max - min + 1);
+				ok := s.Next(min, max);
+			END;
+			RETURN n;
+		END NbOfElems;
+	
+	END UtilSets.

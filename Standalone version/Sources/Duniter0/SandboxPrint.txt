@@ -1,5 +1,5 @@
 (* 
-Duniter: WotWizard.
+Duniter0: WotWizard.
 
 Copyright (C) 2017 GérardMeunier
 
@@ -25,7 +25,6 @@ MODULE Duniter0SandboxPrint;
 			hash, toHash: S.Hash;
 			uid: S.String;
 			pubkey, from, to: S.Pubkey;
-			bnb: INTEGER;
 			exp: LONGINT;
 			ok, okP, b: BOOLEAN;
 			pos: S.CertPos;
@@ -67,12 +66,12 @@ MODULE Duniter0SandboxPrint;
 				okP := pos.CertNextPos(from, toHash);
 				WHILE okP DO
 					StdLog.String(from);
-					IF B.IdPub(from, uid, hash, bnb, exp) THEN
+					IF B.IdPub(from, uid) THEN
 						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
 					END;
 					StdLog.String(" -> ");
 					StdLog.String(toHash);
-					IF S.IdHash(toHash, pubkey, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid, hash, bnb, exp) THEN
+					IF S.IdHash(toHash, pubkey, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
 						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
 					END;
 					b := S.Cert(from, toHash, to, exp); ASSERT(b);
@@ -89,12 +88,12 @@ MODULE Duniter0SandboxPrint;
 				okP := pos.CertNextPos(from, toHash);
 				WHILE okP DO
 					StdLog.String(toHash);
-					IF S.IdHash(toHash, to, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid, hash, bnb, exp) THEN
+					IF S.IdHash(toHash, to, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
 						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
 					END;
 					StdLog.String(" <- ");
 					StdLog.String(from);
-					IF B.IdPub(from, uid, hash, bnb, exp) THEN
+					IF B.IdPub(from, uid) THEN
 						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
 					END;
 					b := S.Cert(from, toHash, to, exp); ASSERT(b);

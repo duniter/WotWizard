@@ -1,5 +1,5 @@
 (* 
-Duniter: WotWizard.
+Duniter0: WotWizard.
 
 Copyright (C) 2017 GérardMeunier
 
@@ -26,7 +26,7 @@ MODULE Duniter0IdentitiesPrint;
 			pubkey: B.Pubkey;
 			hash: B.Hash;
 			bnb: INTEGER;
-			ok, b: BOOLEAN;
+			ok, b, member: BOOLEAN;
 			n: INTEGER;
 			mt, t, exp: LONGINT;
 			s: BA.DateTime;
@@ -35,10 +35,10 @@ MODULE Duniter0IdentitiesPrint;
 		BEGIN (*Print*)
 			StdLog.Clear; StdLog.Open;
 			StdLog.Ln;
-			ok := B.IdNextPubkey(TRUE, pubkey);
+			ok := B.IdNextPubkeyM(TRUE, pubkey);
 			WHILE ok DO
 				StdLog.String(pubkey); StdLog.Tab;
-				b := B.IdPub(pubkey, uid, hash, bnb, exp); ASSERT(b);
+				b := B.IdPubComplete(pubkey, uid, member, hash, bnb, exp); ASSERT(b);
 				StdLog.String(uid); StdLog.Tab;
 				b := B.TimeOf(bnb, mt, t); ASSERT(b);
 				BA.TimestampToString(mt, s);
@@ -47,15 +47,17 @@ MODULE Duniter0IdentitiesPrint;
 				BA.TimestampToString(exp, s);
 				StdLog.String(s);
 				StdLog.Ln;
-				ok := B.IdNextPubkey(FALSE, pubkey);
+				ok := B.IdNextPubkeyM(FALSE, pubkey);
 			END;
 			StdLog.Ln;
 			n := 0;
-			ok := B.IdNextUid(TRUE, uid);
+			ok := B.IdNextUidM(TRUE, uid);
 			WHILE ok DO
-				INC(n);
 				StdLog.String(uid); StdLog.Tab;
-				b := B.IdUid(uid, pubkey, hash, bnb, exp); ASSERT(b);
+				b := B.IdUidComplete(uid, pubkey, member, hash, bnb, exp); ASSERT(b);
+				IF member THEN
+					INC(n);
+				END;
 				StdLog.String(pubkey); StdLog.Tab;
 				b := B.TimeOf(bnb, mt, t); ASSERT(b);
 				BA.TimestampToString(mt, s);
@@ -64,9 +66,10 @@ MODULE Duniter0IdentitiesPrint;
 				BA.TimestampToString(exp, s);
 				StdLog.String(s);
 				StdLog.Ln;
-				ok := B.IdNextUid(FALSE, uid);
+				ok := B.IdNextUidM(FALSE, uid);
 			END;
 			StdLog.Ln;
+			ASSERT(n = B.IdLenM());
 			Dialog.MapString("#Duniter0:MembersNb", ss);
 			StdLog.String(ss + " = ");
 			StdLog.Int(n);

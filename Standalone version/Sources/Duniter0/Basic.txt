@@ -1,5 +1,5 @@
 (* 
-Duniter: WotWizard.
+Duniter0: WotWizard.
 
 Copyright (C) 2017 GérardMeunier
 
@@ -23,6 +23,8 @@ MODULE Duniter0Basic;
 		year0 = 1970; month0 = 1; day0 = 1; (* Start date of computing history *)
 		
 		never* = MAX(LONGINT);
+		missing* = -1;
+		revoked* = -2;
 	
 	TYPE
 		
@@ -74,6 +76,8 @@ MODULE Duniter0Basic;
 		BEGIN (*TimestampToString*)
 			IF t = never THEN
 				Dialog.MapString("#Duniter0:Never", dt);
+			ELSIF (t = missing) OR (t = revoked) THEN
+				Dialog.MapString("#Duniter0:Missing", dt);
 			ELSE
 				TimestampToDate(t, date, time);
 				Dates.DateToString(date, Dates.short, da);

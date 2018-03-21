@@ -1,5 +1,5 @@
 (* 
-Duniter: WotWizard.
+Duniter0: WotWizard.
 
 Copyright (C) 2017 GérardMeunier
 
@@ -38,9 +38,7 @@ MODULE Duniter0SentriesPrint;
 			
 			ok, b: BOOLEAN;
 			pubkey: B.Pubkey;
-			hash: B.Hash;
-			bnb, n: INTEGER;
-			exp: LONGINT;
+			n: INTEGER;
 			ids: A.Tree;
 			id: Uid;
 			e: A.Elem;
@@ -56,7 +54,7 @@ MODULE Duniter0SentriesPrint;
 			ok := B.NextSentry(TRUE, pubkey);
 			WHILE ok DO
 				NEW(id);
-				b := B.IdPub(pubkey, id.uid, hash, bnb, exp); ASSERT(b);
+				b := B.IdPub(pubkey, id.uid); ASSERT(b);
 				e := id;
 				b := ids.SearchIns(e, n); ASSERT(~ b);
 				ok := B.NextSentry(FALSE, pubkey);

@@ -336,6 +336,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			END;
 		END CompP;
 	
+	(**)
 	(* Calculate the shortest prefix of a String, in the proper sense. *)
 	PROCEDURE (man: StringKeyManager) PrefP- (key1: Data; VAR key2: Data);
 		
@@ -362,6 +363,36 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			END;
 			key2 := key;
 		END PrefP;
+	(**)
+	
+	(*
+	(* Calculate the shortest prefix of a String, in the proper sense. *)
+	PROCEDURE (man: StringKeyManager) PrefP- (key1: Data; VAR key2: Data);
+		
+		VAR
+			
+			l, l2: INTEGER;
+			key: String;
+		
+		BEGIN (*PrefP*)
+			ASSERT((key1 # NIL) & (key2 # NIL), 20);
+			ASSERT(man.CompP(key1, key2) = lt, 21);
+			WITH key1: String DO
+				WITH key2: String DO
+					l2 := LEN(key2.c$);
+					NEW(key); NEW(key.c, l2 + 1);
+					l := 0;
+					key.c[l] := 0X;
+					WHILE (l <= l2) & ~((man.CompP(key1, key) = lt) & (man.CompP(key, key2) <= eq)) DO
+						key.c[l] := key2.c[l];
+						INC(l);
+						key.c[l] := 0X;
+					END;
+					key2.c := key.c;
+				END;
+			END;
+		END PrefP;
+	*)
 	
 	(* Create a file with name nF, with the help of fac. Don't open this file. *)
 	PROCEDURE (fac: Factory) Create- (IN nF: ARRAY OF CHAR): BOOLEAN, NEW, ABSTRACT;
@@ -663,7 +694,11 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				IF c < 0 THEN
 					INC(c, valOct);
 				END;
-				n := n * valOct + c;
+				IF n > MAX(LONGINT) DIV valOct THEN
+					n := (7FFFFFFFFFFFFFL - n) * valOct  + 7FFFFFFFFFFFFF00L + c;
+				ELSE
+					n := n * valOct + c;
+				END;
 			END;
 			INC(r.pos, LIS);
 			RETURN n;
@@ -984,7 +1019,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 	PROCEDURE (d: Data) Read- (VAR r: Reader), NEW, ABSTRACT;
 	
 	(* Create data containing an array of char of length l (chars) and of size sz = l * CHS (bytes), with the help of f. *)
-	PROCEDURE (f: StringFac) New- (sz: INTEGER): String;
+	PROCEDURE (f: StringFac) New- (sz: INTEGER): String, EXTENSIBLE;
 		
 		VAR
 			
@@ -1003,7 +1038,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END New;
 	
 	(* Write s.c with the help of the writer w. The length of the production is 2 * (LEN(s.c$)+ 1). *)
-	PROCEDURE (s: String) Write - (VAR w: Writer);
+	PROCEDURE (s: String) Write - (VAR w: Writer), EXTENSIBLE;
 		
 		BEGIN (*Write*)
 			IF s.c # NIL THEN
@@ -1012,7 +1047,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END Write;
 	
 	(* Read s.c with the help of the reader r. *)
-	PROCEDURE (s: String) Read - (VAR r: Reader);
+	PROCEDURE (s: String) Read - (VAR r: Reader), EXTENSIBLE;
 		
 		BEGIN (*Read*)
 			IF s.c # NIL THEN

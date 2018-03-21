@@ -27,6 +27,8 @@ MODULE DuniterBasic;
 		textConv = "CpcUtf8Conv.ExportUtf8";
 		
 		never* = MAX(LONGINT);
+		missing* = -1;
+		revoked* = -2;
 	
 	TYPE
 		
@@ -77,6 +79,8 @@ MODULE DuniterBasic;
 		BEGIN (*TimestampToString*)
 			IF t = never THEN
 				Dialog.MapString("#Duniter:Never", dt);
+			ELSIF (t = missing) OR (t = revoked) THEN
+				Dialog.MapString("#Duniter0:Missing", dt);
 			ELSE
 				TimestampToDate(t, date, time);
 				Dates.DateToString(date, Dates.short, da);

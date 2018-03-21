@@ -568,7 +568,7 @@ MODULE DuniterSandbox;
 			A.New(idHashT);
 			FOR i := 0 TO t.rows - 1 DO
 				t.Read(i, cur);
-				IF ((cur.revocation_sig = NIL) OR (cur.revocation_sig$ = "")) & (now <= cur.expires_on) & ~B.IdUid(cur.uid, pub, hash, bnb, exp) & ~B.IdPub(cur.pubkey, uid, hash, bnb, exp) THEN
+				IF ((cur.revocation_sig = NIL) OR (cur.revocation_sig$ = "")) & (now <= cur.expires_on) & ~B.IdUid(cur.uid, pub) & ~B.IdPub(cur.pubkey, uid) THEN
 					NEW(id);
 					b := ExtractBlockId(cur.buid, id.bid, hash); ASSERT(b, 104);
 					REPEAT
@@ -623,7 +623,7 @@ MODULE DuniterSandbox;
 						e.ref.expires_on := MAX(e.ref.expires_on, cur.expires_on); (* ??? *)
 					END;
 				ELSE ASSERT(cur.inOrOut$ = "OUT", 103);
-					b := tr.Delete(idH); ASSERT(b, 104);
+					b := tr.Delete(idH); (*ASSERT(b, 104);*) (* Pourquoi ? *)
 				END;
 			END;
 			e := idHashT.Next(NIL);
@@ -685,7 +685,7 @@ MODULE DuniterSandbox;
 			A.New(certFromT); A.New(certToT);
 			FOR i := 0 TO t.rows - 1 DO
 				t.Read(i, cur);
-				IF ~B.Cert(cur.from, cur.to, bnb, exp) & (now <= cur.expires_on) & (IdHash(cur.toHash, pubkey, uid, exp) OR B.IdPub(cur.to, uid, hash, bnb, exp) & (hash = cur.toHash)) THEN (* If already in BC, no more in sandbox *)
+				IF ~B.Cert(cur.from, cur.to, bnb, exp) & (now <= cur.expires_on) & (IdHash(cur.toHash, pubkey, uid, exp) OR B.IdPubComplete(cur.to, uid, b, hash, bnb, exp) & (hash = cur.toHash)) THEN (* If already in BC, no more in sandbox *)
 					NEW(c);
 					c.from := cur.from;
 					c.to := cur.to;
@@ -730,10 +730,21 @@ MODULE DuniterSandbox;
 			L.log.Msg("End loading sandbox. Time spent: " + s);
 		END Scan;
 	
+	PROCEDURE IsFree (IN p: Pubkey): BOOLEAN;
+		
+		VAR
+			
+			pos: CertPos;
+		
+		BEGIN (*IsFree*)
+			RETURN ~CertFrom(p, pos);
+		END IsFree;
+	
 	PROCEDURE Init;
 		
 		BEGIN (*Init*)
 			B.AddUpdateProc(Scan);
+			B.FixIsFree(IsFree);
 		END Init;
 	
 	BEGIN (*DuniterSandbox*)

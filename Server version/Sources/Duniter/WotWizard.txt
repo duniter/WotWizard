@@ -20,15 +20,14 @@ MODULE DuniterWotWizard;
 	IMPORT
 		
 		(*
-		L := StdLog,
+		Lg := StdLog,
 		*)
 		
-		A := UtilAvlTree, B := DuniterBlockchain, S := DuniterSandbox, BA := DuniterBasic, L := DuniterLog, Services, Strings;
+		A := UtilAvlTree, B := DuniterBlockchain, S := DuniterSandbox, BA := DuniterBasic, L := DuniterLog, Services, Strings, U := UtilSort;
 	
 	CONST
 		
 		maxSizeDef = 430000000; (* Default value for the greatest allowed allocated memory size  *)
-		maxTimeDef = 90 * Services.resolution; (* Default value for the greatest allowed run time for CalcPermutations  *)
 		
 		(* Sizes of different types *)
 		INS = SIZE(INTEGER);
@@ -53,6 +52,7 @@ MODULE DuniterWotWizard;
 		(* Internal certification *)
 		Certif* = POINTER TO RECORD (CertOrDoss)
 			from-, to-: B.String;
+			fromP-: Pubkey;
 		END;
 		
 		(* Dossier of external certifications *)
@@ -63,10 +63,14 @@ MODULE DuniterWotWizard;
 			proportionOfSentries-: REAL; (* Proportion of sentries reachable through B.pars.stepMax steps *)
 			certifs-: File; (* Array of certifications *)
 		END;
+		
+		FileSort = RECORD (U.T)
+			f: File;
+		END;
 	
 	CONST
 		
-		CS = 2 * LIS + 2 * PTRS; (* Size of Certif *)
+		CS = 2 * LIS + 3 * PTRS; (* Size of Certif *)
 		DS = 2 * LIS + 3 * PTRS + INS + RES; (* Size of Dossier *)
 	
 	TYPE
@@ -124,7 +128,6 @@ MODULE DuniterWotWizard;
 		unknown: B.String;
 		
 		maxSize-: LONGINT; (* Maximum allowed memory size for the execution of CalcPermutations *)
-		maxTime-: LONGINT; (* Maximum allowed run time for the execution of CalcPermutations *)
 		(*
 		log: TextMappers.Formatter;
 		*)
@@ -313,10 +316,8 @@ MODULE DuniterWotWizard;
 		VAR
 			
 			certifiers: POINTER TO ARRAY OF B.Pubkey;
-			j, n, bnb: INTEGER;
-			ok, b: BOOLEAN;
-			h: B.Hash;
-			exp: LONGINT;
+			j, n: INTEGER;
+			ok: BOOLEAN;
 		
 		BEGIN (*CalcPrinc*)
 			n := LEN(certifs);
@@ -325,7 +326,7 @@ MODULE DuniterWotWizard;
 				INC(princCertif);
 				NEW(certifiers, princCertif);
 				FOR j := 0 TO princCertif - 1 DO
-					b := B.IdUid(certifs[j](Certif).from, certifiers[j], h, bnb, exp); ASSERT(b, 100);
+					certifiers[j] := certifs[j](Certif).fromP;
 				END;
 				ok := B.DistanceRuleOk(certifiers);
 			UNTIL ok OR (princCertif = n);
@@ -384,37 +385,53 @@ MODULE DuniterWotWizard;
 			END;
 		END FileDates;
 	
+	(* Dossiers and internal certifications are sorted by increasing dates; if a dossier and an internal certification have the same date, the dossier comes first *)
+	PROCEDURE Less (cd1, cd2: CertOrDoss): BOOLEAN;
+		
+		BEGIN (*Less*)
+			WITH
+				|cd1: Dossier DO
+					WITH
+						|cd2: Dossier DO
+							RETURN (cd1.date < cd2.date) OR (cd1.date = cd2.date) & (cd1.pub$ < cd2.pub$);
+						|cd2: Certif DO
+							RETURN cd1.date <= cd2.date;
+					END;
+				|cd1: Certif DO
+					RETURN (cd1.date < cd2.date) OR (cd2 IS Certif) & (cd1.date = cd2.date) & ((cd1.fromP$ < cd2(Certif).fromP$) OR (cd1.fromP$ = cd2(Certif).fromP$) & ((cd1.to = NIL) & (cd2(Certif).to # NIL) OR (cd1.to # NIL) & (cd2(Certif).to # NIL) & (cd1.to$ < cd2(Certif).to$)));
+			END;
+		END Less;
+	
+	PROCEDURE (VAR fs: FileSort) Less (i1, i2: INTEGER): BOOLEAN;
+		
+		BEGIN (*Less*)
+			RETURN Less(fs.f[i1], fs.f[i2]);
+		END Less;
+	
+	PROCEDURE (VAR fs: FileSort) Swap (i1, i2: INTEGER);
+		
+		VAR
+			
+			cd: CertOrDoss;
+		
+		BEGIN (*Swap*)
+			cd := fs.f[i1]; fs.f[i1] := fs.f[i2]; fs.f[i2] := cd;
+		END Swap;
+	
 	(* Sort, by insertion, the end of f, starting at position i0; all the dates must have been fixed before *)
-	PROCEDURE SortAll (f: File; i0, critical: INTEGER; OUT modif: BOOLEAN);
+	PROCEDURE SortCertifs (f: File; critical: INTEGER; OUT modif: BOOLEAN);
 		
 		VAR
 			
 			cdx: CertOrDoss;
 			i, j: INTEGER;
 		
-		(* Dossiers and internal certifications are sorted by increasing dates; if a dossier and an internal certification have the same date, the dossier comes first *)
-		PROCEDURE Less (cd1, cd2: CertOrDoss): BOOLEAN;
-			
-			BEGIN (*Less*)
-				WITH
-					|cd1: Dossier DO
-						WITH
-							|cd2: Dossier DO
-								RETURN cd1.date < cd2.date;
-							|cd2: Certif DO
-								RETURN cd1.date <= cd2.date;
-						END;
-					|cd1: Certif DO
-						RETURN cd1.date < cd2.date;
-				END;
-			END Less;
-		
-		BEGIN (*SortAll*)
+		BEGIN (*SortCertifs*)
 			modif := FALSE;
 			IF f # NIL THEN
-				FOR i := i0 + 1 TO LEN(f) - 1 DO
+				FOR i := 1 TO LEN(f) - 1 DO
 					j := i; cdx := f[j];
-					WHILE (j > i0) & Less(cdx, f[j - 1]) DO (* No sentinel; inefficient *)
+					WHILE (j > 0) & Less(cdx, f[j - 1]) DO (* No sentinel; inefficient *)
 						f[j] := f[j - 1];
 						DEC(j);
 						modif := modif OR (j = critical);
@@ -422,7 +439,7 @@ MODULE DuniterWotWizard;
 					f[j] := cdx;
 				END;
 			END;
-		END SortAll;
+		END SortCertifs;
 	
 	(* Sort the end of f, starting at position i0; the dates of all Certification(s) must have been fixed before, but not those of Dossier(s); The Dossier dates are always put after the current date *)
 	PROCEDURE SortFile (f: File; i0: INTEGER);
@@ -432,13 +449,14 @@ MODULE DuniterWotWizard;
 			i: INTEGER;
 			cd: CertOrDoss;
 			modif: BOOLEAN;
+			fs: FileSort;
 		
 		BEGIN (*SortFile*)
 			IF f # NIL THEN
 				FOR i := i0 TO LEN(f) - 1 DO
 					cd := f[i];
 					WITH cd: Dossier DO
-						SortAll(cd.certifs, 0, cd.princCertif, modif);
+						SortCertifs(cd.certifs, cd.princCertif - 1, modif);
 						IF modif THEN
 							CalcPrinc(cd.certifs, cd.princCertif);
 						END;
@@ -446,7 +464,8 @@ MODULE DuniterWotWizard;
 					END;
 				END;
 				FileDates(f);
-				SortAll(f, i0, 0, modif);
+				fs.f := f;
+				fs.QuickSort(i0, LEN(f) - 1);
 			END;
 		END SortFile;
 	
@@ -585,7 +604,7 @@ MODULE DuniterWotWizard;
 			BEGIN (*Least*)
 				cc := c; c := c.next;
 				WHILE c.next # NIL DO
-					IF c.next.date < cc.next.date THEN
+					IF (c.next.date < cc.next.date) OR (c.next.date = cc.next.date) & (c.next.pub$ < cc.next.pub$) THEN
 						cc := c;
 					END;
 					c := c.next;
@@ -638,7 +657,6 @@ MODULE DuniterWotWizard;
 		VAR
 			
 			ok: BOOLEAN;
-			tMax: LONGINT;
 			s: ARRAY 20 OF CHAR;
 		
 		(* Put into n.sets the set containing, as unique element, the list of entries in n.f *)
@@ -731,7 +749,7 @@ MODULE DuniterWotWizard;
 						Propagate(n.f, n.step, debug);
 						INC(n.step);
 					END;
-					ok := ok & (stackSize <= maxSize) & (Services.Ticks() <= tMax);
+					ok := ok & (stackSize <= maxSize);
 					IF (n.step >= LEN(n.f)) OR (n.f[n.step].date = BA.never) OR ~ok THEN
 						Evaluate(n);
 						q2.Put(n);
@@ -789,7 +807,6 @@ MODULE DuniterWotWizard;
 		
 		BEGIN (*CalcPermutations*)
 			IF f # NIL THEN
-				tMax := Services.Ticks() + maxTime;
 				ok := TRUE;
 				CalcRec(f, sets);
 				Strings.IntToString(sets.NumberOfElems(), s);
@@ -899,9 +916,9 @@ MODULE DuniterWotWizard;
 			ok, okP, b: BOOLEAN;
 			pos, posI: S.CertPos;
 			from, to: B.Pubkey;
-			toHash, hash: S.Hash;
-			i, j, bnb, nbCertifs, princCertif: INTEGER;
-			exp, exp2, date, mt, t: LONGINT;
+			toHash: S.Hash;
+			i, j, nbCertifs, princCertif: INTEGER;
+			exp, date, mt, t: LONGINT;
 			d: Dossier;
 			c: Certif;
 			uid: B.String;
@@ -945,10 +962,9 @@ MODULE DuniterWotWizard;
 					okP := pos.CertNextPos(from, toHash); ASSERT(okP, 102);
 					REPEAT
 						b := S.Cert(from, toHash, to, exp); ASSERT(b, 103);
-						NEW(c);
-						IF ~B.IdPub(from, c.from, hash, bnb, exp2) THEN
-							c.from := unknown;
-						END;
+						NEW(c); NEW(c.fromP);
+						c.fromP^ := from;
+						b := B.IdPub(from, c.from); ASSERT(b, 104);
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
 						IF c.date <= c.limit THEN
@@ -963,12 +979,11 @@ MODULE DuniterWotWizard;
 			cNb := 0;
 			ok := S.CertNextTo(TRUE, pos);
 			WHILE ok DO
-				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) & B.IdPub(to, uid, hash, bnb, exp2) THEN
+				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
 					REPEAT
-						NEW(c);
-						IF ~B.IdPub(from, c.from, hash, bnb, exp2) THEN
-							c.from := unknown;
-						END;
+						NEW(c); NEW(c.fromP);
+						c.fromP^ := from;
+						b := B.IdPub(from, c.from); ASSERT(b, 105);
 						c.to := uid;
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
@@ -1028,17 +1043,15 @@ MODULE DuniterWotWizard;
 			RETURN b;
 		END BuildEntries;
 	
-	PROCEDURE ChangeParameters* (newMaxSize, newMaxTime: LONGINT);
+	PROCEDURE ChangeParameters* (newMaxSize: LONGINT);
 		
 		BEGIN (*ChangeParameters*)
 			maxSize := newMaxSize;
-			maxTime := newMaxTime;
 		END ChangeParameters;
 	
 	BEGIN (*DuniterWotWizard*)
 		NEW(unknown, LEN(unknownId) + 1); unknown^ := unknownId;
 		maxSize := maxSizeDef;
-		maxTime := maxTimeDef;
 		(**
 		log.ConnectTo(StdLog.text);
 		**)

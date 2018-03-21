@@ -1,5 +1,5 @@
 (* 
-Duniter: WotWizard.
+Duniter0: WotWizard.
 
 Copyright (C) 2017 GérardMeunier
 
@@ -20,14 +20,16 @@ MODULE Duniter0WotWizard;
 	IMPORT
 		
 		(*
-		StdLog,
+		Lg := StdLog,
 		*)
 		
-		A := UtilAvlTree, B := Duniter0Blockchain, S := Duniter0Sandbox, BA := Duniter0Basic;
+		A := UtilAvlTree, B := Duniter0Blockchain, S := Duniter0Sandbox, BA := Duniter0Basic, Services;
 	
 	CONST
 		
-		maxStackLengthDef = 430000000; (* Default value for the greatest allowed allocated memory size  *)
+		maxSizeDef = 430000000; (* Default value for the greatest allowed allocated memory size  *)
+		
+		(* Default value for the greatest allowed run time for CalcPermutations  *)
 		
 		(* Sizes of different types *)
 		INS = SIZE(INTEGER);
@@ -50,6 +52,7 @@ MODULE Duniter0WotWizard;
 		(* Internal certification *)
 		Certif* = POINTER TO RECORD (CertOrDoss)
 			from-, to-: B.String;
+			fromP-: Pubkey;
 		END;
 		
 		(* Dossier of external certifications *)
@@ -63,7 +66,7 @@ MODULE Duniter0WotWizard;
 	
 	CONST
 		
-		CS = 2 * LIS + 2 * PTRS; (* Size of Certif *)
+		CS = 2 * LIS + 3 * PTRS; (* Size of Certif *)
 		DS = 2 * LIS + 3 * PTRS + INS + RES; (* Size of Dossier *)
 	
 	TYPE
@@ -120,7 +123,7 @@ MODULE Duniter0WotWizard;
 	
 	VAR
 		
-		maxStackLength-: LONGINT; (* Maximum allowed virtual stack length for the execution of CalcPermutations *)
+		maxSize-: LONGINT; (* Maximum allowed memory size for the execution of CalcPermutations *)
 		(*
 		log: TextMappers.Formatter;
 		*)
@@ -365,10 +368,8 @@ MODULE Duniter0WotWizard;
 		VAR
 			
 			certifiers: POINTER TO ARRAY OF B.Pubkey;
-			j, n, bnb: INTEGER;
-			ok, b: BOOLEAN;
-			h: B.Hash;
-			exp: LONGINT;
+			j, n: INTEGER;
+			ok: BOOLEAN;
 		
 		BEGIN (*CalcPrinc*)
 			n := LEN(certifs);
@@ -377,7 +378,7 @@ MODULE Duniter0WotWizard;
 				INC(princCertif);
 				NEW(certifiers, princCertif);
 				FOR j := 0 TO princCertif - 1 DO
-					b := B.IdUid(certifs[j](Certif).from, certifiers[j], h, bnb, exp); ASSERT(b, 100);
+					certifiers[j] := certifs[j](Certif).fromP;
 				END;
 				ok := B.DistanceRuleOk(certifiers);
 			UNTIL ok OR (princCertif = n);
@@ -511,7 +512,7 @@ MODULE Duniter0WotWizard;
 				FOR i := i0 TO LEN(f) - 1 DO
 					cd := f[i];
 					WITH cd: Dossier DO
-						SortAll(cd.certifs, 0, cd.princCertif, modif);
+						SortAll(cd.certifs, 0, cd.princCertif - 1, modif);
 						IF modif THEN
 							CalcPrinc(cd.certifs, cd.princCertif);
 						END;
@@ -658,7 +659,7 @@ MODULE Duniter0WotWizard;
 			BEGIN (*Least*)
 				cc := c; c := c.next;
 				WHILE c.next # NIL DO
-					IF c.next.date < cc.next.date THEN
+					IF (c.next.date < cc.next.date) OR (c.next.date = cc.next.date) & (c.next.pub$ < cc.next.pub$) THEN
 						cc := c;
 					END;
 					c := c.next;
@@ -810,7 +811,7 @@ MODULE Duniter0WotWizard;
 						Propagate(n.f, n.step, debug);
 						INC(n.step);
 					END;
-					ok := ok & (stackSize <= maxStackLength);
+					ok := ok & (stackSize <= maxSize);
 					IF (n.step >= LEN(n.f)) OR (n.f[n.step].date = BA.never) OR ~ok THEN
 						Evaluate(n);
 						q2.Put(n);
@@ -968,9 +969,9 @@ MODULE Duniter0WotWizard;
 			ok, okP, b: BOOLEAN;
 			pos, posI: S.CertPos;
 			from, to: B.Pubkey;
-			toHash, hash: S.Hash;
-			i, j, bnb, nbCertifs, princCertif: INTEGER;
-			exp, exp2, date, mt, t: LONGINT;
+			toHash: S.Hash;
+			i, j, nbCertifs, princCertif: INTEGER;
+			exp, date, mt, t: LONGINT;
 			d: Dossier;
 			c: Certif;
 			uid: B.String;
@@ -1016,8 +1017,9 @@ MODULE Duniter0WotWizard;
 					okP := pos.CertNextPos(from, toHash); ASSERT(okP, 102);
 					REPEAT
 						b := S.Cert(from, toHash, to, exp); ASSERT(b, 103);
-						NEW(c);
-						b := B.IdPub(from, c.from, hash, bnb, exp2); ASSERT(b, 104);
+						NEW(c); NEW(c.fromP);
+						c.fromP^ := from;
+						b := B.IdPub(from, c.from); ASSERT(b, 104);
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
 						IF c.date <= c.limit THEN
@@ -1032,10 +1034,11 @@ MODULE Duniter0WotWizard;
 			cNb := 0;
 			ok := S.CertNextTo(TRUE, pos);
 			WHILE ok DO
-				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) & B.IdPub(to, uid, hash, bnb, exp2) THEN
+				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
 					REPEAT
-						NEW(c);
-						b := B.IdPub(from, c.from, hash, bnb, exp2); ASSERT(b, 105);
+						NEW(c); NEW(c.fromP);
+						c.fromP^ := from;
+						b := B.IdPub(from, c.from); ASSERT(b, 105);
 						c.to := uid;
 						FixCertNextDate(from, c.date);
 						c.limit := exp;
@@ -1081,14 +1084,14 @@ MODULE Duniter0WotWizard;
 			RETURN b;
 		END BuildEntries;
 	
-	PROCEDURE ChangeMaxStackLength* (newMaxStackLength: LONGINT);
+	PROCEDURE ChangeParameters* (newMaxSize: LONGINT);
 		
-		BEGIN (*ChangeMaxStackLength*)
-			maxStackLength := newMaxStackLength;
-		END ChangeMaxStackLength;
+		BEGIN (*ChangeParameters*)
+			maxSize := newMaxSize;
+		END ChangeParameters;
 	
 	BEGIN (*Duniter0WotWizard*)
-		maxStackLength := maxStackLengthDef;
+		maxSize := maxSizeDef;
 		(*
 		log.ConnectTo(StdLog.text);
 		*)

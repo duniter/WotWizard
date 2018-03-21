@@ -22,7 +22,7 @@ MODULE DuniterServer;
 	
 	CONST
 		
-		version = "2.2.3se";
+		version = "2.3.0se";
 		
 		rsrcDir = "Duniter/Rsrc"; (* Directory for the two following files *)
 		parametersName = "Parameters.txt"; (* File containing the greatest allowed allocated memory size and the longest run time for W.CalcPermutations *)
@@ -34,8 +34,7 @@ MODULE DuniterServer;
 	
 	VAR
 		
-		maxSize, (* Greatest allowed allocated memory size *)
-		maxTime: LONGINT; (* Greatest allowed run time for W.CalcPermutations *)
+		maxSize: LONGINT; (* Greatest allowed allocated memory size *)
 	
 	(* Write the metadata duration, f, cNb & dNb with the help of fo, in json format; duration is the computation duration, f is the DuniterWotWizard.File structure, cNb and dNb are respectively the numbers of internal certifications and of external dossiers *)
 	PROCEDURE WriteMeta (IN fo: TextMappers.Formatter; duration: LONGINT; f: W.File; cNb, dNb: INTEGER);
@@ -311,7 +310,6 @@ MODULE DuniterServer;
 			f.ConnectTo(t);
 			f.WriteInt(maxSize);
 			f.WriteLn;
-			f.WriteInt(maxTime);
 			name := parametersName;
 			Views.Register(TextViews.dir.New(t), Views.dontAsk, l, name, BA.utf8Conv, res); 
 			L.log.Err(res, name);
@@ -334,22 +332,17 @@ MODULE DuniterServer;
 			v := Views.Old(Views.dontAsk, l, name, BA.utf8Conv);
 			IF v = NIL THEN
 				maxSize := W.maxSize;
-				maxTime := W.maxTime DIV Services.resolution;
 				StoreParameters;
 			ELSE
 				ASSERT(v IS TextViews.View, 100);
 				sc.ConnectTo(v(TextViews.View).ThisModel());
 				sc.Scan; ASSERT((sc.type = TextMappers.int) OR (sc.type = TextMappers.lint), 101);
 				maxSize := sc.lint;
-				sc.Scan; ASSERT((sc.type = TextMappers.int) OR (sc.type = TextMappers.lint), 101);
-				maxTime := sc.lint;
-				W.ChangeParameters(maxSize, maxTime * Services.resolution);
+				W.ChangeParameters(maxSize);
 			END;
 			L.log.Msg("Version " + version);
 			Strings.IntToString(maxSize, s);
 			L.log.Msg("Memory size limit for calculating entries: " + s);
-			Strings.IntToString(maxTime, s);
-			L.log.Msg("Run time limit for calculating entries: " + s);
 			B.AddUpdateProc(StoreText);
 		END Init;
 	

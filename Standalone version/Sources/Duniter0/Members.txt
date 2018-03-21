@@ -1,5 +1,5 @@
 (* 
-Duniter: WotWizard.
+Duniter0: WotWizard.
 
 Copyright (C) 2017 GérardMeunier
 
@@ -26,18 +26,22 @@ MODULE Duniter0Members;
 		
 		VAR
 			
-			ok, b: BOOLEAN;
+			ok, ok2, b: BOOLEAN;
 			pk: B.Pubkey;
 			uid: B.String;
-			jb, lb, nb, n: INTEGER;
+			jb, lb, nb, n, list: INTEGER;
 			mT, time, t0: LONGINT;
 		
 		BEGIN (*Count*)
 			t0 := MAX(LONGINT);
 			ok := B.JLNextPubkey(TRUE, pk);
 			WHILE ok DO
-				b := B.JLPub(pk, jb, lb) & B.TimeOf(jb, mT, time); ASSERT(b);
-				t0 := MIN(t0, time);
+				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
+				WHILE ok2 DO
+					b := B.TimeOf(jb, mT, time); ASSERT(b);
+					t0 := MIN(t0, time);
+					ok2 := B.JLPubLNext(list, jb, lb);
+				END;
 				ok := B.JLNextPubkey(FALSE, pk);
 			END;
 			NEW(counts, SHORT((B.RealNow() - t0 + day - 1) DIV day));
@@ -46,11 +50,15 @@ MODULE Duniter0Members;
 			END;
 			ok := B.JLNextPubkey(TRUE, pk);
 			WHILE ok DO
-				b := B.JLPub(pk, jb, lb) & B.TimeOf(jb, mT, time);
-				INC(counts[SHORT((time - t0) DIV day)]);
-				IF lb # B.hasNotLeaved THEN
-					b := B.TimeOf(lb, mT, time); ASSERT(b);
-					DEC(counts[SHORT((time - t0) DIV day)]);
+				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
+				WHILE ok2 DO
+					b := B.TimeOf(jb, mT, time); ASSERT(b);
+					INC(counts[SHORT((time - t0) DIV day)]);
+					IF lb # B.hasNotLeaved THEN
+						b := B.TimeOf(lb, mT, time); ASSERT(b);
+						DEC(counts[SHORT((time - t0) DIV day)]);
+					END;
+					ok2 := B.JLPubLNext(list, jb, lb);
 				END;
 				ok := B.JLNextPubkey(FALSE, pk);
 			END;

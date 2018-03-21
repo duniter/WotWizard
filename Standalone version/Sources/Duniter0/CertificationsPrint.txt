@@ -1,5 +1,5 @@
 (* 
-Duniter: WotWizard.
+Duniter0: WotWizard.
 
 Copyright (C) 2017 GérardMeunier
 
@@ -24,8 +24,7 @@ MODULE Duniter0CertificationsPrint;
 			
 			uid: B.String;
 			from, to: B.Pubkey;
-			hash: B.Hash;
-			block, bnb: INTEGER;
+			block: INTEGER;
 			ok, okP, b: BOOLEAN;
 			pos: B.CertPos;
 			mt, t: LONGINT;
@@ -37,16 +36,17 @@ MODULE Duniter0CertificationsPrint;
 			StdLog.Clear; StdLog.Open;
 			Dialog.MapString("#Duniter0:CertificationsFrom", s);
 			StdLog.String(s); StdLog.Ln; StdLog.Ln;
-			ok := B.IdNextUid(TRUE, uid);
+			ok := B.IdNextUidM(TRUE, uid);
 			WHILE ok DO
-				b := B.IdUid(uid, from, hash, bnb, exp); ASSERT(b);
+				b := B.IdUid(uid, from); ASSERT(b);
 				IF B.CertFrom(from, pos) THEN
 					StdLog.String(uid); StdLog.String(" ->"); StdLog.Ln;
 					okP := pos.CertNextPos(from, to);
 					WHILE okP DO
 						b := B.Cert(from, to, block, exp); ASSERT(b);
-						b := B.IdPub(to, uid, hash, bnb, exp); ASSERT(b);
-						StdLog.Tab; StdLog.String(uid);
+						StdLog.Tab; 
+						b := B.IdPub(to, uid); ASSERT(b);
+						StdLog.String(uid);
 						StdLog.Tab; 
 						b := B.TimeOf(block, mt, t);
 						BA.TimestampToString(mt, dt);
@@ -54,7 +54,7 @@ MODULE Duniter0CertificationsPrint;
 						okP := pos.CertNextPos(from, to);
 					END;
 				END;
-				ok := B.IdNextUid(FALSE, uid);
+				ok := B.IdNextUidM(FALSE, uid);
 			END;
 			StdLog.Ln;
 		END PrintFrom;
@@ -65,8 +65,7 @@ MODULE Duniter0CertificationsPrint;
 			
 			uid: B.String;
 			from, to: B.Pubkey;
-			hash: B.Hash;
-			block, bnb: INTEGER;
+			block: INTEGER;
 			ok, okP, b: BOOLEAN;
 			pos: B.CertPos;
 			mt, t: LONGINT;
@@ -78,16 +77,17 @@ MODULE Duniter0CertificationsPrint;
 			StdLog.Clear; StdLog.Open;
 			Dialog.MapString("#Duniter0:CertificationsTo", s);
 			StdLog.String(s); StdLog.Ln; StdLog.Ln;
-			ok := B.IdNextUid(TRUE, uid);
+			ok := B.IdNextUidM(TRUE, uid);
 			WHILE ok DO
-				b := B.IdUid(uid, to, hash, bnb, exp); ASSERT(b);
+				b := B.IdUid(uid, to); ASSERT(b);
 				IF B.CertTo(to, pos) THEN
 					StdLog.String(uid); StdLog.String(" <-"); StdLog.Ln;
 					okP := pos.CertNextPos(from, to);
 					WHILE okP DO
 						b := B.Cert(from, to, block, exp);
-						b := B.IdPub(from, uid, hash, bnb, exp); ASSERT(b);
-						StdLog.Tab; StdLog.String(uid);
+						StdLog.Tab; 
+						b := B.IdPub(from, uid); ASSERT(b);
+						StdLog.String(uid);
 						StdLog.Tab; 
 						b := B.TimeOf(block, mt, t);
 						BA.TimestampToString(mt, dt);
@@ -95,7 +95,7 @@ MODULE Duniter0CertificationsPrint;
 						okP := pos.CertNextPos(from, to);
 					END;
 				END;
-				ok := B.IdNextUid(FALSE, uid);
+				ok := B.IdNextUidM(FALSE, uid);
 			END;
 			StdLog.Ln;
 		END PrintTo;
