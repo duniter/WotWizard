@@ -22,7 +22,7 @@ MODULE DuniterServer;
 	
 	CONST
 		
-		version = "2.3.0se";
+		version = "2.3.2se";
 		
 		rsrcDir = "Duniter/Rsrc"; (* Directory for the two following files *)
 		parametersName = "Parameters.txt"; (* File containing the greatest allowed allocated memory size and the longest run time for W.CalcPermutations *)
@@ -37,7 +37,7 @@ MODULE DuniterServer;
 		maxSize: LONGINT; (* Greatest allowed allocated memory size *)
 	
 	(* Write the metadata duration, f, cNb & dNb with the help of fo, in json format; duration is the computation duration, f is the DuniterWotWizard.File structure, cNb and dNb are respectively the numbers of internal certifications and of external dossiers *)
-	PROCEDURE WriteMeta (IN fo: TextMappers.Formatter; duration: LONGINT; f: W.File; cNb, dNb: INTEGER);
+	PROCEDURE WriteMeta (IN fo: TextMappers.Formatter; duration: LONGINT; f: W.File; permutations, cNb, dNb: INTEGER);
 		
 		VAR
 			
@@ -140,6 +140,8 @@ MODULE DuniterServer;
 			BA.TimestampToString(B.Now(), s);
 			J.PushString(s);
 			J.BuildField("now");
+			J.PushInteger(permutations);
+			J.BuildField("permutations");
 			BA.TimeToString(duration, ss);
 			J.PushString(ss);
 			J.BuildField("computation_duration");
@@ -214,7 +216,7 @@ MODULE DuniterServer;
 			occur: A.Tree;
 			loc: Files.Locator;
 			name: Files.Name;
-			res, cNb, dNb: INTEGER;
+			res, cNb, dNb, permutations: INTEGER;
 			t: TextModels.Model;
 			fo: TextMappers.Formatter;
 			nowS: BA.DateTime;
@@ -223,7 +225,7 @@ MODULE DuniterServer;
 		
 		BEGIN (*StoreText*)
 			ti := Services.Ticks();
-			IF ~W.BuildEntries(f, cNb, dNb, occur) THEN
+			IF ~W.BuildEntries(f, permutations, cNb, dNb, occur) THEN
 				A.New(occur);
 			END;
 			duration := Services.Ticks() - ti;
@@ -232,7 +234,7 @@ MODULE DuniterServer;
 			loc := Files.dir.This(""); L.log.Err(loc.res, "");
 			t := TextModels.dir.New();
 			fo.ConnectTo(t);
-			WriteMeta(fo, duration, f, cNb, dNb);
+			WriteMeta(fo, duration, f, permutations, cNb, dNb);
 			name := textMeta;
 			Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, BA.utf8Conv, res);
 			L.log.Err(res, name);

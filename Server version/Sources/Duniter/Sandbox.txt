@@ -544,13 +544,13 @@ MODULE DuniterSandbox;
 		VAR
 			
 			t, tt: S.Table;
-			i, n, bnb: INTEGER;
+			i, n: INTEGER;
 			cur: CurId;
 			id: Identity;
 			hE: IdHashE;
 			e: A.Elem;
 			b: BOOLEAN;
-			now, exp: LONGINT;
+			now: LONGINT;
 			hash: Hash;
 			r: S.Row;
 			pub: Pubkey;
@@ -730,21 +730,10 @@ MODULE DuniterSandbox;
 			L.log.Msg("End loading sandbox. Time spent: " + s);
 		END Scan;
 	
-	PROCEDURE IsFree (IN p: Pubkey): BOOLEAN;
-		
-		VAR
-			
-			pos: CertPos;
-		
-		BEGIN (*IsFree*)
-			RETURN ~CertFrom(p, pos);
-		END IsFree;
-	
 	PROCEDURE Init;
 		
 		BEGIN (*Init*)
 			B.AddUpdateProc(Scan);
-			B.FixIsFree(IsFree);
 		END Init;
 	
 	BEGIN (*DuniterSandbox*)
