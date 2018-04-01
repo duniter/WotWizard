@@ -22,7 +22,7 @@ MODULE DuniterServer;
 	
 	CONST
 		
-		version = "2.3.2se";
+		version = "2.3.3se";
 		
 		rsrcDir = "Duniter/Rsrc"; (* Directory for the two following files *)
 		parametersName = "Parameters.txt"; (* File containing the greatest allowed allocated memory size and the longest run time for W.CalcPermutations *)
