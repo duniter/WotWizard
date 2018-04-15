@@ -76,8 +76,10 @@ MODULE Duniter0Basic;
 		BEGIN (*TimestampToString*)
 			IF t = never THEN
 				Dialog.MapString("#Duniter0:Never", dt);
-			ELSIF (t = missing) OR (t = revoked) THEN
+			ELSIF t = missing THEN
 				Dialog.MapString("#Duniter0:Missing", dt);
+			ELSIF t = revoked THEN
+				Dialog.MapString("#Duniter0:Revoked", dt);
 			ELSE
 				TimestampToDate(t, date, time);
 				Dates.DateToString(date, Dates.short, da);

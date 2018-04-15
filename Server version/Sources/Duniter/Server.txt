@@ -22,10 +22,10 @@ MODULE DuniterServer;
 	
 	CONST
 		
-		version = "2.3.3se";
+		version = "2.4.0se";
 		
 		rsrcDir = "Duniter/Rsrc"; (* Directory for the two following files *)
-		parametersName = "Parameters.txt"; (* File containing the greatest allowed allocated memory size and the longest run time for W.CalcPermutations *)
+		parametersName = "Parameters.txt"; (* File containing the greatest allowed allocated memory size for W.CalcPermutations *)
 		runningName = "Running.odc"; (* File whose existence shows that WWServer.exe is running *)
 		
 		textMeta = "WWMeta.json"; (* Json file containing metadata *)

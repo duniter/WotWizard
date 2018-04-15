@@ -81,7 +81,7 @@ MODULE UtilAlea;
 					v2 := 2. * g.Random() - 1.;
 					r := v1 * v1 + v2 * v2;
 				UNTIL (r < 1.) & (r > 0.);
-				r := Math.Sqrt( - 2. * Math.Ln(r) / r);
+				r := Math.Sqrt( -2. * Math.Ln(r) / r);
 				g.g := v1 * r;
 				RETURN v2 * r;
 			END;

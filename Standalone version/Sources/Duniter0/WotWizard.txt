@@ -23,13 +23,11 @@ MODULE Duniter0WotWizard;
 		Lg := StdLog,
 		*)
 		
-		A := UtilAvlTree, B := Duniter0Blockchain, S := Duniter0Sandbox, BA := Duniter0Basic, Services;
+		A := UtilAvlTree, B := Duniter0Blockchain, S := Duniter0Sandbox, BA := Duniter0Basic;
 	
 	CONST
 		
 		maxSizeDef = 430000000; (* Default value for the greatest allowed allocated memory size  *)
-		
-		(* Default value for the greatest allowed run time for CalcPermutations  *)
 		
 		(* Sizes of different types *)
 		INS = SIZE(INTEGER);
@@ -867,7 +865,7 @@ MODULE Duniter0WotWizard;
 		END CalcPermutations;
 	
 	(* Merge the Set(s) returned by CalcPermutations and combine their probabilities; return the list of entries sorted by date(s) (occurDate with elements of type PropDate) or by id(s) (occurName with elements of type PropName)  *)
-	PROCEDURE CalcEntries* (f: File; OUT occurDate, occurName: A.Tree): BOOLEAN;
+	PROCEDURE CalcEntries* (f: File; OUT permutations: INTEGER; OUT occurDate, occurName: A.Tree): BOOLEAN;
 		
 		VAR
 			
@@ -884,6 +882,8 @@ MODULE Duniter0WotWizard;
 		BEGIN (*CalcEntries*)
 			debug := NIL;
 			IF CalcPermutations(f, debug, sets) THEN
+				
+				permutations := sets.NumberOfElems();
 				
 				(* Computing of Propagation(s) with their proba(s) *)
 				A.New(occur);
@@ -966,15 +966,15 @@ MODULE Duniter0WotWizard;
 		
 		VAR
 			
-			ok, okP, b: BOOLEAN;
+			ok, okP, b, bb: BOOLEAN;
 			pos, posI: S.CertPos;
 			from, to: B.Pubkey;
-			toHash: S.Hash;
-			i, j, nbCertifs, princCertif: INTEGER;
+			toHash, h: S.Hash;
+			i, j, nbCertifs, princCertif, bnb: INTEGER;
 			exp, date, mt, t: LONGINT;
 			d: Dossier;
 			c: Certif;
-			uid: B.String;
+			uid, uid1: B.String;
 			certs, cert: PubList;
 			cdL, l: CdList;
 			proportionOfSentries: REAL;
@@ -984,71 +984,77 @@ MODULE Duniter0WotWizard;
 			dNb := 0;
 			ok := S.IdNextHash(TRUE, toHash);
 			WHILE ok DO
-				nbCertifs := 0; certs := NIL;
-				IF S.CertTo(toHash, pos) THEN
-					posI := pos;
-					REPEAT
-						okP := pos.CertNextPos(from, toHash);
-						IF okP THEN
-							b := S.Cert(from, toHash, to, exp) ; ASSERT(b, 100);
-							FixCertNextDate(from, date);
-							IF date <= exp THEN (* Not-expired certification *)
-								INC(nbCertifs);
-								NEW(cert); NEW(cert.pub); cert.pub^ := from; cert.date := date;
-								cert.next := certs; certs := cert;
+				b := S.IdHash(toHash, to, uid, exp); ASSERT(b);
+				b := B.IdPub(to, uid1); bb := B.IdUid(uid, to);
+				IF ~b & ~bb OR b & (uid$ = uid1$) & B.IdPubComplete(to, uid, b, h, bnb, exp) & (exp = BA.missing) THEN
+					nbCertifs := 0; certs := NIL;
+					IF S.CertTo(toHash, pos) THEN
+						posI := pos;
+						REPEAT
+							okP := pos.CertNextPos(from, toHash);
+							IF okP THEN
+								b := S.Cert(from, toHash, to, exp) ; ASSERT(b, 100);
+								FixCertNextDate(from, date);
+								IF date <= exp THEN (* Not-expired certification *)
+									INC(nbCertifs);
+									NEW(cert); NEW(cert.pub); cert.pub^ := from; cert.date := date;
+									cert.next := certs; certs := cert;
+								END;
 							END;
-						END;
-					UNTIL ~okP;
-				END;
-				IF (nbCertifs >= minCertifs) & ((minCertifs < B.pars.sigQty) OR NotTooFar(certs, nbCertifs, princCertif, proportionOfSentries)) THEN
-					INC(dNb);
-					NEW(d); NEW(d.pub);
-					NEW(l.next); l := l.next;
-					l.cd := d;
-					IF minCertifs < B.pars.sigQty THEN
-						b := NotTooFar(certs, nbCertifs, princCertif, proportionOfSentries);
+						UNTIL ~okP;
 					END;
-					d.princCertif := princCertif;
-					d.proportionOfSentries := proportionOfSentries;
-					b := S.IdHash(toHash, d.pub, d.id, d.limit); ASSERT(b, 101);
-					NEW(d.certifs, nbCertifs);
-					j := 0;
-					pos := posI;
-					okP := pos.CertNextPos(from, toHash); ASSERT(okP, 102);
-					REPEAT
-						b := S.Cert(from, toHash, to, exp); ASSERT(b, 103);
-						NEW(c); NEW(c.fromP);
-						c.fromP^ := from;
-						b := B.IdPub(from, c.from); ASSERT(b, 104);
-						FixCertNextDate(from, c.date);
-						c.limit := exp;
-						IF c.date <= c.limit THEN
-							d.certifs[j] := c;
-							INC(j);
+					IF (nbCertifs >= minCertifs) & ((minCertifs < B.pars.sigQty) OR NotTooFar(certs, nbCertifs, princCertif, proportionOfSentries)) THEN
+						INC(dNb);
+						NEW(d); NEW(d.pub);
+						NEW(l.next); l := l.next;
+						l.cd := d;
+						IF minCertifs < B.pars.sigQty THEN
+							b := NotTooFar(certs, nbCertifs, princCertif, proportionOfSentries);
 						END;
-						okP := pos.CertNextPos(from, toHash);
-					UNTIL ~okP;
+						d.princCertif := princCertif;
+						d.proportionOfSentries := proportionOfSentries;
+						b := S.IdHash(toHash, d.pub, d.id, d.limit); ASSERT(b, 101);
+						NEW(d.certifs, nbCertifs);
+						j := 0;
+						pos := posI;
+						okP := pos.CertNextPos(from, toHash); ASSERT(okP, 102);
+						REPEAT
+							b := S.Cert(from, toHash, to, exp); ASSERT(b, 103);
+							NEW(c); NEW(c.fromP);
+							c.fromP^ := from;
+							b := B.IdPub(from, c.from); ASSERT(b, 104);
+							FixCertNextDate(from, c.date);
+							c.limit := exp;
+							IF c.date <= c.limit THEN
+								d.certifs[j] := c;
+								INC(j);
+							END;
+							okP := pos.CertNextPos(from, toHash);
+						UNTIL ~okP;
+					END;
+					ok := S.IdNextHash(FALSE, toHash);
 				END;
-				ok := S.IdNextHash(FALSE, toHash);
 			END;
 			cNb := 0;
 			ok := S.CertNextTo(TRUE, pos);
 			WHILE ok DO
-				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
+				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) THEN
 					REPEAT
-						NEW(c); NEW(c.fromP);
-						c.fromP^ := from;
-						b := B.IdPub(from, c.from); ASSERT(b, 105);
-						c.to := uid;
-						FixCertNextDate(from, c.date);
-						c.limit := exp;
-						(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite ; peut-être inutile maintenant *)
-						mt := 0;
-						b := B.TimeOf(B.LastBlock() - 1, mt, t); ASSERT(b OR (B.LastBlock() = 0), 106);
-						IF (c.date <= c.limit) & (c.date > mt) THEN
-							INC(cNb);
-							NEW(l.next); l := l.next;
-							l.cd := c;
+						IF B.IdPubComplete(to, uid, b, h, bnb, t) & b THEN
+							NEW(c); NEW(c.fromP);
+							c.fromP^ := from;
+							b := B.IdPub(from, c.from); ASSERT(b, 105);
+							c.to := uid;
+							FixCertNextDate(from, c.date);
+							c.limit := exp;
+							(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite ; peut-être inutile maintenant *)
+							mt := 0;
+							b := B.TimeOf(B.LastBlock() - 1, mt, t); ASSERT(b OR (B.LastBlock() = 0), 106);
+							IF (c.date <= c.limit) & (c.date > mt) THEN
+								INC(cNb);
+								NEW(l.next); l := l.next;
+								l.cd := c;
+							END;
 						END;
 					UNTIL ~(pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp));
 				END;
@@ -1070,7 +1076,7 @@ MODULE Duniter0WotWizard;
 		END FillFile;
 	
 	(* Calculate the current set of entries, sorted by dates (occur) and by names (invOccur) *)
-	PROCEDURE BuildEntries* (OUT f: File; OUT cNb, dNb: INTEGER; OUT occurDate, occurName: A.Tree): BOOLEAN;
+	PROCEDURE BuildEntries* (OUT f: File; OUT permutations, cNb, dNb: INTEGER; OUT occurDate, occurName: A.Tree): BOOLEAN;
 		
 		VAR
 			
@@ -1080,7 +1086,7 @@ MODULE Duniter0WotWizard;
 		BEGIN (*BuildEntries*)
 			FillFile(B.pars.sigQty, f, cNb, dNb);
 			n := 0;
-			b := CalcEntries(CopyFile(f, 0, n), occurDate, occurName);
+			b := CalcEntries(CopyFile(f, 0, n), permutations, occurDate, occurName);
 			RETURN b;
 		END BuildEntries;
 	

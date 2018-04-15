@@ -544,13 +544,13 @@ MODULE Duniter0Sandbox;
 		VAR
 			
 			t, tt: S.Table;
-			i, n, bnb: INTEGER;
+			i, n: INTEGER;
 			cur: CurId;
 			id: Identity;
 			hE: IdHashE;
 			e: A.Elem;
 			b: BOOLEAN;
-			now, exp: LONGINT;
+			now: LONGINT;
 			hash: Hash;
 			r: S.Row;
 			pub: Pubkey;
@@ -724,29 +724,16 @@ MODULE Duniter0Sandbox;
 			Certifications(d);
 		END Scan;
 	
-	PROCEDURE IsFree (IN p: Pubkey): BOOLEAN;
-		
-		VAR
-			
-			pos: CertPos;
-		
-		BEGIN (*IsFree*)
-			RETURN ~CertFrom(p, pos);
-		END IsFree;
-	
 	PROCEDURE Init;
 		
 		BEGIN (*Init*)
-			B.AddUpdateProc(Scan, TRUE);
-			B.AddUpdateProc(Scan, FALSE);
-			B.FixIsFree(IsFree);
-			B.Update;
+			B.AddUpdateProc(Scan);
+			B.UpdateAll;
 			Scan;
 		END Init;
 	
 	BEGIN (*Duniter0Sandbox*)
 		Init;
 	CLOSE
-		B.RemoveUpdateProc(Scan, TRUE);
-		B.RemoveUpdateProc(Scan, FALSE);
+		B.RemoveUpdateProc(Scan);
 	END Duniter0Sandbox.

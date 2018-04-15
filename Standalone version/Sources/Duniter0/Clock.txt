@@ -71,11 +71,11 @@ MODULE Duniter0Clock;
 		BEGIN (*Init*)
 			oldBlock := - 1;
 			UpdateTime;
-			B.AddUpdateProc(UpdateTime, FALSE);
+			B.AddUpdateProc(UpdateTime);
 		END Init;
 	
 	BEGIN (*Duniter0Clock*)
 		Init;
 	CLOSE
-		B.RemoveUpdateProc(UpdateTime, FALSE);
+		B.RemoveUpdateProc(UpdateTime);
 	END Duniter0Clock.

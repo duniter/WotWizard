@@ -10,64 +10,50 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 *)
 
-MODULE Duniter0MembersPrint;
+MODULE Duniter0CentralitiesJson;
 	
 	
-
+	
 	IMPORT
 		
-		M := Duniter0Members, TextMappers, TextModels, TextViews, Views;
-
-	PROCEDURE Do*;
-		
-		
-		VAR
-			
-			t: TextModels.Model;
-			f: TextMappers.Formatter;
-			a: POINTER TO ARRAY OF INTEGER;
-			i: INTEGER;
-		
-		BEGIN (*Do*)
-			M.Count(a);
-			t := TextModels.dir.New();
-			f.ConnectTo(t);
-			FOR i := 0 TO LEN(a) - 1 DO
-				f.WriteTab;
-				f.WriteInt(i);
-				f.WriteTab;
-				f.WriteInt(a[i]);
-				f.WriteLn;
-			END;
-			Views.OpenView(TextViews.dir.New(t));
-		END Do;
-
-	PROCEDURE DoP* (period: INTEGER);
-		
-		
-		VAR
-			
-			t: TextModels.Model;
-			f: TextMappers.Formatter;
-			a: POINTER TO ARRAY OF INTEGER;
-			i: INTEGER;
-		
-		BEGIN (*DoP*)
-			M.CountP(period, a);
-			t := TextModels.dir.New();
-			f.ConnectTo(t);
-			FOR i := 0 TO LEN(a) - 1 DO
-				f.WriteTab;
-				f.WriteInt(i * period);
-				f.WriteTab;
-				f.WriteInt(a[i]);
-				f.WriteLn;
-			END;
-			Views.OpenView(TextViews.dir.New(t));
-		END DoP;
+		B := Duniter0Blockchain, C := Duniter0Centralities, J := UtilJson, TextMappers, TextModels, TextViews, Views;
 	
-	END Duniter0MembersPrint.
+	PROCEDURE Print*;
+		
+		VAR
+			
+			centers, centersId: C.Centrals;
+			i: INTEGER;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*Print*)
+			C.Count(centers, centersId);
+			J.StartObject;
+			J.PushString("Centralities");
+			J.BuildField("description");
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			J.StartArray;
+			FOR i := 0 TO LEN(centersId) - 1 DO
+				J.StartObject;
+				J.PushString(centersId[i].id);
+				J.BuildField("id");
+				J.PushReal(centersId[i].c);
+				J.BuildField("centrality");
+				J.BuildObject;
+			END;
+			J.BuildArray;
+			J.BuildField("values");
+			J.BuildObject;
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			J.GetJson().Write(f);
+			Views.OpenView(TextViews.dir.New(t));
+		END Print;
+		
+	END Duniter0CentralitiesJson.
 
-Duniter0MembersPrint.Do;
+DevDebug.UnloadThis Duniter0CentralitiesPrint Duniter0CentralitiesJson Duniter0Centralities 
 
-"Duniter0MembersPrint.DoP(20)"
+Duniter0CentralitiesJson.Print;

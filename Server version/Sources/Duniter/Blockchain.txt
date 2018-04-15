@@ -1559,7 +1559,7 @@ MODULE DuniterBlockchain;
 		
 		VAR
 			
-			i, idRef, jlRef, n, res: INTEGER;
+			i, idRef, jlRef, n, res, bnb: INTEGER;
 			tt: LONGINT;
 			s: ARRAY 101 OF CHAR;
 			b: BOOLEAN;
@@ -1604,6 +1604,7 @@ MODULE DuniterBlockchain;
 				END;
 				ASSERT(id.hash # "", 104);
 				Strings.StringToInt(nb, id.block_number, res); ASSERT(res = 0, 105);
+				bnb := id.block_number;
 				NEW(idU); NEW(idU.c, LEN(id.uid$) + 1); idU.c^ := id.uid$;
 				NEW(idP); idP.ref := id.pubkey;
 				IF idPubT.SearchIns(idP) THEN
@@ -1642,7 +1643,7 @@ MODULE DuniterBlockchain;
 				END;
 				NEW(jlL);
 				jlL.next := jl .list;
-				jlL.joiningBlock := id.block_number;
+				jlL.joiningBlock := bnb;
 				jlL.leavingBlock := hasNotLeaved;
 				jl.list := joinAndLeaveLMan.WriteAllocateData(jlL);
 				joinAndLeaveMan.WriteData(jlRef, jl);
@@ -1653,7 +1654,7 @@ MODULE DuniterBlockchain;
 			END;
 			
 			i := 1;
-			WHILE ssA[i] # ']' DO (* actives : Update *)
+			WHILE ssA[i] # ']' DO (* actives *)
 				INC(i);
 				NEW(idP);
 				ScanS(ssA, ':', idP.ref, i);

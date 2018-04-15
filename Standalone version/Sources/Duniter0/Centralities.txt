@@ -1,0 +1,212 @@
+(* 
+Duniter0: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter0Centralities;
+	
+	(* Le degré de centralité d'un membre est le nombre de couples orientés (membre->membre) pour lesquels il fait partie d'un des plus courts chemins reliant ce couple. *)
+	
+	
+
+	IMPORT
+		
+		A := UtilAvlTree, BA := Duniter0Basic, B := Duniter0Blockchain, N := UtilNet, Math, UtilSort;
+	
+	TYPE
+		
+		Net = POINTER TO RECORD (N.Net)
+		END;
+		
+		Node = POINTER TO RECORD (N.Node)
+			p: B.Pubkey;
+			pos: B.CertPos;
+		END;
+	
+		Central* = POINTER TO RECORD
+			id-: B.String;
+			c-: REAL;
+		END;
+		
+		Centrals* = POINTER TO ARRAY OF Central;
+		
+		CentralSort = EXTENSIBLE RECORD (UtilSort.T)
+			c: Centrals
+		END;
+		
+		CentralSortId = RECORD (CentralSort)
+		END;
+	
+	VAR
+		
+		net: Net;
+	
+	PROCEDURE (VAR s: CentralSort) Swap (p1, p2: INTEGER);
+		
+		VAR
+			
+			c: Central;
+		
+		BEGIN (*Swap*)
+			c := s.c[p1]; s.c[p1] := s.c[p2]; s.c[p2] := c;
+		END Swap;
+	
+	PROCEDURE (VAR s: CentralSort) Less (p1, p2: INTEGER): BOOLEAN, EXTENSIBLE;
+		
+		BEGIN (*Less*)
+			RETURN (s.c[p1].c > s.c[p2].c) OR (s.c[p1].c = s.c[p2].c) & (BA.CompP(s.c[p1].id, s.c[p2].id) = A.lt);
+		END Less;
+	
+	PROCEDURE (VAR s: CentralSortId) Less (p1, p2: INTEGER): BOOLEAN;
+		
+		BEGIN (*Less*)
+			RETURN BA.CompP(s.c[p1].id, s.c[p2].id) = A.lt;
+		END Less;
+	
+	PROCEDURE NewNode (IN p: B.Pubkey): Node;
+		
+		VAR
+			
+			n: Node;
+		
+		BEGIN (*NewNode*)
+			NEW(n);
+			n.p := p;
+			RETURN n;
+		END NewNode;
+	
+	PROCEDURE (net: Net) Number (): INTEGER; 
+		
+		BEGIN (*Number*)
+			RETURN B.IdLen();
+		END Number;
+	
+	PROCEDURE (net: Net) Enumerate (first: BOOLEAN; OUT node: N.Node; OUT member: BOOLEAN): BOOLEAN;
+		
+		VAR
+			
+			p: B.Pubkey;
+			id: B.String;
+			b: BOOLEAN;
+			h: B.Hash;
+			bnb: INTEGER;
+			exp: LONGINT;
+		
+		BEGIN (*Enumerate*)
+			IF B.IdNextUid(first, id) THEN
+				b := B.IdUidComplete(id, p, member, h, bnb, exp); ASSERT(b);
+				node := NewNode(p);
+				RETURN TRUE;
+			END;
+			RETURN FALSE;
+		END Enumerate;
+	
+	PROCEDURE (n1: Node) Compare (n2: N.Node): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH n2: Node DO
+				IF n1.p < n2.p THEN
+					RETURN A.lt;
+				END;
+				IF n1.p > n2.p THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+
+	PROCEDURE (n: Node) FromTo (first: BOOLEAN; OUT follow: N.Node): BOOLEAN;
+		
+		VAR
+			
+			b: BOOLEAN;
+			from, to: B.Pubkey;
+		
+		BEGIN (*FromTo*)
+			IF first THEN
+				b := B.CertFrom(n.p, n.pos);
+			END;
+			IF ~n.pos.CertNextPos(from, to) THEN
+				RETURN FALSE;
+			END;
+			follow := NewNode(to);
+			RETURN TRUE;
+		END FromTo;
+	
+	PROCEDURE Count* (OUT centers, centersId: Centrals);
+		
+		VAR
+			
+			i, len: INTEGER;
+			ok, b: BOOLEAN;
+			c: Central;
+			s: CentralSort;
+			sId: CentralSortId;
+			cV: LONGINT;
+			id: B.String;
+			cT: N.Centrals;
+			node: N.Node;
+			max: REAL;
+		
+		BEGIN (*Count*)
+			cT := net.Centralities();
+			len := net.ExtremitiesNb();
+			max := Math.Ln(1 + (len - 1) * (len - 2));
+			NEW(centers, len);
+			i := 0;
+			ok := cT.Walk(TRUE, node, cV);
+			WHILE ok DO
+				WITH node: Node DO
+					b := B.IdPub(node.p, id); ASSERT(b);
+					NEW(c);
+					c.id := id;
+					c.c := Math.Ln(1 + cV) / max;
+					centers[i] := c;
+					INC(i);
+				END;
+				ok := cT.Walk(FALSE, node, cV);
+			END;
+			ASSERT(i = len);
+			s.c := centers;
+			s.QuickSort(0, len - 1);
+			NEW(centersId, len);
+			FOR i := 0 TO len - 1 DO
+				centersId[i] := centers[i];
+			END;
+			sId.c := centersId;
+			sId.QuickSort(0, len - 1);
+		END Count;
+	
+	PROCEDURE CountOne* (p: B.Pubkey): REAL;
+		
+		VAR
+			
+			len: LONGINT;
+		
+		BEGIN (*CountOne*)
+			len := net.ExtremitiesNb();
+			RETURN Math.Ln(1 + net.Centrality(NewNode(p))) / Math.Ln(1 + (len - 1) * (len - 2));
+		END CountOne;
+	
+	PROCEDURE Update;
+		
+		BEGIN (*Update*)
+			net.Update;
+		END Update;
+	
+	BEGIN (*Duniter0Centralities*)
+		NEW(net);
+		B.AddUpdateProc(Update);
+		B.UpdateAll;
+	CLOSE
+		B.RemoveUpdateProc(Update);
+	END Duniter0Centralities.
+
+DevDebug.UnloadThis Duniter0CentralitiesPrint Duniter0Centralities UtilNet 

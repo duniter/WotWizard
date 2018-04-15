@@ -12,7 +12,7 @@ You should have received a copy of the GNU General Public License along with thi
 
 MODULE UtilSets;
 	
-	(**)
+	
 	
 	(* The module UtilSets implements the type Set, a set of non-negative integers, represented by intervals. *)
 	
@@ -34,12 +34,17 @@ MODULE UtilSets;
 		END;
 		
 		Set* = POINTER TO LIMITED RECORD (* Set of non-negative integers. *)
-			nbElems-, (* Number of elements in the set. *)
-			pos, posE: INTEGER;
-			elems, cour: Segment;
+			nbElems-: INTEGER; (* Number of elements in the set. *)
+			elems: Segment;
 		END;
 		
 		TableVer = ARRAY 2, 2 OF BYTE;
+		
+		SetIterator* = RECORD
+			s: Set;
+			cour: Segment;
+			pos, posE: INTEGER;
+		END;
 
 	PROCEDURE InsereSegment (apresSeg: Segment; plein, vide: INTEGER);
 		
@@ -65,7 +70,6 @@ MODULE UtilSets;
 			s.elems.largeurs[0] := taSet;
 			s.elems.suivant := s.elems;
 			s.elems.precedent := s.elems;
-			s.cour := NIL;
 		END Empty;
 
 	(* Creates and returns a new empty set. *)
@@ -117,7 +121,6 @@ MODULE UtilSets;
 		BEGIN (*Trans*)
 			s.nbElems := src.nbElems;
 			s.elems := src.elems;
-			s.cour := NIL;
 		END Trans;
 
 	(* Creates and returns a copy of s.*)
@@ -539,89 +542,84 @@ MODULE UtilSets;
 			RETURN se # t;
 		END NextElem;
 	
+	PROCEDURE (VAR i: SetIterator) Attach* (s: Set), NEW;
+		
+		BEGIN (*Attach*)
+			ASSERT(s # NIL, 20);
+			i.s := s;
+			i.cour := NIL;
+		END Attach;
+	
 		(* On return, min and max contain the first interval of the set s. Returns TRUE if such an interval exists. Usage: ok:= s.First(a, b); WHILE ok DO ... ok:= s.Next(a, b) END; *)
-	PROCEDURE (s: Set) First* (OUT min, max: INTEGER): BOOLEAN, NEW;
+	PROCEDURE (VAR i: SetIterator) First* (OUT min, max: INTEGER): BOOLEAN, NEW;
 		
 		BEGIN (*First*)
-			IF s.IsEmpty() THEN
+			ASSERT(i.s # NIL, 20);
+			IF i.s.IsEmpty() THEN
 				RETURN FALSE;
 			END;
-			s.cour := s.elems.suivant;
-			s.pos := sMin + s.elems.largeurs[0];
-			min := s.pos;
-			max := min + s.cour.largeurs[1] - 1;
+			i.cour := i.s.elems.suivant;
+			i.pos := sMin + i.s.elems.largeurs[0];
+			min := i.pos;
+			max := min + i.cour.largeurs[1] - 1;
 			RETURN TRUE;
 		END First;
 	
 		(* On return, min and max contain the next interval of the set s. Returns TRUE if such an interval exists. s.First must have been called once before s.Next. Usage: ok:= s.First(a, b); WHILE ok DO ... ok:= s.Next(a, b) END; *)
-	PROCEDURE (s: Set) Next* (OUT min, max: INTEGER): BOOLEAN, NEW;
+	PROCEDURE (VAR i: SetIterator) Next* (OUT min, max: INTEGER): BOOLEAN, NEW;
 		
 		BEGIN (*Next*)
-			ASSERT(s.cour # NIL, 20);
-			s.pos := s.pos + s.cour.largeurs[1] + s.cour.largeurs[0];
-			s.cour := s.cour.suivant;
-			IF s.cour = s.elems THEN
-				s.cour := NIL;
+			ASSERT(i.s # NIL, 20);
+			ASSERT(i.cour # NIL, 21);
+			i.pos := i.pos + i.cour.largeurs[1] + i.cour.largeurs[0];
+			i.cour := i.cour.suivant;
+			IF i.cour = i.s.elems THEN
+				i.cour := NIL;
 				RETURN FALSE;
 			END;
-			min := s.pos;
-			max := min + s.cour.largeurs[1] - 1;
+			min := i.pos;
+			max := min + i.cour.largeurs[1] - 1;
 			RETURN TRUE;
 		END Next;
 	
-	PROCEDURE (s: Set) FirstE* (OUT e: INTEGER): BOOLEAN, NEW;
+	PROCEDURE (VAR i: SetIterator) FirstE* (OUT e: INTEGER): BOOLEAN, NEW;
 		
 		BEGIN (*FirstE*)
-			IF s.IsEmpty() THEN
+			ASSERT(i.s # NIL, 20);
+			IF i.s.IsEmpty() THEN
 				RETURN FALSE;
 			END;
-			s.cour := s.elems.suivant;
-			s.pos := sMin + s.elems.largeurs[0];
-			s.posE := s.pos;
-			e := s.pos;
+			i.cour := i.s.elems.suivant;
+			i.pos := sMin + i.s.elems.largeurs[0];
+			i.posE := i.pos;
+			e := i.posE;
 			RETURN TRUE;
 		END FirstE;
 	
-	PROCEDURE (s: Set) NextE* (OUT e: INTEGER): BOOLEAN, NEW;
+	PROCEDURE (VAR i: SetIterator) NextE* (OUT e: INTEGER): BOOLEAN, NEW;
 		
 		VAR
 			
 			max: INTEGER;
 		
 		BEGIN (*NextE*)
-			ASSERT(s.cour # NIL, 20);
-			max := s.pos + s.cour.largeurs[1] - 1;
-			IF s.posE < max THEN
-				INC(s.posE);
-				e := s.posE;
+			ASSERT(i.s # NIL, 20);
+			ASSERT(i.cour # NIL, 21);
+			max := i.pos + i.cour.largeurs[1] - 1;
+			IF i.posE < max THEN
+				INC(i.posE);
+				e := i.posE;
 				RETURN TRUE;
 			END;
-			s.pos := s.pos + s.cour.largeurs[1] + s.cour.largeurs[0];
-			s.cour := s.cour.suivant;
-			IF s.cour = s.elems THEN
-				s.cour := NIL;
+			i.pos := i.pos + i.cour.largeurs[1] + i.cour.largeurs[0];
+			i.cour := i.cour.suivant;
+			IF i.cour = i.s.elems THEN
+				i.cour := NIL;
 				RETURN FALSE;
 			END;
-			s.posE := s.pos;
-			e := s.posE;
+			i.posE := i.pos;
+			e := i.posE;
 			RETURN TRUE;
 		END NextE;
-	
-	PROCEDURE (s: Set) NbOfElems* (): INTEGER, NEW;
-		
-		VAR
-			
-			n, min, max: INTEGER;
-			ok: BOOLEAN;
-		
-		BEGIN (*NbOfElems*)
-			n := 0;
-			ok := s.First(min, max);
-			WHILE ok DO
-				INC(n, max - min + 1);
-				ok := s.Next(min, max);
-			END;
-			RETURN n;
-		END NbOfElems;
 	
 	END UtilSets.

@@ -16,6 +16,10 @@ MODULE Duniter0Members;
 
 	IMPORT
 		
+		(*
+		L := StdLog,
+		*)
+		
 		B := Duniter0Blockchain;
 	
 	PROCEDURE Count* (OUT counts: POINTER TO ARRAY OF INTEGER);
@@ -66,5 +70,56 @@ MODULE Duniter0Members;
 				INC(counts[n], counts[n - 1]);
 			END;
 		END Count;
+	
+	PROCEDURE CountP* (period: INTEGER; OUT counts: POINTER TO ARRAY OF INTEGER);
+		
+		CONST
+			
+			day = 60 * 60 * 24;
+		
+		VAR
+			
+			ok, ok2, b: BOOLEAN;
+			pk: B.Pubkey;
+			uid: B.String;
+			jb, lb, nb, n, list: INTEGER;
+			mT, time, t0: LONGINT;
+			p: INTEGER;
+		
+		BEGIN (*CountP*)
+			p := period * day;
+			t0 := MAX(LONGINT);
+			ok := B.JLNextPubkey(TRUE, pk);
+			WHILE ok DO
+				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
+				WHILE ok2 DO
+					b := B.TimeOf(jb, mT, time); ASSERT(b);
+					t0 := MIN(t0, time);
+					ok2 := B.JLPubLNext(list, jb, lb);
+				END;
+				ok := B.JLNextPubkey(FALSE, pk);
+			END;
+			NEW(counts, SHORT((B.RealNow() - t0 + p - 1) DIV p));
+			FOR n := 0 TO LEN(counts) - 1 DO
+				counts[n] := 0;
+			END;
+			ok := B.JLNextPubkey(TRUE, pk);
+			WHILE ok DO
+				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
+				WHILE ok2 DO
+					b := B.TimeOf(jb, mT, time); ASSERT(b);
+					INC(counts[SHORT((time - t0) DIV p)]);
+					IF lb # B.hasNotLeaved THEN
+						b := B.TimeOf(lb, mT, time); ASSERT(b);
+						DEC(counts[SHORT((time - t0) DIV p)]);
+					END;
+					ok2 := B.JLPubLNext(list, jb, lb);
+				END;
+				ok := B.JLNextPubkey(FALSE, pk);
+			END;
+			FOR n := 1 TO LEN(counts) - 1 DO
+				INC(counts[n], counts[n - 1]);
+			END;
+		END CountP;
 	
 	END Duniter0Members.
