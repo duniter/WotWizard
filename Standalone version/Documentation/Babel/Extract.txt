@@ -1,0 +1,26 @@
+BabelExtract
+
+DEFINITION BabelExtract;
+
+	IMPORT Files, Stores;
+
+	PROCEDURE Do;
+	PROCEDURE ImportTbl (fi: Files.File; OUT s: Stores.Store);
+	PROCEDURE Install;
+
+END BabelExtract.
+
+BabelExtract provides a converter which may be used to read the contents of .tbl files.
+
+To install the converter:
+
+"BabelExtract.Install"
+
+PROCEDURE Do
+Extracts the content of a .tbl file and writes it as a new text.
+
+PROCEDURE ImportTbl (fi: Files.File; OUT s: Stores.Store)
+Converter which can read the content of a .tbl file.
+
+PROCEDURE Install
+Installs the converter ImportTbl which can read the content of a .tbl file.

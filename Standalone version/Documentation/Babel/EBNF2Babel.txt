@@ -1,0 +1,19 @@
+BabelEBNF2Babel
+
+DEFINITION BabelEBNF2Babel;
+
+	PROCEDURE Compile;
+
+END BabelEBNF2Babel.
+
+
+This modules reads the EBNF text which is in the focus view and converts it into a Babel definition file. Look at the EBNFgrammar and its Babelcounterpart, and, as an example, at the ComponentPascal grammar.
+
+Strings inclosed in single or double quotes are copied into the LEXICON part with a dummy name.
+Identifiers are copied into the LEXICON part if they are terminals, or into the DECLARATION part if they are non-terminals of the grammar.
+Defs (strings delimited by two "&") are copied into the LEXICON part if they are used in productions, or into the DEFINITION part if not.
+
+BabelEBNF2Babel.Compile;
+
+PROCEDURE Compile
+Reads the EBNF text which is in the focus view and writes its Babel translation into a new text document.
