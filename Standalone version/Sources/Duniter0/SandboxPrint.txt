@@ -16,7 +16,7 @@ MODULE Duniter0SandboxPrint;
 
 	IMPORT
 		
-		B := Duniter0Blockchain, BA := Duniter0Basic, S := Duniter0Sandbox, StdLog;
+		B := Duniter0Blockchain, BA := Duniter0Basic, S := Duniter0Sandbox, Dialog, TextMappers, TextModels, TextViews, Views;
 	
 	PROCEDURE Print*;
 		
@@ -29,81 +29,94 @@ MODULE Duniter0SandboxPrint;
 			ok, okP, b: BOOLEAN;
 			pos: S.CertPos;
 			s: BA.DateTime;
+			ss: Views.Title;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
 		
 		BEGIN (*Print*)
-			StdLog.Clear; StdLog.Open;
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			
 			ok := S.IdNextHash(TRUE, hash);
 			WHILE ok DO
 				b := S.IdHash(hash, pubkey, uid, exp); ASSERT(b);
-				StdLog.String(hash); StdLog.Tab;
-				StdLog.String(pubkey); StdLog.Tab;
-				StdLog.String(uid); StdLog.Tab;
+				f.WriteString(hash); f.WriteLn;
+				f.WriteTab; f.WriteString(pubkey); f.WriteLn;
+				f.WriteTab; f.WriteString(uid); f.WriteTab;
 				BA.TimestampToString(exp, s);
-				StdLog.String(s);
-				StdLog.Ln;
+				f.WriteString(s); f.WriteLn;
 				ok := S.IdNextHash(FALSE, hash);
 			END;
-			StdLog.Ln;
+			f.WriteLn;
 			ok := S.IdNextPubkey(TRUE, pubkey, hash);
 			WHILE ok DO
-				StdLog.String(pubkey); StdLog.Tab;
-				StdLog.String(hash);
-				StdLog.Ln;
+				f.WriteString(pubkey); f.WriteLn; f.WriteTab;
+				f.WriteString(hash);
+				f.WriteLn;
 				ok := S.IdNextPubkey(FALSE, pubkey, hash);
 			END;
-			StdLog.Ln;
+			f.WriteLn;
 			ok := S.IdNextUid(TRUE, uid, hash);
 			WHILE ok DO
-				StdLog.String(uid); StdLog.Tab;
-				StdLog.String(hash);
-				StdLog.Ln;
+				f.WriteString(uid); f.WriteLn; f.WriteTab;
+				f.WriteString(hash);
+				f.WriteLn;
 				ok := S.IdNextUid(FALSE, uid, hash);
 			END;
-			StdLog.Ln;
+			f.WriteLn;
 			
 			ok := S.CertNextFrom(TRUE, pos);
 			WHILE ok DO
 				okP := pos.CertNextPos(from, toHash);
 				WHILE okP DO
-					StdLog.String(from);
+					f.WriteString(from);
 					IF B.IdPub(from, uid) THEN
-						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
+						f.WriteLn; f.WriteTab;
+						f.WriteString(" ("); f.WriteString(uid); f.WriteString(")");
 					END;
-					StdLog.String(" -> ");
-					StdLog.String(toHash);
+					f.WriteLn; f.WriteString("→"); f.WriteLn;
+					f.WriteString(toHash);
 					IF S.IdHash(toHash, pubkey, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
-						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
+						f.WriteLn; f.WriteTab;
+						f.WriteString(" ("); f.WriteString(uid); f.WriteString(") ");
 					END;
 					b := S.Cert(from, toHash, to, exp); ASSERT(b);
 					BA.TimestampToString(exp, s);
-					StdLog.String(s);
-					StdLog.Ln;
+					f.WriteLn;
+					f.WriteString(s);
+					f.WriteLn; f.WriteLn;
 					okP := pos.CertNextPos(from, toHash);
 				END;
 				ok := S.CertNextFrom(FALSE, pos);
 			END;
-			StdLog.Ln;
+			f.WriteLn;
 			ok := S.CertNextTo(TRUE, pos);
 			WHILE ok DO
 				okP := pos.CertNextPos(from, toHash);
 				WHILE okP DO
-					StdLog.String(toHash);
+					f.WriteString(toHash);
 					IF S.IdHash(toHash, to, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
-						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
+						f.WriteLn; f.WriteTab;
+						f.WriteString(" ("); f.WriteString(uid); f.WriteString(")");
 					END;
-					StdLog.String(" <- ");
-					StdLog.String(from);
+					f.WriteLn; f.WriteString("←"); f.WriteLn;
+					f.WriteString(from);
 					IF B.IdPub(from, uid) THEN
-						StdLog.String(" ("); StdLog.String(uid); StdLog.String(")");
+						f.WriteLn; f.WriteTab;
+						f.WriteString(" ("); f.WriteString(uid); f.WriteString(") ");
 					END;
 					b := S.Cert(from, toHash, to, exp); ASSERT(b);
 					BA.TimestampToString(exp, s);
-					StdLog.String(s);
-					StdLog.Ln;
+					f.WriteLn;
+					f.WriteString(s);
+					f.WriteLn; f.WriteLn;
 					okP := pos.CertNextPos(from, toHash);
 				END;
 				ok := S.CertNextTo(FALSE, pos);
 			END;
+			
+			Dialog.MapString("#Duniter0:Sandbox", ss);
+			Views.OpenAux(TextViews.dir.New(t), ss);
 		END Print;
 	
 	END Duniter0SandboxPrint.

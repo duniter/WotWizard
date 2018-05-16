@@ -60,7 +60,7 @@ MODULE Duniter0Blockchain;
 	
 	TYPE
 		
-		UpdateProc* = PROCEDURE; (* Procedure called at every update *)
+		UpdateProc* = PROCEDURE (VAR changed: BOOLEAN); (* Procedure called at every update *)
 		
 		UpdateList = POINTER TO RECORD (* Chained list of procedures called at every update *)
 			next: UpdateList;
@@ -269,6 +269,7 @@ MODULE Duniter0Blockchain;
 		
 		updateList: UpdateList; (* Head of general UpdateList *)
 		update: UpdateAction;
+		updateChanged: BOOLEAN;
 		
 		pars-: Parameters; (* Duniter parmeters *)
 		
@@ -2134,7 +2135,7 @@ MODULE Duniter0Blockchain;
 		END CalculateSentries;
 	
 	(* Insert datas from all the blocks from the secureGapth block before the last read *)
-	PROCEDURE ScanBlocks (d: S.Database);
+	PROCEDURE ScanBlocks (d: S.Database): BOOLEAN;
 		
 		VAR
 			
@@ -2193,7 +2194,9 @@ MODULE Duniter0Blockchain;
 			database.UpdateBase;
 			IF t.rows > 0 THEN
 				CalculateSentries;
+				RETURN TRUE;
 			END;
+			RETURN FALSE;
 		END ScanBlocks;
 	
 	PROCEDURE AddUpdateProc* (updateProc: UpdateProc);
@@ -2241,7 +2244,7 @@ MODULE Duniter0Blockchain;
 		END RemoveUpdateProc;
 	
 	(* Scan the Duniter database *)
-	PROCEDURE Scan;
+	PROCEDURE Scan (VAR changed: BOOLEAN);
 		
 		VAR
 			
@@ -2250,7 +2253,7 @@ MODULE Duniter0Blockchain;
 		
 		BEGIN (*Scan*)
 			S.OpenDatabase(driver, "", "", duniBase, S.sync, S.hideErrors, d, res); ASSERT(res = 0, 100);
-			ScanBlocks(d);
+			changed := ScanBlocks(d) OR changed;
 		END Scan;
 	
 	(* Scan the Duniter parameters in block 0 *)
@@ -2278,9 +2281,10 @@ MODULE Duniter0Blockchain;
 			t0 := Services.Ticks();
 			l := updateList;
 			WHILE l # NIL DO
-				l.update;
+				l.update(updateChanged);
 				l := l.next;
 			END;
+			updateChanged := FALSE;
 			BA.Collect;
 			t1 := Services.Ticks();
 			rest := delay - (t1 - t0);
@@ -2428,6 +2432,7 @@ MODULE Duniter0Blockchain;
 			NEW(intKeyMan); NEW(idKTimeMan); NEW(certKTimeMan);
 			OpenB;
 			NEW(update);
+			updateChanged := TRUE;
 			UpdateAll;
 		END Init;
 	

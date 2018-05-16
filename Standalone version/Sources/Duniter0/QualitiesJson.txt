@@ -16,9 +16,9 @@ MODULE Duniter0QualitiesJson;
 	
 	IMPORT
 		
-		Q := Duniter0QualitiesSetsArr, 
+		Q := Duniter0Qualities, 
 		
-		B := Duniter0Blockchain, J := UtilJson, TextMappers, TextModels, TextViews, Views;
+		B := Duniter0Blockchain, J := UtilJson, Dialog, TextMappers, TextModels, TextViews, Views;
 	
 	PROCEDURE Print*;
 		
@@ -26,6 +26,7 @@ MODULE Duniter0QualitiesJson;
 			
 			props, propsId: Q.Props;
 			i: INTEGER;
+			s: Views.Title;
 			t: TextModels.Model;
 			f: TextMappers.Formatter;
 		
@@ -41,7 +42,7 @@ MODULE Duniter0QualitiesJson;
 				J.StartObject;
 				J.PushString(propsId[i].id);
 				J.BuildField("id");
-				J.PushReal(propsId[i].prop);
+				J.PushReal(100. * propsId[i].prop);
 				J.BuildField("quality");
 				J.BuildObject;
 			END;
@@ -51,7 +52,8 @@ MODULE Duniter0QualitiesJson;
 			t := TextModels.dir.New();
 			f.ConnectTo(t);
 			J.GetJson().Write(f);
-			Views.OpenView(TextViews.dir.New(t));
+			Dialog.MapString("#Duniter0:Qualities", s);
+			Views.OpenAux(TextViews.dir.New(t), s);
 		END Print;
 		
 	END Duniter0QualitiesJson.

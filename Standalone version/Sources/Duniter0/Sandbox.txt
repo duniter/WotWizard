@@ -710,7 +710,7 @@ MODULE Duniter0Sandbox;
 		END Certifications;
 	
 	(* Scan the sandbox in the Duniter database *)
-	PROCEDURE Scan;
+	PROCEDURE Scan (VAR changed: BOOLEAN);
 		
 		VAR
 			
@@ -726,10 +726,13 @@ MODULE Duniter0Sandbox;
 	
 	PROCEDURE Init;
 		
+		VAR
+			
+			changed: BOOLEAN;
+		
 		BEGIN (*Init*)
 			B.AddUpdateProc(Scan);
-			B.UpdateAll;
-			Scan;
+			Scan(changed);
 		END Init;
 	
 	BEGIN (*Duniter0Sandbox*)

@@ -1,0 +1,439 @@
+(* 
+Duniter0: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter0WotWizardPrint;
+	
+	
+
+	IMPORT
+		
+		A := UtilAvlTree, B := Duniter0Blockchain, BA := Duniter0Basic, Dialog, Math, Strings, TextMappers, TextModels, TextViews, W := Duniter0WotWizard, Views;
+	
+	VAR
+		
+		debugFo: TextMappers.Formatter;
+	
+	(* Print c with fo *)
+	PROCEDURE PrintCertif (IN fo: TextMappers.Formatter; c: W.Certif; now: LONGINT);
+		
+		VAR
+			
+			s: BA.DateTime;
+		
+		BEGIN (*PrintCertif*)
+			IF c.to # NIL THEN
+				fo.WriteString(c.to); fo.WriteString(" ← ");
+			END;
+			fo.WriteString(c.from);
+			fo.WriteString(" ");
+			BA.TimestampToString(c.date, s);
+			fo.WriteString(s);
+			fo.WriteString(" (→ ");
+			BA.TimestampToString(c.limit, s);
+			fo.WriteString(s);
+			fo.WriteString(")");
+			IF (c.date < now) & (now <= c.limit) THEN
+				fo.WriteString(" (OK)");
+			ELSE
+				fo.WriteString(" (KO)");
+			END;
+		END PrintCertif;
+	
+	(* Print d with fo *)
+	PROCEDURE PrintDossier (IN fo: TextMappers.Formatter; d: W.Dossier; now: LONGINT);
+		
+		VAR
+			
+			s: BA.DateTime;
+			certifiers: POINTER TO ARRAY OF B.Pubkey;
+			j, bnb: INTEGER;
+			exp: LONGINT;
+			b: BOOLEAN;
+			percent: REAL;
+			hash: B.Hash;
+		
+		BEGIN (*PrintDossier*)
+			fo.WriteInt(d.princCertif); fo.WriteString(" ");
+			fo.WriteString(d.id);
+			BA.TimestampToString(d.date, s);
+			fo.WriteString(" ("); fo.WriteString(s);
+			fo.WriteString(") (→ ");
+			BA.TimestampToString(d.limit, s);
+			fo.WriteString(s);
+			fo.WriteString(") (");
+			IF d.certifs # NIL THEN
+				NEW(certifiers, LEN(d.certifs));
+				FOR j := 0 TO LEN(d.certifs) - 1 DO
+					certifiers[j] := d.certifs[j](W.Certif).fromP;
+				END;
+				percent := B.PercentOfSentries(certifiers);
+				fo.WriteRealForm(percent * 100, 16, 1, - 2, " ");
+				fo.WriteString("%) (");
+				IF (d.princCertif >= B.pars.sigQty) & (now <= d.limit) & (percent >= B.pars.xpercent) THEN
+					fo.WriteString("OK");
+				ELSE
+					fo.WriteString("KO");
+				END;
+			ELSE
+				fo.WriteString("0%) (KO");
+			END;
+			fo.WriteString(") |");
+			IF d.certifs # NIL THEN
+				FOR j := 0 TO LEN(d.certifs) - 1 DO
+					fo.WriteLn; fo.WriteString(" ");
+					PrintCertif(fo, d.certifs[j](W.Certif), now);
+				END;
+			END;
+		END PrintDossier;
+	
+	(* Print f with fo, starting at the element of rank i0; if withNow, the output begins with the printing of the current date *)
+	PROCEDURE PrintFile (IN fo: TextMappers.Formatter; f: W.File; i0: INTEGER; withNow: BOOLEAN);
+		
+		VAR
+			
+			s: BA.DateTime;
+			now: LONGINT;
+			i: INTEGER;
+			cd: W.CertOrDoss;
+		
+		BEGIN (*PrintFile*)
+			now := B.Now();
+			IF withNow THEN
+				BA.TimestampToString(now, s);
+				fo.WriteString(s);
+				fo.WriteString(" (UTC+0)");
+				fo.WriteLn; fo.WriteLn;
+			END;
+			IF f # NIL THEN
+				FOR i := i0 TO LEN(f) - 1 DO
+					cd := f[i];
+					WITH
+						|cd: W.Certif DO
+							PrintCertif(fo, cd, now);
+						|cd: W.Dossier DO
+							PrintDossier(fo, cd, now);
+					END;
+					fo.WriteLn; fo.WriteLn;
+				END;
+				fo.WriteLn;
+			END;
+		END PrintFile;
+	
+	(* Print permutations returned by CalcPermutations *)
+	PROCEDURE PrintPermutations (IN fo: TextMappers.Formatter; f: W.File): BOOLEAN;
+		
+		CONST
+			
+			maxPerm = 1000;
+		
+		VAR
+			
+			n, i, l: INTEGER;
+			s, nowS: BA.DateTime;
+			sets, tD: A.Tree;
+			e, ee: A.Elem;
+			debug: W.Debug;
+		
+		PROCEDURE ByDate (tId: A.Tree): A.Tree;
+			
+			VAR
+				
+				tD: A.Tree;
+				pD: W.PropDate;
+				e, ee: A.Elem;
+				b: BOOLEAN;
+			
+			BEGIN (*ByDate*)
+				A.New(tD);
+				e := tId.Next(NIL);
+				WHILE e # NIL DO
+					WITH e: W.Propagation DO
+						NEW(pD);
+						pD.id := e.id;
+						pD.date := e.date;
+						pD.after := e.after;
+						ee := pD;
+						b := tD.SearchIns(ee, n); ASSERT(~b, 101);
+					END;
+					e := tId.Next(e);
+				END;
+				RETURN tD;
+			END ByDate;
+		
+		BEGIN (*PrintPermutations*)
+			debug := NIL;
+			IF W.CalcPermutations(f, debug, sets) THEN
+				n := sets.NumberOfElems();
+				IF n > maxPerm THEN
+					Strings.IntToString(n, s);
+					Dialog.GetOK("#Duniter0:PrintManyPerms", s, "", "", {Dialog.yes, Dialog.no}, i);
+					IF i = Dialog.no THEN
+						RETURN FALSE;
+					END;
+				END;
+				fo.WriteString("    ");
+				BA.TimestampToString(B.Now(), nowS);
+				fo.WriteString(nowS);
+				fo.WriteString(" (UTC+0)");
+				fo.WriteLn; fo.WriteLn;
+				fo.WriteString("    " + "Nombre de permutations : ");
+				fo.WriteInt(n);
+				fo.WriteLn; fo.WriteLn;
+				e := sets.Next(NIL);
+				l := 0;
+				WITH e: W.Set DO
+					ee := e.t.Next(NIL);
+					WHILE ee # NIL DO
+						l := MAX(l, LEN(ee(W.Propagation).id$));
+						ee := e.t.Next(ee);
+					END;
+				END;
+				WHILE e # NIL DO
+					WITH e: W.Set DO
+						fo.WriteString("    ");
+						fo.WriteMsg("#Duniter0:Proba"); fo.WriteString(" = ");
+						n := SHORT(ENTIER(Math.Round(e.proba * 100000000)));
+						fo.WriteInt(n DIV 1000000); fo.WriteString("."); fo.WriteIntForm(n MOD 1000000, 10, 6, '0', FALSE);
+						fo.WriteString("%");
+						fo.WriteLn;
+						tD := ByDate(e.t);
+						ee := tD.Next(NIL);
+						WHILE ee # NIL DO
+							WITH ee: W.Propagation DO
+								fo.WriteString("    ");
+								fo.WriteString(ee.id);
+								FOR i := 1 TO l - LEN(ee.id$) DO
+									fo.WriteString(" ");
+								END;
+								fo.WriteString(" (");
+								BA.TimestampToString(ee.date, s);
+								fo.WriteString(s);
+								IF ee.after THEN
+									fo.WriteString("+");
+								END;
+								fo.WriteString(")");
+								fo.WriteLn;
+							END;
+							ee := tD.Next(ee);
+						END;
+					END;
+					fo.WriteLn;
+					e := sets.Next(e);
+				END;
+			END;
+			RETURN TRUE;
+		END PrintPermutations;
+	
+	(* Print the entries sorted by dates *)
+	PROCEDURE ByDates* (IN fo: TextMappers.Formatter; occur: A.Tree);
+		
+		VAR
+			
+			l, i: INTEGER;
+			e: A.Elem;
+			date: LONGINT;
+			after: BOOLEAN;
+			s: BA.DateTime;
+		
+		BEGIN (*ByDates*)
+			l := 0;
+			e := occur.Next(NIL);
+			WHILE e # NIL DO
+				l := MAX(l, LEN(e(W.PropDate).id$));
+				e := occur.Next(e);
+			END;
+			date := - 1;
+			e := occur.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: W.PropDate DO
+					IF (e.date # date) OR (e.after # after) THEN
+						date := e.date; after := e.after;
+						fo.WriteString("    "); fo.WriteLn;
+						fo.WriteString("    ");
+						BA.TimestampToString(e.date, s);
+						fo.WriteString(s);
+						IF e.after THEN
+							fo.WriteString("+");
+						END;
+						fo.WriteLn;
+					END;
+					fo.WriteString("        ");
+					fo.WriteString(e.id);
+					FOR i := 1 TO l - LEN(e.id$) DO
+						fo.WriteString(" ");
+					END;
+					fo.WriteString(": "); fo.WriteMsg("#Duniter0:Proba"); fo.WriteString(" = ");
+					fo.WriteIntForm(ENTIER(Math.Round(e.proba * 100)), 10, 3, " ", FALSE);
+					fo.WriteString("%");
+					fo.WriteLn;
+				END;
+				e := occur.Next(e);
+			END;
+		END ByDates;
+	
+	(* Print the entries sorted by names *)
+	PROCEDURE ByNames* (IN fo: TextMappers.Formatter; invOccur: A.Tree);
+		
+		VAR
+			
+			id: B.String;
+			e: A.Elem;
+			ss: Dialog.String;
+			i: INTEGER;
+			s: BA.DateTime;
+		
+		BEGIN (*ByNames*)
+			NEW(id, 1); id^ := 0X;
+			e := invOccur.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: W.PropName DO
+					IF e.id$ # id$ THEN
+						id := e.id;
+						fo.WriteString("    "); fo.WriteLn;
+						fo.WriteString("    ");
+						fo.WriteString(e.id);
+						fo.WriteLn;
+					END;
+					fo.WriteString("        ");
+					IF e.date = BA.never THEN
+						Dialog.MapString("#Duniter0:Never", ss);
+						fo.WriteString(ss);
+						BA.TimestampToString(0, s);
+						FOR i := 0 TO LEN(s$) - LEN(ss$) DO
+							fo.WriteString(" ");
+						END;
+					ELSE
+						BA.TimestampToString(e.date, s);
+						fo.WriteString(s);
+						IF e.after THEN
+							fo.WriteString("+");
+						ELSE
+							fo.WriteString(" ");
+						END;
+					END;
+					fo.WriteString(": "); fo.WriteMsg("#Duniter0:Proba"); fo.WriteString(" = ");
+					fo.WriteIntForm(ENTIER(Math.Round(e.proba * 100)), 10, 3, " ", FALSE);
+					fo.WriteString("%");
+					fo.WriteLn;
+				END;
+				e := invOccur.Next(e);
+			END;
+		END ByNames;
+	
+	(* Print the entries sorted by names first and then by dates *)
+	PROCEDURE PrintEntries (IN fo: TextMappers.Formatter; occur, invOccur: A.Tree);
+		
+		VAR
+			
+			nowS: BA.DateTime;
+		
+		BEGIN (*PrintEntries*)
+			BA.TimestampToString(B.Now(), nowS);
+			fo.WriteString("    ");
+			fo.WriteString(nowS);
+			fo.WriteString(" (UTC+0)");
+			fo.WriteLn;
+			ByNames(fo, invOccur);
+			fo.WriteString("    "); fo.WriteLn;
+			ByDates(fo, occur);
+		END PrintEntries;
+	
+	(* Print the current W.File *)
+	PROCEDURE ShowFile*;
+		
+		VAR
+			
+			s: Views.Title;
+			t: TextModels.Model;
+			fo: TextMappers.Formatter;
+			f: W.File;
+			cNb, dNb: INTEGER;
+		
+		BEGIN (*ShowFile*)
+			t := TextModels.dir.New();
+			fo.ConnectTo(t);
+			W.FillFile(0, f, cNb, dNb);
+			PrintFile(fo, f, 0, TRUE);
+			Dialog.MapString("#Duniter0:ShowFile", s);
+			Views.OpenAux(TextViews.dir.New(t), s);
+		END ShowFile;
+	
+	(* Print the set of current possible permutations of entries *)
+	PROCEDURE Permutations*;
+		
+		VAR
+			
+			s: Views.Title;
+			t: TextModels.Model;
+			fo: TextMappers.Formatter;
+			f: W.File;
+			cNb, dNb: INTEGER;
+		
+		BEGIN (*Permutations*)
+			t := TextModels.dir.New();
+			fo.ConnectTo(t);
+			W.FillFile(B.pars.sigQty, f, cNb, dNb);
+			IF PrintPermutations(fo, f) THEN
+				Dialog.MapString("#Duniter0:Permutations", s);
+				Views.OpenAux(TextViews.dir.New(t), s);
+			END;
+		END Permutations;
+	
+	(* Print the current set of entries, sorted by names first, then by dates *)
+	PROCEDURE Entries*;
+		
+		VAR
+			
+			s: Views.Title;
+			t: TextModels.Model;
+			fo: TextMappers.Formatter;
+			f: W.File;
+			occur, invOccur: A.Tree;
+			cNb, dNb, n: INTEGER;
+		
+		BEGIN (*Entries*)
+			W.FillFile(B.pars.sigQty, f, cNb, dNb);
+			IF W.CalcEntries(f, n, occur, invOccur) THEN
+				t := TextModels.dir.New();
+				fo.ConnectTo(t);
+				PrintEntries(fo, occur, invOccur);
+				Dialog.MapString("#Duniter0:Entries", s);
+				Views.OpenAux(TextViews.dir.New(t), s);
+			END;
+		END Entries;
+	
+	PROCEDURE DoDebug (f: W.File; i0: INTEGER);
+		
+		BEGIN (*DoDebug*)
+			PrintFile(debugFo, f, i0, FALSE);
+			debugFo.WriteLn;
+		END DoDebug;
+	
+	PROCEDURE Debug* ;
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: W.File;
+			b: BOOLEAN;
+			sets: A.Tree;
+			cNb, dNb: INTEGER;
+		
+		BEGIN (*Debug*)
+			t := TextModels.dir.New();
+			debugFo.ConnectTo(t);
+			Views.OpenView(TextViews.dir.New(t));
+			W.FillFile(B.pars.sigQty, f, cNb, dNb);
+			b := W.CalcPermutations(f, DoDebug, sets);
+		END Debug;
+	
+	END Duniter0WotWizardPrint.

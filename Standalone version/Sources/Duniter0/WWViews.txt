@@ -22,7 +22,7 @@ MODULE Duniter0WWViews;
 		StdLog,
 		*)
 		
-		A := UtilAvlTree, B := Duniter0Blockchain, BA := Duniter0Basic, Containers, Controllers, Controls, Converters, DevSearch, Dialog, Documents, Files, Fonts, J := UtilJson, Math, Models, Ports, Properties, Sequencers, Services, StdCmds, Stores, Strings, TextMappers, TextModels, TextRulers, TextViews, Views, W := Duniter0WotWizard, Windows;
+		A := UtilAvlTree, B := Duniter0Blockchain, BA := Duniter0Basic, Containers, Controllers, Controls, Converters, CpcFloat, DevSearch, Dialog, Documents, Files, Fonts, J := UtilJson, Math, Models, Ports, Properties, Sequencers, Services, StdCmds, Stores, Strings, TextMappers, TextModels, TextRulers, TextViews, Views, W := Duniter0WotWizard, Windows;
 	
 	CONST
 		
@@ -32,8 +32,8 @@ MODULE Duniter0WWViews;
 		textMeta = "WWMeta.json"; (* File containing metadata *)
 		textByDate = "WWByDate.json"; (* File containing entries data, sorted by dates *)
 		
-		oldEntriesName = "WW_Old_Entries.json"; (* File containing previous metadata output *)
-		oldMetaName = "WW_Old_Meta.json"; (* File containing previous entries data output *)
+		oldEntriesName = "WW_Old_Entries.json"; (* File containing previous entries data output *)
+		oldMetaName = "WW_Old_Meta.json"; (* File containing previous metadata output *)
 		
 		title = "WotWizard"; (* Title of the outputs *)
 		
@@ -78,6 +78,8 @@ MODULE Duniter0WWViews;
 		END;
 	
 	VAR
+		
+		precision: REAL;
 		
 		dateNameMeta*: INTEGER; (* Sort of the output *)
 		
@@ -139,7 +141,7 @@ MODULE Duniter0WWViews;
 			BEGIN (*Equal*)
 				WITH e1: W.PropDate DO
 					WITH e2: W.PropDate DO
-						RETURN (e1.id$ = e2.id$) & (e1.date = e2.date) & (e1.after = e2.after) & (Math.Round(1.E16 * e1.proba) = Math.Round(1.E16 * e2.proba));
+						RETURN (e1.id$ = e2.id$) & (e1.date = e2.date) & (e1.after = e2.after) & (Math.Round(precision * e1.proba) = Math.Round(precision * e2.proba));
 					END;
 				END;
 			END Equal;
@@ -885,7 +887,7 @@ MODULE Duniter0WWViews;
 			END;
 		END Rewrite;
 	
-	PROCEDURE Update;
+	PROCEDURE Update (VAR changed: BOOLEAN);
 		
 		VAR
 			
@@ -1116,6 +1118,7 @@ MODULE Duniter0WWViews;
 			rd: Stores.Reader;
 		
 		BEGIN (*Init*)
+			precision := Math.Sqrt(1. / CpcFloat.eps);
 			dateNameMeta := byName;
 			showOldEntries := FALSE;
 			l := Files.dir.This(parametersDir);

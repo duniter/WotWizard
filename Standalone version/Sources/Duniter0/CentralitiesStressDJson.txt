@@ -1,0 +1,61 @@
+(* 
+Duniter0: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter0CentralitiesStressDJson;
+	
+	
+	
+	IMPORT
+		
+		B := Duniter0Blockchain, C := Duniter0CentralitiesStressD, J := UtilJson, Dialog, TextMappers, TextModels, TextViews, Views;
+	
+	PROCEDURE Print*;
+		
+		VAR
+			
+			centers, centersId: C.Centrals;
+			i: INTEGER;
+			s: Views.Title;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*Print*)
+			C.Count(centers, centersId);
+			J.StartObject;
+			J.PushString("Centralities");
+			J.BuildField("description");
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			J.StartArray;
+			FOR i := 0 TO LEN(centersId) - 1 DO
+				J.StartObject;
+				J.PushString(centersId[i].id);
+				J.BuildField("id");
+				J.PushReal(100. * centersId[i].c);
+				J.BuildField("centrality");
+				J.BuildObject;
+			END;
+			J.BuildArray;
+			J.BuildField("values");
+			J.BuildObject;
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			J.GetJson().Write(f);
+			Dialog.MapString("#Duniter0:Centralities", s);
+			Views.OpenAux(TextViews.dir.New(t), s);
+		END Print;
+		
+	END Duniter0CentralitiesStressDJson.
+
+DevDebug.UnloadThis Duniter0CentralitiesStressDPrint Duniter0CentralitiesStressDJson Duniter0CentralitiesStressD 
+
+Duniter0CentralitiesStressDJson.Print;

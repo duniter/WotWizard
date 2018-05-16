@@ -16,34 +16,43 @@ MODULE Duniter0ParametersPrint;
 
 	IMPORT
 		
-		B := Duniter0Blockchain, StdLog;
+		B := Duniter0Blockchain, Dialog, TextMappers, TextModels, TextViews, Views;
 	
 	PROCEDURE Do*;
 		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			s: Views.Title;
+		
 		BEGIN (*Do*)
-			StdLog.Clear; StdLog.Open;
-			StdLog.String("c = "); StdLog.Real(B.pars.c); StdLog.Ln;
-			StdLog.String("dt = "); StdLog.Int(B.pars.dt); StdLog.Ln;
-			StdLog.String("ud0 = "); StdLog.Int(B.pars.ud0); StdLog.Ln;
-			StdLog.String("sigPeriod = "); StdLog.Int(B.pars.sigPeriod); StdLog.Ln;
-			StdLog.String("sigStock = "); StdLog.Int(B.pars.sigStock); StdLog.Ln;
-			StdLog.String("sigWindow = "); StdLog.Int(B.pars.sigWindow); StdLog.Ln;
-			StdLog.String("sigValidity = "); StdLog.Int(B.pars.sigValidity); StdLog.Ln;
-			StdLog.String("sigQty = "); StdLog.Int(B.pars.sigQty); StdLog.Ln;
-			StdLog.String("idtyWindow = "); StdLog.Int(B.pars.idtyWindow); StdLog.Ln;
-			StdLog.String("msWindow = "); StdLog.Int(B.pars.msWindow); StdLog.Ln;
-			StdLog.String("msPeriod = "); StdLog.Int(B.pars.msPeriod); StdLog.Ln;
-			StdLog.String("xpercent = "); StdLog.Real(B.pars.xpercent); StdLog.Ln;
-			StdLog.String("msValidity = "); StdLog.Int(B.pars.msValidity); StdLog.Ln;
-			StdLog.String("stepMax = "); StdLog.Int(B.pars.stepMax); StdLog.Ln;
-			StdLog.String("medianTimeBlocks = "); StdLog.Int(B.pars.medianTimeBlocks); StdLog.Ln;
-			StdLog.String("avgGenTime = "); StdLog.Int(B.pars.avgGenTime); StdLog.Ln;
-			StdLog.String("dtDiffEval = "); StdLog.Int(B.pars.dtDiffEval); StdLog.Ln;
-			StdLog.String("percentRot = "); StdLog.Real(B.pars.percentRot); StdLog.Ln;
-			StdLog.String("udTime0 = "); StdLog.Int(B.pars.udTime0); StdLog.Ln;
-			StdLog.String("udReevalTime0 = "); StdLog.Int(B.pars.udReevalTime0); StdLog.Ln;
-			StdLog.String("dtReeval = "); StdLog.Int(B.pars.dtReeval); StdLog.Ln;
-			StdLog.String("txWindow = "); StdLog.Int(B.pars.txWindow); StdLog.Ln;
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			f.WriteString("c = "); f.WriteReal(B.pars.c); f.WriteLn;
+			f.WriteString("dt = "); f.WriteInt(B.pars.dt); f.WriteLn;
+			f.WriteString("ud0 = "); f.WriteInt(B.pars.ud0); f.WriteLn;
+			f.WriteString("sigPeriod = "); f.WriteInt(B.pars.sigPeriod); f.WriteLn;
+			f.WriteString("sigStock = "); f.WriteInt(B.pars.sigStock); f.WriteLn;
+			f.WriteString("sigWindow = "); f.WriteInt(B.pars.sigWindow); f.WriteLn;
+			f.WriteString("sigValidity = "); f.WriteInt(B.pars.sigValidity); f.WriteLn;
+			f.WriteString("sigQty = "); f.WriteInt(B.pars.sigQty); f.WriteLn;
+			f.WriteString("idtyWindow = "); f.WriteInt(B.pars.idtyWindow); f.WriteLn;
+			f.WriteString("msWindow = "); f.WriteInt(B.pars.msWindow); f.WriteLn;
+			f.WriteString("msPeriod = "); f.WriteInt(B.pars.msPeriod); f.WriteLn;
+			f.WriteString("xpercent = "); f.WriteReal(B.pars.xpercent); f.WriteLn;
+			f.WriteString("msValidity = "); f.WriteInt(B.pars.msValidity); f.WriteLn;
+			f.WriteString("stepMax = "); f.WriteInt(B.pars.stepMax); f.WriteLn;
+			f.WriteString("medianTimeBlocks = "); f.WriteInt(B.pars.medianTimeBlocks); f.WriteLn;
+			f.WriteString("avgGenTime = "); f.WriteInt(B.pars.avgGenTime); f.WriteLn;
+			f.WriteString("dtDiffEval = "); f.WriteInt(B.pars.dtDiffEval); f.WriteLn;
+			f.WriteString("percentRot = "); f.WriteReal(B.pars.percentRot); f.WriteLn;
+			f.WriteString("udTime0 = "); f.WriteInt(B.pars.udTime0); f.WriteLn;
+			f.WriteString("udReevalTime0 = "); f.WriteInt(B.pars.udReevalTime0); f.WriteLn;
+			f.WriteString("dtReeval = "); f.WriteInt(B.pars.dtReeval); f.WriteLn;
+			f.WriteString("txWindow = "); f.WriteInt(B.pars.txWindow); f.WriteLn;
+			Dialog.MapString("#Duniter0:Parameters", s);
+			Views.OpenAux(TextViews.dir.New(t), s);
 		END Do;
 	
 	END Duniter0ParametersPrint.Do;

@@ -16,7 +16,7 @@ MODULE Duniter0SentriesPrint;
 
 	IMPORT
 		
-		A := UtilAvlTree, B := Duniter0Blockchain, BA := Duniter0Basic, Dialog, Math, StdLog;
+		A := UtilAvlTree, B := Duniter0Blockchain, BA := Duniter0Basic, Math, Dialog, TextMappers, TextModels, TextViews, Views;
 	
 	TYPE
 		
@@ -42,14 +42,17 @@ MODULE Duniter0SentriesPrint;
 			ids: A.Tree;
 			id: Uid;
 			e: A.Elem;
-			s: Dialog.String;
+			s: Views.Title;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
 		
 		BEGIN (*Do*)
-			StdLog.Clear; StdLog.Open;
-			Dialog.MapString("#Duniter0:Threshold", s);
-			StdLog.String(s + " = ");
-			StdLog.Int(SHORT(ENTIER(Math.Ceiling(Math.Power(B.IdLen(), 1 / B.pars.stepMax)))));
-			StdLog.Ln; StdLog.Ln;
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			f.WriteMsg("#Duniter0:Threshold");
+			f.WriteString(" = ");
+			f.WriteInt(SHORT(ENTIER(Math.Ceiling(Math.Power(B.IdLen(), 1 / B.pars.stepMax)))));
+			f.WriteLn; f.WriteLn;
 			A.New(ids);
 			ok := B.NextSentry(TRUE, pubkey);
 			WHILE ok DO
@@ -61,13 +64,15 @@ MODULE Duniter0SentriesPrint;
 			END;
 			e := ids.Next(NIL);
 			WHILE e # NIL DO
-				StdLog.String(e(Uid).uid); StdLog.Ln;
+				f.WriteString(e(Uid).uid); f.WriteLn;
 				e := ids.Next(e);
 			END;
-			StdLog.Ln;
-			Dialog.MapString("#Duniter0:SentriesNb", s);
-			StdLog.String(s + " = ");
-			StdLog.Int(B.SentriesLen()); StdLog.Ln;
+			f.WriteLn;
+			f.WriteMsg("#Duniter0:SentriesNb");
+			f.WriteString(" = ");
+			f.WriteInt(B.SentriesLen()); f.WriteLn;
+			Dialog.MapString("#Duniter0:Sentries", s);
+			Views.OpenAux(TextViews.dir.New(t), s);
 		END Do;
 	
 	END Duniter0SentriesPrint.Do;

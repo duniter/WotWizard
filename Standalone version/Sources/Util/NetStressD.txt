@@ -1,0 +1,366 @@
+(* 
+Util: Utility tools.
+
+Copyright (C) 2001…2006 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE UtilNetStressD;
+	
+	
+	
+	(* Calculate the stress centrality with Ulrik Brandes's algorithm, slightly modified to deal with the fact that only paths between members have to be considered *)
+
+	IMPORT
+		
+		(*
+		L := StdLog,
+		*)
+		
+		S := UtilSets, UtilSort;
+	
+	CONST
+		
+		(* Results of comparison. *)
+		lt* = -1; (* less than *)
+		eq* = 0; (* equal *)
+		gt* = + 1; (* greater than *)
+	
+	TYPE
+		
+		Net* = POINTER TO ABSTRACT RECORD
+			nbNodes-: INTEGER;
+			nodes: NodesSort;
+			extremities: S.Set;
+			links: Links;
+		END;
+		
+		Node* = POINTER TO ABSTRACT RECORD
+		END;
+		
+		Nodes = POINTER TO ARRAY OF Node;
+		
+		NodesSort = RECORD (UtilSort.T)
+			t: Nodes;
+			ex: POINTER TO ARRAY OF BOOLEAN;
+		END;
+		
+		Links = POINTER TO ARRAY OF S.Set;
+		
+		SetC = POINTER TO ARRAY OF LONGINT;
+		
+		Centrals* = POINTER TO LIMITED RECORD
+			nbNodes: INTEGER;
+			nodes: Nodes;
+			cT: SetC;
+			pos: INTEGER;
+		END;
+		
+		Queue = RECORD
+			end: Elem;
+		END;
+		
+		Stack = RECORD
+			end: Elem;
+		END;
+		
+		Elem = POINTER TO RECORD
+			next: Elem;
+			val: INTEGER;
+		END;
+	
+	PROCEDURE (VAR s: Stack) Init, NEW;
+		
+		BEGIN (*Init*)
+			s.end := NIL;
+		END Init;
+	
+	PROCEDURE (IN s: Stack) IsEmpty (): BOOLEAN, NEW;
+		
+		BEGIN (*IsEmpty*)
+			RETURN s.end = NIL;
+		END IsEmpty;
+	
+	PROCEDURE (VAR s: Stack) Push (val: INTEGER), NEW;
+		
+		VAR
+			
+			e: Elem;
+		
+		BEGIN (*Push*)
+			NEW(e); e.val := val;
+			e.next := s.end;
+			s.end := e;
+		END Push;
+	
+	PROCEDURE (VAR s: Stack) Pop (OUT val: INTEGER), NEW;
+		
+		BEGIN (*Pop*)
+			ASSERT(s.end # NIL, 100);
+			val := s.end.val;
+			s.end := s.end.next
+		END Pop;
+	
+	PROCEDURE (VAR q: Queue) Init, NEW;
+		
+		BEGIN (*Init*)
+			q.end := NIL;
+		END Init;
+	
+	PROCEDURE (IN q: Queue) IsEmpty (): BOOLEAN, NEW;
+		
+		BEGIN (*IsEmpty*)
+			RETURN q.end = NIL;
+		END IsEmpty;
+	
+	PROCEDURE (VAR q: Queue) Put (val: INTEGER), NEW;
+		
+		VAR
+			
+			e: Elem;
+		
+		BEGIN (*Put*)
+			NEW(e); e.val := val;
+			IF q.end = NIL THEN
+				q.end := e;
+				e.next := e;
+			ELSE
+				e.next := q.end.next;
+				q.end.next := e;
+				q.end := e;
+			END;
+		END Put;
+	
+	PROCEDURE (VAR q: Queue) Get (OUT val: INTEGER), NEW;
+		
+		VAR
+			
+			e: Elem;
+		
+		BEGIN (*Get*)
+			ASSERT(q.end # NIL, 100);
+			e := q.end.next;
+			q.end.next := e.next;
+			IF q.end = e THEN
+				q.end := NIL;
+			END;
+			val := e.val;
+		END Get;
+	
+	PROCEDURE (net: Net) Number- (): INTEGER, NEW, ABSTRACT; 
+	
+	PROCEDURE (net: Net) Enumerate- (first: BOOLEAN; OUT node: Node; OUT extremity: BOOLEAN): BOOLEAN, NEW, ABSTRACT; 
+	
+	PROCEDURE (n1: Node) Compare- (n2: Node): BYTE, NEW, ABSTRACT;
+	
+	PROCEDURE (n: Node) FromTo- (first: BOOLEAN; OUT follow: Node): BOOLEAN, NEW, ABSTRACT;
+	
+	PROCEDURE (net: Net) ExtremitiesNb* (): INTEGER, NEW;
+		
+		BEGIN (*ExtremitiesNb*)
+			ASSERT(net.extremities # NIL, 20);
+			RETURN net.extremities.nbElems;
+		END ExtremitiesNb;
+	
+	PROCEDURE (VAR s: NodesSort) Less (p1, p2: INTEGER): BOOLEAN;
+		
+		BEGIN (*Less*)
+			RETURN s.t[p1].Compare(s.t[p2]) = lt;
+		END Less;
+	
+	PROCEDURE (VAR s: NodesSort) Swap (p1, p2: INTEGER);
+		
+		VAR
+			
+			n: Node;
+			b: BOOLEAN;
+		
+		BEGIN (*Swap*)
+			n := s.t[p1]; s.t[p1] := s.t[p2]; s.t[p2] := n;
+			b := s.ex[p1]; s.ex[p1] := s.ex[p2]; s.ex[p2] := b;
+		END Swap;
+	
+	PROCEDURE (ct: Centrals) Walk* (first: BOOLEAN; OUT node: Node; OUT c: LONGINT): BOOLEAN, NEW;
+		
+		VAR
+			
+			ok: BOOLEAN;
+		
+		BEGIN (*Walk*)
+			IF first THEN
+				ct.pos := 0;
+			ELSIF ct.pos < ct.nbNodes THEN
+				INC(ct.pos);
+			END;
+			ok := ct.pos < ct.nbNodes;
+			IF ~ok THEN
+				RETURN FALSE;
+			END;
+			node := ct.nodes[ct.pos];
+			c := ct.cT[ct.pos];
+			RETURN TRUE;
+		END Walk;
+	
+	PROCEDURE (net: Net) FindNode (node: Node; OUT n: INTEGER): BOOLEAN, NEW;
+		
+		BEGIN (*FindNode*)
+			n := net.nbNodes;
+			net.nodes.t[n] := node;
+			net.nodes.BinSearch(0, n - 1, n);
+			RETURN n < net.nbNodes;
+		END FindNode;
+	
+	PROCEDURE (net: Net) Update*, NEW;
+		
+		VAR
+			
+			i, n: INTEGER;
+			ok, extremity, b: BOOLEAN;
+			node: Node;
+		
+		BEGIN (*Update*)
+			net.nbNodes := net.Number();
+			NEW(net.nodes.t, net.nbNodes + 1);
+			NEW(net.nodes.ex, net.nbNodes);
+			i := 0;
+			ok := net.Enumerate(TRUE, node, extremity);
+			WHILE ok DO
+				net.nodes.t[i] := node;
+				net.nodes.ex[i] := extremity;
+				INC(i);
+				ok := net.Enumerate(FALSE, node, extremity);
+			END;
+			ASSERT(i = net.nbNodes);
+			net.nodes.QuickSort(0, net.nbNodes - 1);
+			net.extremities := S.NewSet();
+			FOR i := 0 TO net.nbNodes - 1 DO
+				IF net.nodes.ex[i] THEN
+					net.extremities.Incl(i);
+				END;
+			END;
+			net.nodes.ex := NIL;
+			
+			NEW(net.links, net.nbNodes);
+			FOR i := 0 TO net.nbNodes - 1 DO
+				net.links[i] := S.NewSet();
+			END;
+			FOR i := 0 TO net.nbNodes - 1 DO
+				ok := net.nodes.t[i].FromTo(TRUE, node);
+				WHILE ok DO
+					b := net.FindNode(node, n); ASSERT(b);
+					net.links[i].Incl(n);
+					ok := net.nodes.t[i].FromTo(FALSE, node);
+				END;
+			END;
+		END Update;
+	
+	PROCEDURE (net: Net) NewC (OUT set: SetC), NEW;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*NewC*)
+			NEW(set, net.nbNodes);
+			FOR i := 0 TO net.nbNodes - 1 DO
+				set[i] := 0;
+			END;
+		END NewC;
+	
+	(* Modified Ulrik Brandes's algorithm *)
+	PROCEDURE (net: Net) StressD (maxStep: INTEGER; VAR cS: ARRAY OF LONGINT), NEW;
+		
+		VAR
+			
+			v, s, w: INTEGER;
+			q: Queue;
+			st: Stack;
+			p: POINTER TO ARRAY OF Stack;
+			sig, d, delt: POINTER TO ARRAY OF INTEGER;
+			it1, it2: S.SetIterator;
+			ok1, ok2, ext: BOOLEAN;
+		
+		BEGIN (*StressD*)
+			ASSERT(LEN(cS) = net.nbNodes);
+			NEW(p, net.nbNodes);
+			NEW(sig, net.nbNodes);
+			NEW(d, net.nbNodes);
+			NEW(delt, net.nbNodes);
+			FOR v := 0 TO net.nbNodes - 1 DO
+				cS[v] := 0;
+			END;
+			(* Only extremities can be sources of paths *)
+			it1.Attach(net.extremities);
+			ok1 := it1.FirstE(s);
+			WHILE ok1 DO
+				st.Init;
+				FOR v := 0 TO net.nbNodes - 1 DO
+					p[v].Init;
+					sig[v] := 0; d[v] := - 1;
+					delt[v] := 0;
+				END;
+				sig[s] := 1; d[s] := 0;
+				q.Init;
+				q.Put(s);
+				WHILE ~q.IsEmpty() DO
+					q.Get(v);
+					st.Push(v);
+					IF d[v] <= maxStep THEN
+						it2.Attach(net.links[v]);
+						ok2 := it2.FirstE(w);
+						WHILE ok2 DO
+							IF d[w] < 0 THEN
+								q.Put(w);
+								d[w] := d[v] + 1;
+							END;
+							IF d[w] = d[v] + 1 THEN
+								INC(sig[w], sig[v]);
+								p[w].Push(v);
+							END;
+							ok2 := it2.NextE(w);
+						END;
+					END;
+				END;
+				WHILE ~st.IsEmpty() DO
+					st.Pop(w);
+					ext := net.extremities.In(w);
+					WHILE ~p[w].IsEmpty() DO
+						p[w].Pop(v);
+						IF ext THEN
+							delt[v] := delt[v] + sig[v] * (1 + delt[w] DIV sig[w]);
+						ELSE
+							 (* Don't increase by 1 if w is not an extremity, since no path ends at w *)
+							delt[v] := delt[v] + sig[v] * delt[w] DIV sig[w];
+						END;
+					END;
+					IF w # s THEN
+						cS[w] := cS[w] + delt[w];
+					END;
+				END;
+				ok1 := it1.NextE(s);
+			END;
+		END StressD;
+	
+	PROCEDURE (net: Net) Centralities* (maxStep: INTEGER): Centrals, NEW;
+		
+		VAR
+			
+			setC: SetC;
+			ct: Centrals;
+		
+		BEGIN (*Centralities*)
+			net.NewC(setC);
+			net.StressD(maxStep, setC);
+			NEW(ct);
+			ct.nbNodes := net.nbNodes;
+			ct.nodes := net.nodes.t;
+			ct.cT := setC;
+			RETURN ct;
+		END Centralities;
+	
+	END UtilNetStressD.

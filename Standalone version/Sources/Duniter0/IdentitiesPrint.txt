@@ -16,7 +16,7 @@ MODULE Duniter0IdentitiesPrint;
 
 	IMPORT
 		
-		B := Duniter0Blockchain, BA := Duniter0Basic, Dialog, StdLog;
+		B := Duniter0Blockchain, BA := Duniter0Basic, Dialog, TextMappers, TextModels, TextViews, Views;
 	
 	PROCEDURE Print*;
 		
@@ -30,50 +30,54 @@ MODULE Duniter0IdentitiesPrint;
 			n: INTEGER;
 			mt, t, exp: LONGINT;
 			s: BA.DateTime;
-			ss: Dialog.String;
+			ss: Views.Title;
+			tt: TextModels.Model;
+			f: TextMappers.Formatter;
 		
 		BEGIN (*Print*)
-			StdLog.Clear; StdLog.Open;
-			StdLog.Ln;
+			tt := TextModels.dir.New();
+			f.ConnectTo(tt);
 			ok := B.IdNextPubkeyM(TRUE, pubkey);
 			WHILE ok DO
-				StdLog.String(pubkey); StdLog.Tab;
+				f.WriteString(pubkey); f.WriteTab;
 				b := B.IdPubComplete(pubkey, uid, member, hash, bnb, exp); ASSERT(b);
-				StdLog.String(uid); StdLog.Tab;
+				f.WriteString(uid); f.WriteLn; f.WriteTab;
 				b := B.TimeOf(bnb, mt, t); ASSERT(b);
 				BA.TimestampToString(mt, s);
-				StdLog.String(s);
-				StdLog.String(" -> ");
+				f.WriteString(s);
+				f.WriteString(" → ");
 				BA.TimestampToString(exp, s);
-				StdLog.String(s);
-				StdLog.Ln;
+				f.WriteString(s);
+				f.WriteLn;
 				ok := B.IdNextPubkeyM(FALSE, pubkey);
 			END;
-			StdLog.Ln;
+			f.WriteLn;
 			n := 0;
 			ok := B.IdNextUidM(TRUE, uid);
 			WHILE ok DO
-				StdLog.String(uid); StdLog.Tab;
+				f.WriteString(uid); f.WriteTab;
 				b := B.IdUidComplete(uid, pubkey, member, hash, bnb, exp); ASSERT(b);
 				IF member THEN
 					INC(n);
 				END;
-				StdLog.String(pubkey); StdLog.Tab;
+				f.WriteString(pubkey); f.WriteLn; f.WriteTab;
 				b := B.TimeOf(bnb, mt, t); ASSERT(b);
 				BA.TimestampToString(mt, s);
-				StdLog.String(s);
-				StdLog.String(" -> ");
+				f.WriteString(s);
+				f.WriteString(" → ");
 				BA.TimestampToString(exp, s);
-				StdLog.String(s);
-				StdLog.Ln;
+				f.WriteString(s);
+				f.WriteLn;
 				ok := B.IdNextUidM(FALSE, uid);
 			END;
-			StdLog.Ln;
+			f.WriteLn;
 			ASSERT(n = B.IdLenM());
-			Dialog.MapString("#Duniter0:MembersNb", ss);
-			StdLog.String(ss + " = ");
-			StdLog.Int(n);
-			StdLog.Ln;
+			f.WriteMsg("#Duniter0:MembersNb");
+			f.WriteString(" = ");
+			f.WriteInt(n);
+			f.WriteLn;
+			Dialog.MapString("#Duniter0:Identities", ss);
+			Views.OpenAux(TextViews.dir.New(tt), ss);
 		END Print;
 	
 	END Duniter0IdentitiesPrint.

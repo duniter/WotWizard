@@ -1,0 +1,112 @@
+(* 
+Duniter0: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter0Qualities;
+	
+	
+	
+	(* Calculate qualities with UtilSets; numbering of members is done by array; fast *)
+
+	IMPORT
+		
+		A := UtilAvlTree, BA := Duniter0Basic, B := Duniter0Blockchain, UtilSort;
+	
+	TYPE
+	
+		PropOfSentries* = POINTER TO RECORD
+			id-: B.String;
+			prop-: REAL;
+		END;
+		
+		Props* = POINTER TO ARRAY OF PropOfSentries;
+		
+		PropsSort = EXTENSIBLE RECORD (UtilSort.T)
+			t: Props;
+		END;
+		
+		PropsSortId = EXTENSIBLE RECORD (PropsSort)
+		END;
+	
+	PROCEDURE (VAR s: PropsSort) Swap (i, j: INTEGER);
+		
+		VAR
+			
+			p: PropOfSentries;
+		
+		BEGIN (*Swap*)
+			p := s.t[i]; s.t[i] := s.t[j]; s.t[j] := p;
+		END Swap;
+	
+	PROCEDURE (VAR s: PropsSort) Less (p1, p2: INTEGER): BOOLEAN, EXTENSIBLE;
+		
+		BEGIN (*Less*)
+			RETURN (s.t[p1].prop > s.t[p2].prop) OR (s.t[p1].prop = s.t[p2].prop) & (BA.CompP(s.t[p1].id, s.t[p2].id) = A.lt);
+		END Less;
+	
+	PROCEDURE (VAR s: PropsSortId) Less (p1, p2: INTEGER): BOOLEAN;
+		
+		BEGIN (*Less*)
+			RETURN BA.CompP(s.t[p1].id, s.t[p2].id) = A.lt;
+		END Less;
+	
+	PROCEDURE PercentOfSentries (IN pubkey: B.Pubkey): REAL;
+		
+		VAR
+			
+			pubs: ARRAY 1 OF B.Pubkey;
+		
+		BEGIN (*PercentOfSentries*)
+			pubs[0] := pubkey;
+			RETURN B.PercentOfSentries(pubs);
+		END PercentOfSentries;
+	
+	PROCEDURE Count* (OUT props, propsId: Props);
+		
+		VAR
+			
+			ok, b: BOOLEAN;
+			p: B.Pubkey;
+			i, n: INTEGER;
+			c: PropOfSentries;
+			s: PropsSort;
+			sId: PropsSortId;
+		
+		BEGIN (*Count*)
+			n := B.IdLenM();
+			NEW(props, n);
+			i := 0;
+			ok := B.IdNextPubkeyM(TRUE, p);
+			WHILE ok DO
+				NEW(c);
+				b := B.IdPub(p, c.id); ASSERT(b);
+				c.prop := PercentOfSentries(p);
+				props[i] := c;
+				INC(i);
+				ok := B.IdNextPubkeyM(FALSE, p);
+			END;
+			s.t := props;
+			s.QuickSort(0, n - 1);
+			NEW(propsId, n);
+			FOR i := 0 TO n - 1 DO
+				propsId[i] := props[i];
+			END;
+			sId.t := propsId;
+			sId.QuickSort(0, n - 1);
+		END Count;
+	
+	PROCEDURE CountOne* (p: B.Pubkey): REAL;
+		
+		BEGIN (*CountOne*)
+			RETURN PercentOfSentries(p);
+		END CountOne;
+	
+	END Duniter0Qualities.

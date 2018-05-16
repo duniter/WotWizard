@@ -1,0 +1,124 @@
+(* 
+Duniter0: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter0QualitiesPrint;
+	
+	
+	
+	(* Print qualities *)
+
+	IMPORT
+		
+		Q := Duniter0Qualities, 
+		
+		B := Duniter0Blockchain, HermesAxes, HermesScat, HermesUtil, HermesViews, Ports, L := StdLog, Services, Dialog, TextMappers, TextModels, TextViews, Views;
+	
+	PROCEDURE Print*;
+		
+		CONST
+			
+			scatColor= Ports.red;
+			scatShape= HermesScat.point;
+		
+		VAR
+			
+			props, propsId: Q.Props;
+			i, m: INTEGER;
+			time: LONGINT;
+			s: Views.Title;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			p: HermesViews.View;
+			ts: POINTER TO ARRAY OF HermesUtil.Dot;
+			tr: HermesViews.Trace;
+		
+		BEGIN (*Print*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			time := Services.Ticks();
+			Q.Count(props, propsId);
+			L.Int(Services.Ticks() - time);
+			L.Ln;
+			f.WriteMsg("#Duniter0:Block"); f.WriteString(" "); f.WriteInt(B.LastBlock());
+			f.WriteLn; f.WriteLn;
+			m := LEN(props);
+			FOR i := 0 TO m - 1 DO
+				f.WriteTab;
+				f.WriteInt(i);
+				f.WriteTab;
+				f.WriteRealForm(100. * props[i].prop, 16, 6, - 2, '');
+				f.WriteTab;
+				f.WriteString(props[i].id);
+				f.WriteLn;
+			END;
+			f.WriteLn;
+			FOR i := 0 TO m - 1 DO
+				f.WriteTab;
+				f.WriteString(propsId[i].id);
+				f.WriteTab;
+				f.WriteRealForm(100. * propsId[i].prop, 16, 6, - 2, '');
+				f.WriteLn;
+			END;
+			Dialog.MapString("#Duniter0:Qualities", s);
+			Views.OpenAux(TextViews.dir.New(t), s);
+			p:= HermesViews.New();
+			NEW(ts, m);
+			FOR i := 0 TO m - 1 DO
+				ts[i].x := i;
+				ts[i].y := 100. * props[i].prop;
+			END;
+			tr:= HermesScat.Insert(p, ts, scatShape, FALSE, FALSE, FALSE);
+			tr.ChangeColor(scatColor);
+			tr:= HermesAxes.Insert(p, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 'n', '', 0, 3);
+			tr:= HermesAxes.Insert(p, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 'q', '%', 0, 3);
+			p.FixY(0., 100.);
+			Views.OpenAux(p, s);
+		END Print;
+	
+	PROCEDURE PrintOne* (IN id: ARRAY OF CHAR);
+		
+		VAR
+			
+			p: B.Pubkey;
+		
+		BEGIN (*PrintOne*)
+			L.Open;
+			IF B.IdUid(id, p) THEN
+				L.String("Quality of " + id + ": ");
+				L.RealForm(100. * Q.CountOne(p), 16, 6, - 2, '');
+			END;
+			L.Ln;
+		END PrintOne;
+	
+	END Duniter0QualitiesPrint.
+
+DevDebug.UnloadThis Duniter0QualitiesPrint Duniter0QualitiesJson Duniter0QualitiesSetsArr Duniter0QualitiesSetsAVL Duniter0QualitiesAVL 
+
+Duniter0QualitiesPrint.Print;
+
+"Duniter0QualitiesPrint.PrintOne('Mathou')"
+
+"Duniter0QualitiesPrint.PrintOne('TomBaumert')"
+
+"Duniter0QualitiesPrint.PrintOne('yot82150')"
+
+"Duniter0QualitiesPrint.PrintOne('pirboazo')"
+
+"Duniter0QualitiesPrint.PrintOne('gerard94')"
+
+"Duniter0QualitiesPrint.PrintOne('BenoitLavenier')"
+
+"Duniter0QualitiesPrint.PrintOne('Zheny')"
+
+"Duniter0QualitiesPrint.PrintOne('clairecamille')"
+
+"Duniter0QualitiesPrint.PrintOne('Ninon36')"

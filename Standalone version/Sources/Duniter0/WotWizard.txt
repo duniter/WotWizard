@@ -467,7 +467,7 @@ MODULE Duniter0WotWizard;
 					|cd1: Dossier DO
 						WITH
 							|cd2: Dossier DO
-								RETURN (cd2.princCertif < B.pars.sigQty) & (cd1.princCertif > cd2.princCertif) OR (cd1.princCertif >= B.pars.sigQty) & (cd2.princCertif >= B.pars.sigQty) & (cd1.date < cd2.date);
+								RETURN (cd2.princCertif < B.pars.sigQty) & ((cd1.princCertif > cd2.princCertif) OR (cd1.princCertif = cd2.princCertif) & ((cd1.date < cd2.date) OR (cd1.date = cd2.date) & (cd1.pub$ < cd2.pub$))) OR (cd1.princCertif >= B.pars.sigQty) & (cd2.princCertif >= B.pars.sigQty) & ((cd1.date < cd2.date) OR (cd1.date = cd2.date) & (cd1.pub$ < cd2.pub$));
 							|cd2: Certif DO
 								RETURN (cd1.princCertif >= B.pars.sigQty) & (cd1.date <= cd2.date);
 						END;
@@ -476,7 +476,7 @@ MODULE Duniter0WotWizard;
 							|cd2: Dossier DO
 								RETURN (cd2.princCertif < B.pars.sigQty) OR (cd1.date < cd2.date);
 							|cd2: Certif DO
-								RETURN cd1.date < cd2.date;
+								RETURN (cd1.date < cd2.date) OR (cd1.date = cd2.date) & ((cd1.fromP$ < cd2(Certif).fromP$) OR (cd1.fromP$ = cd2(Certif).fromP$) & ((cd1.to = NIL) & (cd2(Certif).to # NIL) OR (cd1.to # NIL) & (cd2(Certif).to # NIL) & (cd1.to$ < cd2(Certif).to$)));
 						END;
 				END;
 			END Less;
@@ -687,7 +687,11 @@ MODULE Duniter0WotWizard;
 			ok: BOOLEAN;
 		
 		BEGIN (*NotTooFar*)
-			IF n < B.pars.sigQty THEN
+			IF n = 0 THEN
+				needed := 0;
+				proportionOfSentries := 0;
+				ok := FALSE;
+			ELSIF n < B.pars.sigQty THEN
 				NEW(certifiers, n);
 				FOR j := 0 TO n - 1 DO
 					certifiers[j] := c.pub;
@@ -1014,23 +1018,28 @@ MODULE Duniter0WotWizard;
 						d.princCertif := princCertif;
 						d.proportionOfSentries := proportionOfSentries;
 						b := S.IdHash(toHash, d.pub, d.id, d.limit); ASSERT(b, 101);
-						NEW(d.certifs, nbCertifs);
-						j := 0;
-						pos := posI;
-						okP := pos.CertNextPos(from, toHash); ASSERT(okP, 102);
-						REPEAT
-							b := S.Cert(from, toHash, to, exp); ASSERT(b, 103);
-							NEW(c); NEW(c.fromP);
-							c.fromP^ := from;
-							b := B.IdPub(from, c.from); ASSERT(b, 104);
-							FixCertNextDate(from, c.date);
-							c.limit := exp;
-							IF c.date <= c.limit THEN
-								d.certifs[j] := c;
-								INC(j);
-							END;
-							okP := pos.CertNextPos(from, toHash);
-						UNTIL ~okP;
+						IF nbCertifs = 0 THEN
+							d.certifs := NIL;
+						ELSE
+							NEW(d.certifs, nbCertifs);
+							j := 0;
+							pos := posI;
+							okP := pos.CertNextPos(from, toHash); ASSERT(okP, 102);
+							REPEAT
+								b := S.Cert(from, toHash, to, exp); ASSERT(b, 103);
+								FixCertNextDate(from, date);
+								IF date <= exp THEN
+									NEW(c); NEW(c.fromP);
+									c.fromP^ := from;
+									b := B.IdPub(from, c.from); ASSERT(b, 104);
+									c.date := date;
+									c.limit := exp;
+									d.certifs[j] := c;
+									INC(j);
+								END;
+								okP := pos.CertNextPos(from, toHash);
+							UNTIL ~okP;
+						END;
 					END;
 					ok := S.IdNextHash(FALSE, toHash);
 				END;

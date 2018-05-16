@@ -16,7 +16,7 @@ MODULE Duniter0CertificationsPrint;
 
 	IMPORT
 		
-		B := Duniter0Blockchain, BA := Duniter0Basic, Dialog, StdLog;
+		B := Duniter0Blockchain, BA := Duniter0Basic, Dialog, TextMappers, TextModels, TextViews, Views;
 	
 	PROCEDURE PrintFrom*;
 		
@@ -24,39 +24,48 @@ MODULE Duniter0CertificationsPrint;
 			
 			uid: B.String;
 			from, to: B.Pubkey;
-			block: INTEGER;
+			block, n: INTEGER;
 			ok, okP, b: BOOLEAN;
 			pos: B.CertPos;
 			mt, t: LONGINT;
 			dt: BA.DateTime;
 			exp: LONGINT;
-			s: Dialog.String;
+			s: Views.Title;
+			tt: TextModels.Model;
+			f: TextMappers.Formatter;
 		
 		BEGIN (*PrintFrom*)
-			StdLog.Clear; StdLog.Open;
-			Dialog.MapString("#Duniter0:CertificationsFrom", s);
-			StdLog.String(s); StdLog.Ln; StdLog.Ln;
-			ok := B.IdNextUidM(TRUE, uid);
+			tt := TextModels.dir.New();
+			f.ConnectTo(tt);
+			f.WriteMsg("#Duniter0:CertificationsFrom");
+			f.WriteLn; f.WriteLn;
+			n := 0;
+			ok := B.IdNextUid(TRUE, uid);
 			WHILE ok DO
 				b := B.IdUid(uid, from); ASSERT(b);
 				IF B.CertFrom(from, pos) THEN
-					StdLog.String(uid); StdLog.String(" ->"); StdLog.Ln;
+					f.WriteString(uid); f.WriteString(" →"); f.WriteLn;
 					okP := pos.CertNextPos(from, to);
 					WHILE okP DO
+						INC(n);
 						b := B.Cert(from, to, block, exp); ASSERT(b);
-						StdLog.Tab; 
+						f.WriteTab; 
 						b := B.IdPub(to, uid); ASSERT(b);
-						StdLog.String(uid);
-						StdLog.Tab; 
+						f.WriteString(uid);
+						f.WriteTab; 
 						b := B.TimeOf(block, mt, t);
 						BA.TimestampToString(mt, dt);
-						StdLog.String(dt); StdLog.Ln;
+						f.WriteString(dt); f.WriteLn;
 						okP := pos.CertNextPos(from, to);
 					END;
 				END;
-				ok := B.IdNextUidM(FALSE, uid);
+				ok := B.IdNextUid(FALSE, uid);
 			END;
-			StdLog.Ln;
+			f.WriteLn;
+			Dialog.MapString("#Duniter0:Certifications", s);
+			f.WriteInt(n); f.WriteString(" " + s);
+			f.WriteLn;
+			Views.OpenAux(TextViews.dir.New(tt), s);
 		END PrintFrom;
 	
 	PROCEDURE PrintTo*;
@@ -65,39 +74,48 @@ MODULE Duniter0CertificationsPrint;
 			
 			uid: B.String;
 			from, to: B.Pubkey;
-			block: INTEGER;
+			block, n: INTEGER;
 			ok, okP, b: BOOLEAN;
 			pos: B.CertPos;
 			mt, t: LONGINT;
 			dt: BA.DateTime;
 			exp: LONGINT;
-			s: Dialog.String;
+			s: Views.Title;
+			tt: TextModels.Model;
+			f: TextMappers.Formatter;
 		
 		BEGIN (*PrintTo*)
-			StdLog.Clear; StdLog.Open;
-			Dialog.MapString("#Duniter0:CertificationsTo", s);
-			StdLog.String(s); StdLog.Ln; StdLog.Ln;
-			ok := B.IdNextUidM(TRUE, uid);
+			tt := TextModels.dir.New();
+			f.ConnectTo(tt);
+			f.WriteMsg("#Duniter0:CertificationsTo");
+			f.WriteLn; f.WriteLn;
+			n := 0;
+			ok := B.IdNextUid(TRUE, uid);
 			WHILE ok DO
 				b := B.IdUid(uid, to); ASSERT(b);
 				IF B.CertTo(to, pos) THEN
-					StdLog.String(uid); StdLog.String(" <-"); StdLog.Ln;
+					f.WriteString(uid); f.WriteString(" ←"); f.WriteLn;
 					okP := pos.CertNextPos(from, to);
 					WHILE okP DO
+						INC(n);
 						b := B.Cert(from, to, block, exp);
-						StdLog.Tab; 
+						f.WriteTab; 
 						b := B.IdPub(from, uid); ASSERT(b);
-						StdLog.String(uid);
-						StdLog.Tab; 
+						f.WriteString(uid);
+						f.WriteTab; 
 						b := B.TimeOf(block, mt, t);
 						BA.TimestampToString(mt, dt);
-						StdLog.String(dt); StdLog.Ln;
+						f.WriteString(dt); f.WriteLn;
 						okP := pos.CertNextPos(from, to);
 					END;
 				END;
-				ok := B.IdNextUidM(FALSE, uid);
+				ok := B.IdNextUid(FALSE, uid);
 			END;
-			StdLog.Ln;
+			f.WriteLn;
+			Dialog.MapString("#Duniter0:Certifications", s);
+			f.WriteInt(n); f.WriteString(" " + s);
+			f.WriteLn;
+			Views.OpenAux(TextViews.dir.New(tt), s);
 		END PrintTo;
 	
 	END Duniter0CertificationsPrint.

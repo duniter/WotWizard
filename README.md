@@ -38,4 +38,4 @@ You can:
 
 Standalone version:
 
-This version combines the server side and the gui side into a single application. It contains several derived tools like an explorer of the web of trust, a tool that prints the number of members day by day, or the number of certifications by certifiers, etc...
+This version combines the server side and the gui side into a single application. It contains several derived tools like an explorer of the web of trust, a tool that prints the number of members day by day, or the number of certifications by certifiers, etc... Its installation is the same as for the Server version; just replace WWServer.exe by WotWizard.exe (Standalone Version).

@@ -1,0 +1,112 @@
+(* 
+Duniter0: WotWizard.
+
+Copyright (C) 2018 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter0Events;
+	
+	
+
+	IMPORT
+		
+		A := UtilAvlTree, B := Duniter0Blockchain, BA := Duniter0Basic, S := UtilSort, L := StdLog, Services, Dialog, TextMappers, TextModels, TextViews, Views;
+	
+	TYPE
+		
+		Membership = POINTER TO RECORD
+			id: B.String;
+			exp: LONGINT;
+			expS: BA.DateTime;
+		END;
+		
+		Memberships = POINTER TO ARRAY OF Membership;
+		
+		MemSort = RECORD (S.T)
+			m: Memberships;
+		END;
+	
+	PROCEDURE (VAR ms: MemSort) Less (m1, m2: INTEGER): BOOLEAN;
+		
+		BEGIN (*Less*)
+			RETURN (ms.m[m1].exp < ms.m[m2].exp) OR (ms.m[m1].exp = ms.m[m2].exp) & (BA.CompP(ms.m[m1].id, ms.m[m2].id) = A.lt);
+		END Less;
+	
+	PROCEDURE (VAR ms: MemSort) Swap (m1, m2: INTEGER);
+		
+		VAR
+			
+			m: Membership;
+		
+		BEGIN (*Swap*)
+			m := ms.m[m1]; ms.m[m1] := ms.m[m2]; ms.m[m2] := m;
+		END Swap;
+	
+	PROCEDURE NextNoMembers (): Memberships;
+		
+		VAR
+			
+			ms: MemSort;
+			ok, mem, b: BOOLEAN;
+			id: B.String;
+			p: B.Pubkey;
+			h: B.Hash;
+			bnb, i: INTEGER;
+			exp: LONGINT;
+		
+		BEGIN (*NextNoMembers*)
+			NEW(ms.m, B.IdLenM());
+			i := 0;
+			ok := B.IdNextUidM(TRUE, id);
+			WHILE ok DO
+				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b & mem);
+				NEW(ms.m[i]);
+				ms.m[i].id := id; ms.m[i].exp := exp; BA.TimestampToString(exp, ms.m[i].expS);
+				INC(i);
+				ok := B.IdNextUidM(FALSE, id);
+			END;
+			ms.QuickSort(0, LEN(ms.m) - 1);
+			RETURN ms.m;
+		END NextNoMembers;
+	
+	PROCEDURE Print*;
+		
+		VAR
+			
+			ms: Memberships;
+			i, m: INTEGER;
+			time: LONGINT;
+			s: Views.Title;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*Print*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			Dialog.MapString("#Duniter0:LimitsM", s);
+			f.WriteString(s);
+			f.WriteLn; f.WriteLn;
+			time := Services.Ticks();
+			ms := NextNoMembers();
+			L.Int(Services.Ticks() - time);
+			L.Ln;
+			m := LEN(ms);
+			FOR i := 0 TO m - 1 DO
+				f.WriteString('    ');
+				f.WriteString(ms[i].expS);
+				f.WriteString('    ');
+				f.WriteString(ms[i].id);
+				f.WriteLn;
+			END;
+			Views.OpenAux(TextViews.dir.New(t), s);
+		END Print;
+	
+	END Duniter0Events.
+
+Duniter0Events.Print;

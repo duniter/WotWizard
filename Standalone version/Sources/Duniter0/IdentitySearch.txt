@@ -20,7 +20,7 @@ MODULE Duniter0IdentitySearch;
 		L := StdLog,
 		*)
 		
-		A := UtilAvlTree, B := Duniter0Blockchain, Dialog, S := Duniter0Sandbox, BA := Duniter0Basic, C := Duniter0Centralities, Strings;
+		A := UtilAvlTree, B := Duniter0Blockchain, Dialog, S := Duniter0Sandbox, BA := Duniter0Basic, C := Duniter0CentralitiesStressD, Strings;
 	
 	CONST
 		
@@ -620,11 +620,15 @@ MODULE Duniter0IdentitySearch;
 			quality := quality + "%";
 		END CalcQuality;
 	
-	PROCEDURE CalcCentrality (OUT centrality: ARRAY OF CHAR);
+	PROCEDURE CalcCentrality (inBC: BOOLEAN; OUT centrality: ARRAY OF CHAR);
 		
 		BEGIN (*CalcCentrality*)
-			Strings.RealToStringForm(100 * C.CountOne(identity.fields[2]$), 16, 6, - 2, '', centrality);
-			centrality := centrality + "%";
+			IF inBC THEN
+				Strings.RealToStringForm(100 * C.CountOne(identity.fields[2]$), 16, 6, - 2, '', centrality);
+				centrality := centrality + "%";
+			ELSE
+				centrality := "0.00%"
+			END;
 		END CalcCentrality;
 	
 	PROCEDURE Fix;
@@ -651,7 +655,7 @@ MODULE Duniter0IdentitySearch;
 					CalcQuality(identity.fields[20]);
 				END;
 				IF identity.calcCentr THEN
-					CalcCentrality(identity.fields[22]);
+					CalcCentrality(inBC, identity.fields[22]);
 				END;
 				FOR i := 0 TO nonEditableNb - 1 DO
 					identity.fields[2 * i + 1] := identity.fields[2 * i];
