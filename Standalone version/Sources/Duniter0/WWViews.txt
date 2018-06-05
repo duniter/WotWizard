@@ -669,7 +669,7 @@ MODULE Duniter0WWViews;
 							J.PushBoolean(e.after);
 							J.BuildField("after");
 							IF e.date = BA.never THEN
-								Dialog.MapString("#Duniter:Never", ss);
+								Dialog.MapString("#Duniter0:Never", ss);
 								J.PushString(ss);
 							ELSE
 								BA.TimestampToString(e.date, s);
@@ -770,8 +770,8 @@ MODULE Duniter0WWViews;
 			v.text := TextViews.dir.New(TextModels.dir.New());
 			Stores.Join(v, v.text);
 			v.text.ThisController().SetOpts({Containers.noCaret});
-			BuildOccurDN(J.Read("", textByDate), v.nowS, v.occurD, v.occurN);
-			v.meta := J.Read("", textMeta);
+			BuildOccurDN(J.ReadFile("", textByDate), v.nowS, v.occurD, v.occurN);
+			v.meta := J.ReadFile("", textMeta);
 			v.UpdateText;
 		END InstallText;
 	
@@ -936,7 +936,7 @@ MODULE Duniter0WWViews;
 				f.WriteMsg(title);
 				f.WriteLn;
 				f.rider.SetAttr(TextModels.NewSize(f.rider.attr, headSize));
-				f.WriteMsg("#Duniter:PreviousDisplay");
+				f.WriteMsg("#Duniter0:PreviousDisplay");
 				f.WriteLn;
 				f.WriteLn;
 				r := TextRulers.dir.New(NIL);
@@ -946,7 +946,7 @@ MODULE Duniter0WWViews;
 				f.WriteTab;
 				InitProp(prop);
 				prop.link := "DevSearch.Compare";
-				prop.label := "#Duniter:Compare";
+				prop.label := "#Duniter0:Compare";
 				Dialog.MapString(prop.label, s);
 				c := Controls.dir.NewPushButton(prop);
 				f.WriteView(c);
@@ -963,7 +963,7 @@ MODULE Duniter0WWViews;
 				IF showOldEntries THEN
 					loc := Files.dir.This(""); ASSERT(loc.res = 0, 100);
 					
-					j := J.Read("", oldMetaName);
+					j := J.ReadFile("", oldMetaName);
 					IF j  # NIL THEN
 						IF dateNameMeta # meta THEN
 							dN := dateNameMeta;
@@ -986,7 +986,7 @@ MODULE Duniter0WWViews;
 						DevSearch.Compare;
 					END;
 					
-					j := J.Read("", oldEntriesName);
+					j := J.ReadFile("", oldEntriesName);
 					IF j # NIL THEN
 						IF dateNameMeta # byDate THEN
 							dN := dateNameMeta;

@@ -1,6 +1,6 @@
-UtilBTree
+UtilBTree2
 
-DEFINITION UtilBTree;
+DEFINITION UtilBTree2;
 
 	CONST
 		BOS = 1;
@@ -31,12 +31,12 @@ DEFINITION UtilBTree;
 		END;
 
 		File = POINTER TO ABSTRACT RECORD 
-			(ref: File) PosReader- (pos: INTEGER), NEW, ABSTRACT;
+			(ref: File) PosReader- (pos: LONGINT), NEW, ABSTRACT;
 			(ref: File) Read- (OUT a: ARRAY OF BYTE), NEW, ABSTRACT;
-			(ref: File) PosWriter- (pos: INTEGER), NEW, ABSTRACT;
+			(ref: File) PosWriter- (pos: LONGINT), NEW, ABSTRACT;
 			(ref: File) Write- (IN a: ARRAY OF BYTE), NEW, ABSTRACT;
-			(ref: File) End- (OUT end: INTEGER), NEW, ABSTRACT;
-			(ref: File) Truncate- (end: INTEGER), NEW, ABSTRACT;
+			(ref: File) End- (OUT end: LONGINT), NEW, ABSTRACT;
+			(ref: File) Truncate- (end: LONGINT), NEW, ABSTRACT;
 			(ref: File) Flush-, NEW, EMPTY;
 			(ref: File) Close-, NEW, ABSTRACT;
 			(ref: File) BytesToReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): REAL, NEW, ABSTRACT;
@@ -46,13 +46,14 @@ DEFINITION UtilBTree;
 		END;
 
 		Database = POINTER TO LIMITED RECORD 
-			end-, placeNb-: INTEGER;
-			(base: Database) ReadPlace (place: INTEGER): INTEGER, NEW;
-			(base: Database) WritePlace (place, val: INTEGER), NEW;
+			end-: LONGINT;
+			placeNb-: INTEGER;
+			(base: Database) ReadPlace (place: INTEGER): LONGINT, NEW;
+			(base: Database) WritePlace (place: INTEGER; val: LONGINT), NEW;
 			(base: Database) CreateDataMan (fac: DataFac): DataMan, NEW;
-			(base: Database) CreateIndex (keySize: INTEGER): INTEGER, NEW;
-			(base: Database) OpenIndex (ref: INTEGER; man: KeyManager; f: DataFac): Index, NEW;
-			(base: Database) DeleteIndex (ref: INTEGER), NEW;
+			(base: Database) CreateIndex (keySize: INTEGER): LONGINT, NEW;
+			(base: Database) OpenIndex (ref: LONGINT; man: KeyManager; f: DataFac): Index, NEW;
+			(base: Database) DeleteIndex (ref: LONGINT), NEW;
 			(base: Database) UpdateBase, NEW;
 			(base: Database) CloseBase, NEW
 		END;
@@ -67,21 +68,22 @@ DEFINITION UtilBTree;
 		END;
 
 		StringFac = POINTER TO EXTENSIBLE RECORD (DataFac)
-			(f: StringFac) New- (size: INTEGER): String
+			(f: StringFac) New- (size: INTEGER): String, EXTENSIBLE
 		END;
 
 		String = POINTER TO EXTENSIBLE RECORD (Data)
 			c: POINTER TO ARRAY OF CHAR;
-			(s: String) Read- (VAR r: Reader);
-			(s: String) Write- (VAR w: Writer)
+			(s: String) Read- (VAR r: Reader), EXTENSIBLE;
+			(s: String) Write- (VAR w: Writer), EXTENSIBLE
 		END;
 
 		DataMan = POINTER TO LIMITED RECORD 
-			(d: DataMan) ReadData (ptr: INTEGER): Data, NEW;
-			(d: DataMan) AllocateData (data: Data): INTEGER, NEW;
-			(d: DataMan) WriteAllocateData (data: Data): INTEGER, NEW;
-			(d: DataMan) WriteData (ptr: INTEGER; data: Data), NEW;
-			(d: DataMan) EraseData (ptr: INTEGER), NEW
+			(d: DataMan) ReadData (ptr: LONGINT): Data, NEW;
+			(d: DataMan) AllocateSize (size: INTEGER): LONGINT, NEW;
+			(d: DataMan) AllocateData (data: Data): LONGINT, NEW;
+			(d: DataMan) WriteAllocateData (data: Data): LONGINT, NEW;
+			(d: DataMan) WriteData (ptr: LONGINT; data: Data), NEW
+			(d: DataMan) EraseData (ptr: LONGINT), NEW;
 		END;
 
 		IndexPos = POINTER TO LIMITED RECORD  END;
@@ -98,8 +100,8 @@ DEFINITION UtilBTree;
 			(ind: Index) Previous, NEW;
 			(ind: Index) PosSet (): BOOLEAN, NEW;
 			(ind: Index) CurrentKey (): Data, NEW;
-			(ind: Index) ReadValue (): INTEGER, NEW;
-			(ind: Index) WriteValue (val: INTEGER), NEW;
+			(ind: Index) ReadValue (): LONGINT, NEW;
+			(ind: Index) WriteValue (val: LONGINT), NEW;
 			(ind: Index) Close, NEW
 		END;
 
@@ -148,7 +150,7 @@ DEFINITION UtilBTree;
 			(VAR w: Writer) OutSet (s: SET), NEW
 		END;
 
-END UtilBTree.
+END UtilBTree2.
 
 The module UtilBTree manages a disk file like a heap, allocating and freeing it easily, with the possibility of indexing by BTrees.
 
@@ -238,7 +240,7 @@ TYPE File
 ABSTRACT
 File.
 
-PROCEDURE (ref: File) PosReader- (pos: INTEGER)
+PROCEDURE (ref: File) PosReader- (pos: LONGINT)
 NEW, ABSTRACT
 Set the reading position of the file ref to pos; the firt position is 0.
 
@@ -246,7 +248,7 @@ PROCEDURE (ref: File) Read- (OUT a: ARRAY OF BYTE)
 NEW, ABSTRACT
 Read the array a from the file ref at reading position.
 
-PROCEDURE (ref: File) PosWriter- (pos: INTEGER)
+PROCEDURE (ref: File) PosWriter- (pos: LONGINT)
 NEW, ABSTRACT
 Set the writing position of the file ref to pos; the firt position is 0.
 
@@ -254,11 +256,11 @@ PROCEDURE (ref: File) Write- (IN a: ARRAY OF BYTE)
 NEW, ABSTRACT
 Write the array a to the file ref at writing position.
 
-PROCEDURE (ref: File) End- (OUT end: INTEGER)
+PROCEDURE (ref: File) End- (OUT end: LONGINT)
 NEW, ABSTRACT
 Return in end the length of the file ref.
 
-PROCEDURE (ref: File) Truncate- (end: INTEGER)
+PROCEDURE (ref: File) Truncate- (end: LONGINT)
 NEW, ABSTRACT
 Truncate the file ref at the length end.
 
@@ -290,13 +292,13 @@ TYPE Database
 LIMITED
 Database.
 
-end-: INTEGER
+end-: LONGINT
 Length of file.
 
 placeNb-: INTEGER
 Number of fixed places in database.
 
-PROCEDURE (base: Database) ReadPlace (place: INTEGER): INTEGER
+PROCEDURE (base: Database) ReadPlace (place: INTEGER): LONGINT
 NEW
 Read and return the content of the fixed place place of the database base. The first place has number 0.
 
@@ -304,7 +306,7 @@ Pre
 base is open	20
 0 <= place < base.placeNb	21
 
-PROCEDURE (base: Database) WritePlace (place, val: INTEGER)
+PROCEDURE (base: Database) WritePlace (place: INTEGER; val: LONGINT)
 NEW
 Write val in the fixed place place of the database base. The first place has number 0.
 
@@ -319,7 +321,7 @@ Create and return a new manager of the data created by fac in the database base.
 Pre
 fac # NIL	20
 
-PROCEDURE (base: Database) CreateIndex (keySize: INTEGER): INTEGER
+PROCEDURE (base: Database) CreateIndex (keySize: INTEGER): LONGINT
 NEW
 Create a new index in the database base and return its reference, but do not open it. keySize is the size of keys on disk. If keys have a fixed size, put this size in keySize. If the size of keys does not vary much, put the greatest size in keySize. If the greatest size of keys is unknown, or if this size vary much, or if you want to use prefixes, put zero in keySize: you'll have to fix the size of each key later. In any case, the actual size of a key of type Key is given by the length of the output of Key.Write.
 
@@ -327,7 +329,7 @@ Pre
 base is open	20
 keySize >= 0	21
 
-PROCEDURE (base: Database) OpenIndex (ref: INTEGER; man: KeyManager; f: DataFac): Index
+PROCEDURE (base: Database) OpenIndex (ref: LONGINT; man: KeyManager; f: DataFac): Index
 NEW
 Open and return an index created with the reference ref by Database.CreateIndex in the database base. man is the key manager of the index and f is the factory of its keys. The current position of the index is reset.
 
@@ -338,7 +340,7 @@ f # NIL	22
 ref # bNil	23
 index is not already open 24
 
-PROCEDURE (base: Database) DeleteIndex (ref: INTEGER)
+PROCEDURE (base: Database) DeleteIndex (ref: LONGINT)
 NEW
 Delete the index of position ref in the database base; this index must have been closed.
 
@@ -386,6 +388,7 @@ EXTENSIBLE
 Factory of Strings.
 
 PROCEDURE (IN f: StringFac) New- (size: INTEGER): String
+EXTENSIBLE
 Create data containing an array of char of length l (chars) and size = l * CHS (bytes), with the help of f.
 
 Pre
@@ -400,16 +403,18 @@ c: POINTER TO ARRAY OF CHAR
 Array of char contained in String.
 
 PROCEDURE (s: String) Read- (VAR r: Reader)
+EXTENSIBLE
 Read s.c with the help of the reader r.
 
 PROCEDURE (s: String) Write- (VAR w: Writer)
+EXTENSIBLE
 Write s.c with the help of the writer w. The length of the production is CHS * (LEN(s.c$)+ 1).
 
 TYPE DataMan
 LIMITED
 Manager of data.
 
-PROCEDURE (d: DataMan) ReadData (ptr: INTEGER): Data
+PROCEDURE (d: DataMan) ReadData (ptr: LONGINT): Data
 NEW
 Read user data d in database base at position ptr.
 
@@ -417,24 +422,31 @@ Pre
 The database of d is open	20
 ptr # bNil	21
 
-PROCEDURE (d: DataMan) AllocateData (data: Data): INTEGER
+PROCEDURE (d: DataMan) AllocateSize (size: INTEGER): LONGINT
 NEW
-Consider using WriteAllocateData instead.Allocate a cluster for data, managed by d, in the database of d, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size.
+Consider using AllocateData or, better, WriteAllocateData instead. Allocate a cluster of size size, managed by d, in the database of d, and return its position.
 
 Pre
 The database of d is open	20
 size > 0	21
 
-PROCEDURE (d: DataMan) WriteAllocateData (data: Data): INTEGER
+PROCEDURE (d: DataMan) AllocateData (data: Data): LONGINT
+NEW
+Consider using WriteAllocateData instead.Allocate a cluster for data, managed by d, in the database of d, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size.
+
+Pre
+The database of d is open	20
+data # NIL	21
+
+PROCEDURE (d: DataMan) WriteAllocateData (data: Data): LONGINT
 NEW
 Allocate a cluster for data, managed by d, in the database of d, and write data into it; return the position of the allocated cluster.
 
 Pre
 The database of d is open	20
 data # NIL	21
-ptr # bNil	22
 
-PROCEDURE (d: DataMan) WriteData (ptr: INTEGER; data: Data)
+PROCEDURE (d: DataMan) WriteData (ptr: LONGINT; data: Data)
 NEW
 Write data, managed by d, at the position ptr in the database of d.
 
@@ -443,7 +455,7 @@ The database of d is open	20
 data # NIL	21
 ptr # bNil	22
 
-PROCEDURE (d: DataMan) EraseData (ptr: INTEGER)
+PROCEDURE (d: DataMan) EraseData (ptr: LONGINT)
 NEW
 Erase data managed by d at position ptr in the database of d.
 
@@ -540,14 +552,14 @@ Return the value of the key in the current position of the index ind, or NIL if 
 Pre
 ind is open	20
 
-PROCEDURE (ind: Index) ReadValue (): INTEGER
+PROCEDURE (ind: Index) ReadValue (): LONGINT
 NEW
 Read, at the current position of the index ind, the integer associated data and return it. When a new key is inserted, the data which is initially attached to it has the value bNil. The reset position of an index has, itself, a associated data, legible by Index.ReadValue.
 
 Pre
 ind is open	20
 
-PROCEDURE (ind: Index) WriteValue (val: INTEGER)
+PROCEDURE (ind: Index) WriteValue (val: LONGINT)
 NEW
 Write on the current position of the index ind the value val of the associated integer data. When a new key is inserted, the data which is initially attached to it has the value bNil. The reset position of an index has, itself, a associated data, modifiable by Index.WriteValue.
 

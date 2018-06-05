@@ -78,6 +78,7 @@ DEFINITION UtilBTree;
 
 		DataMan = POINTER TO LIMITED RECORD 
 			(d: DataMan) ReadData (ptr: INTEGER): Data, NEW;
+			(d: DataMan) AllocateSize (size: INTEGER): INTEGER, NEW;
 			(d: DataMan) AllocateData (data: Data): INTEGER, NEW;
 			(d: DataMan) WriteAllocateData (data: Data): INTEGER, NEW;
 			(d: DataMan) WriteData (ptr: INTEGER; data: Data), NEW;
@@ -386,6 +387,7 @@ EXTENSIBLE
 Factory of Strings.
 
 PROCEDURE (IN f: StringFac) New- (size: INTEGER): String
+EXTENSIBLE
 Create data containing an array of char of length l (chars) and size = l * CHS (bytes), with the help of f.
 
 Pre
@@ -400,9 +402,11 @@ c: POINTER TO ARRAY OF CHAR
 Array of char contained in String.
 
 PROCEDURE (s: String) Read- (VAR r: Reader)
+EXTENSIBLE
 Read s.c with the help of the reader r.
 
 PROCEDURE (s: String) Write- (VAR w: Writer)
+EXTENSIBLE
 Write s.c with the help of the writer w. The length of the production is CHS * (LEN(s.c$)+ 1).
 
 TYPE DataMan
@@ -417,13 +421,21 @@ Pre
 The database of d is open	20
 ptr # bNil	21
 
+PROCEDURE (d: DataMan) AllocateSize (size: INTEGER): INTEGER
+NEW
+Consider using AllocateData or, better, WriteAllocateData instead. Allocate a cluster of size size, managed by d, in the database of d, and return its position.
+
+Pre
+The database of d is open	20
+size > 0	21
+
 PROCEDURE (d: DataMan) AllocateData (data: Data): INTEGER
 NEW
 Consider using WriteAllocateData instead.Allocate a cluster for data, managed by d, in the database of d, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size.
 
 Pre
 The database of d is open	20
-size > 0	21
+data # NIL	21
 
 PROCEDURE (d: DataMan) WriteAllocateData (data: Data): INTEGER
 NEW
@@ -432,7 +444,6 @@ Allocate a cluster for data, managed by d, in the database of d, and write data 
 Pre
 The database of d is open	20
 data # NIL	21
-ptr # bNil	22
 
 PROCEDURE (d: DataMan) WriteData (ptr: INTEGER; data: Data)
 NEW

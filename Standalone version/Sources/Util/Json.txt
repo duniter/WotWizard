@@ -1,7 +1,7 @@
 (* 
 Util: Utility tools.
 
-Copyright (C) 2017…2018 Gérard Meunier
+Copyright (C) 2017…2018 GérardMeunier
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
 
@@ -297,7 +297,22 @@ MODULE UtilJson;
 			RETURN TRUE;
 		END Execution;
 	
-	PROCEDURE Read* (IN path, name: ARRAY OF CHAR ): Json;
+	PROCEDURE ReadText* (t: TextModels.Model ): Json;
+		
+		VAR
+			
+			c: Compilation;
+		
+		BEGIN (*ReadText*)
+			NEW(c);
+			c.r := t.NewReader(NIL);
+			IF ~c.Compile(comp, TRUE) THEN
+				RETURN NIL;
+			END;
+			RETURN c.json;
+		END ReadText;
+	
+	PROCEDURE ReadFile* (IN path, name: ARRAY OF CHAR ): Json;
 		
 		CONST
 			
@@ -311,7 +326,7 @@ MODULE UtilJson;
 			conv: Converters.Converter;
 			v: Views.View;
 		
-		BEGIN (*Read*)
+		BEGIN (*ReadFile*)
 			conv := Converters.list;
 			WHILE (conv # NIL) & (conv.exp # textConv) DO
 				conv := conv.next;
@@ -323,13 +338,8 @@ MODULE UtilJson;
 			IF (v = NIL) OR ~(v IS TextViews.View) THEN
 				RETURN NIL;
 			END;
-			NEW(c);
-			c.r := v(TextViews.View).ThisModel().NewReader(NIL);
-			IF ~c.Compile(comp, TRUE) THEN
-				RETURN NIL;
-			END;
-			RETURN c.json;
-		END Read;
+			RETURN ReadText(v(TextViews.View).ThisModel());
+		END ReadFile;
 	
 	PROCEDURE (j: Json) Write* (fo: TextMappers.Formatter), NEW;
 		

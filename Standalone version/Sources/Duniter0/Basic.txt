@@ -16,7 +16,7 @@ MODULE Duniter0Basic;
 
 	IMPORT
 		
-		A := UtilAvlTree, B := UtilBBTree, Dates, Dialog, Kernel, Services, Strings, UC := UnicodeCase_Mapping, UL := UnicodeLetter_Mapping;
+		A := UtilAvlTree, B := UtilBBTree2, Dates, Dialog, Kernel, Services, Strings, UC := UnicodeCase_Mapping, UL := UnicodeLetter_Mapping;
 	
 	CONST
 		

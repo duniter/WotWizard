@@ -656,9 +656,9 @@ MODULE DuniterWWViews;
 			nowS: BA.DateTime;
 		
 		BEGIN (*UpdateText*)
-			BuildOccurDN(J.Read("", textByDate), nowS, occurD, v.occurN);
+			BuildOccurDN(J.ReadFile("", textByDate), nowS, occurD, v.occurN);
 			BA.Collect;
-			meta := J.Read("", textMeta);
+			meta := J.ReadFile("", textMeta);
 			BA.Collect;
 			oM := v.modified;
 			b := ~OccursEqual(occurD, v.occurD);

@@ -18,6 +18,10 @@ MODULE Duniter0CentralitiesStressD;
 
 	IMPORT
 		
+		(*
+		L := StdLog,
+		*)
+		
 		A := UtilAvlTree, BA := Duniter0Basic, B := Duniter0Blockchain, N := UtilNetStressD, Math, UtilSort;
 	
 	TYPE
@@ -158,6 +162,7 @@ MODULE Duniter0CentralitiesStressD;
 			from, to: B.Pubkey;
 		
 		BEGIN (*FromTo*)
+			(* Counterintuitive : the result doesn't depend on the direction of arrows *)
 			IF first THEN
 				b := B.CertFrom(n.p, n.pos);
 			END;

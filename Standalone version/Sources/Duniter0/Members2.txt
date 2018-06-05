@@ -1,0 +1,101 @@
+(* 
+Duniter0: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter0Members2;
+	
+	
+
+	IMPORT
+		
+		(*
+		L := StdLog,
+		*)
+		
+		A := UtilAvlTree, B := Duniter0Blockchain;
+	
+	TYPE
+		
+		Event = POINTER TO RECORD (A.Elem)
+			date: LONGINT;
+			number: INTEGER;
+		END;
+		
+		Events* = POINTER TO ARRAY OF RECORD
+			date-: LONGINT;
+			number-: INTEGER;
+		END;
+	
+	PROCEDURE (ev1: Event) Compare (ev2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH ev2: Event DO
+				IF ev1.date < ev2.date THEN
+					RETURN A.lt;
+				END;
+				IF ev1.date > ev2.date THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	PROCEDURE Count* (OUT counts: Events);
+		
+		VAR
+			
+			ok, ok2, b: BOOLEAN;
+			pk: B.Pubkey;
+			jb, lb, n: INTEGER;
+			mT, time, list: LONGINT;
+			t: A.Tree;
+			ev: Event;
+			e: A.Elem;
+		
+		BEGIN (*Count*)
+			A.New(t);
+			ok := B.JLNextPubkey(TRUE, pk);
+			WHILE ok DO
+				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
+				WHILE ok2 DO
+					b := B.TimeOf(jb, mT, time); ASSERT(b);
+					NEW(ev); e := ev;
+					ev.date := time; ev.number := 0;
+					b := t.SearchIns(e, n);
+					INC(e(Event).number);
+					IF lb # B.hasNotLeaved THEN
+						b := B.TimeOf(lb, mT, time); ASSERT(b);
+						NEW(ev); e := ev;
+						ev.date := time; ev.number := 0;
+						b := t.SearchIns(e, n);
+						DEC(e(Event).number);
+					END;
+					ok2 := B.JLPubLNext(list, jb, lb);
+				END;
+				ok := B.JLNextPubkey(FALSE, pk);
+			END;
+			NEW(counts, t.NumberOfElems());
+			n := 0;
+			e := t.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: Event DO
+					counts[n].date := e.date;
+					counts[n].number := e.number;
+				END;
+				INC(n);
+				e := t.Next(e);
+			END;
+			FOR n := 1 TO LEN(counts) - 1 DO
+				INC(counts[n].number, counts[n - 1].number);
+			END;
+		END Count;
+	
+	END Duniter0Members2.

@@ -335,7 +335,7 @@ MODULE UtilNetStressD;
 							delt[v] := delt[v] + sig[v] * (1 + delt[w] DIV sig[w]);
 						ELSE
 							 (* Don't increase by 1 if w is not an extremity, since no path ends at w *)
-							delt[v] := delt[v] + sig[v] * delt[w] DIV sig[w];
+							delt[v] := delt[v] + sig[v] * (delt[w] DIV sig[w]);
 						END;
 					END;
 					IF w # s THEN

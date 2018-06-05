@@ -2064,7 +2064,22 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			RETURN pa;
 		END ReadData;
 	
-	(* Consider using WriteAllocateData instead.Allocate a cluster for data, managed by d, in the database of d, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size. *)
+	(* Consider using AllocateData or, better, WriteAllocateData instead. Allocate a cluster of size size, managed by d, in the database of d, and return its position. *)
+	PROCEDURE (d: DataMan) AllocateSize* (size: INTEGER): INTEGER, NEW;
+		
+		VAR
+			
+			pos: INTEGER;
+			pa: Data;
+		
+		BEGIN (*AllocateSize*)
+			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(size > 0, 21);
+			pa := d.base.NewDiskPage(size, d.fac, pos);
+			RETURN pos;
+		END AllocateSize;
+	
+	(* Consider using WriteAllocateData instead. Allocate a cluster for data, managed by d, in the database of d, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size. *)
 	PROCEDURE (d: DataMan) AllocateData* (data: Data): INTEGER, NEW;
 		
 		VAR
@@ -2113,7 +2128,6 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			
 			r: Reader;
 			w: Writer;
-			a: Bytes;
 		
 		BEGIN (*WriteData*)
 			ASSERT(d.base.ref # NIL, 20);

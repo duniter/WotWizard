@@ -10,15 +10,15 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 *)
 
-MODULE UtilBBTree;
+MODULE UtilBBTree2;
 
 	
 
-	(* Implementation of BArbre for BlackBox. For use in BlackBox, this module should be imported in place of UtilBTree. *)
+	(* Implementation of BArbre for BlackBox. For use in BlackBox, this module should be imported in place of UtilBTree2. *)
 
 	IMPORT
 
-		B := UtilBTree, SYSTEM, Files, HostFiles, Strings, WinApi;
+		B := UtilBTree2, SYSTEM, Files, HostFiles, Strings, WinApi;
 
 	CONST
 
@@ -49,7 +49,7 @@ MODULE UtilBBTree;
 
 		File = POINTER TO RECORD (B.File)
 			h: WinApi.HANDLE;
-			rPos, wPos: INTEGER;
+			rPos, wPos: LONGINT;
 		END;
 
 		KeyManager* = B.KeyManager;
@@ -208,7 +208,7 @@ MODULE UtilBBTree;
 			ASSERT(b # 0, 20);
 		END Flush;
 
-	PROCEDURE (ref: File) PosReader (pos: INTEGER);
+	PROCEDURE (ref: File) PosReader (pos: LONGINT);
 
 		BEGIN (*PosReader*)
 			ref.rPos := pos;
@@ -222,14 +222,14 @@ MODULE UtilBBTree;
 			n: INTEGER;
 
 		BEGIN (*Read*)
-			n := WinApi.SetFilePointer(ref.h, ref.rPos, NIL, WinApi.FILE_BEGIN);
+			n := WinApi.SetFilePointerEx(ref.h, ref.rPos, NIL, WinApi.FILE_BEGIN);
 			ASSERT(n # - 1, 20);
 			b := WinApi.ReadFile(ref.h, SYSTEM.ADR(a), LEN(a), n, NIL);
 			ASSERT((b # 0) & (n = LEN(a)), 21);
 			INC(ref.rPos, n);
 		END Read;
 
-	PROCEDURE (ref: File) PosWriter (pos: INTEGER);
+	PROCEDURE (ref: File) PosWriter (pos: LONGINT);
 
 		BEGIN (*PosWriter*)
 			ref.wPos := pos;
@@ -243,21 +243,25 @@ MODULE UtilBBTree;
 			n: INTEGER;
 
 		BEGIN (*Write*)
-			n := WinApi.SetFilePointer(ref.h, ref.wPos, NIL, WinApi.FILE_BEGIN);
+			n := WinApi.SetFilePointerEx(ref.h, ref.wPos, NIL, WinApi.FILE_BEGIN);
 			ASSERT(n # - 1, 20);
 			b := WinApi.WriteFile(ref.h, SYSTEM.ADR(a), LEN(a), n, NIL);
 			ASSERT((b # 0) & (n = LEN(a)), 21);
 			INC(ref.wPos, n);
 		END Write;
 
-	PROCEDURE (ref: File) End (OUT fin: INTEGER);
+	PROCEDURE (ref: File) End (OUT fin: LONGINT);
+		
+		VAR
+			
+			res: INTEGER;
 
 		BEGIN (*End*)
-			fin := WinApi.GetFileSize(ref.h, NIL);
-			ASSERT(fin # - 1, 20);
+			res := WinApi.GetFileSizeEx(ref.h, fin);
+			ASSERT(res # 0, 20);
 		END End;
 
-	PROCEDURE (ref: File) Truncate (fin: INTEGER);
+	PROCEDURE (ref: File) Truncate (fin: LONGINT);
 
 		VAR
 
@@ -265,7 +269,7 @@ MODULE UtilBBTree;
 			n: INTEGER;
 
 		BEGIN (*Truncate*)
-			n := WinApi.SetFilePointer(ref.h, fin, NIL, WinApi.FILE_BEGIN);
+			n := WinApi.SetFilePointerEx(ref.h, fin, NIL, WinApi.FILE_BEGIN);
 			ASSERT(n # - 1, 20);
 			b := WinApi.SetEndOfFile(ref.h);
 			ASSERT(b # 0, 21);
@@ -348,6 +352,6 @@ MODULE UtilBBTree;
 			fac := f;
 		END Init;
 
-	BEGIN (*UtilBBTree*)
+	BEGIN (*UtilBBTree2*)
 		Init;
-	END UtilBBTree.
+	END UtilBBTree2.

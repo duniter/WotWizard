@@ -1,0 +1,88 @@
+(* 
+Duniter0: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter0Members2Print;
+	
+	
+
+	IMPORT
+		
+		B := Duniter0Blockchain, BA := Duniter0Basic, M := Duniter0Members2, Dialog, HermesAxes, HermesScat, HermesUtil, HermesViews, Ports, TextMappers, TextModels, TextViews, Views;
+
+	PROCEDURE Do*;
+		
+		CONST
+			
+			day = 60 * 60 * 24;
+			month = 365.25 * day / 12;
+			
+			scatColor= 00BF00BFH;
+			scatShape= HermesScat.point;
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			a: M.Events;
+			d: BA.DateTime;
+			i, m: INTEGER;
+			s: Views.Title;
+			p: HermesViews.View;
+			ts: POINTER TO ARRAY OF HermesUtil.Dot;
+			tr: HermesViews.Trace;
+			t0: LONGINT;
+		
+		BEGIN (*Do*)
+			M.Count(a);
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			f.WriteMsg("#Duniter0:Block"); f.WriteString(" "); f.WriteInt(B.LastBlock());
+			f.WriteLn; f.WriteLn;
+			t0 := a[0].date;
+			m := LEN(a);
+			FOR i := 0 TO m - 1 DO
+				f.WriteTab;
+				f.WriteRealForm((a[i].date - t0) / month, 16, 21, -16, '');
+				f.WriteTab;
+				f.WriteIntForm(a[i].number, 10, 7, '', FALSE);
+				f.WriteLn;
+			END;
+			f.WriteString("~");
+			f.WriteLn;
+			FOR i := 0 TO m - 1 DO
+				f.WriteTab;
+				BA.TimestampToString(a[i].date, d);
+				f.WriteString(d);
+				f.WriteTab;
+				f.WriteIntForm(a[i].number, 10, 7, '', FALSE);
+				f.WriteLn;
+			END;
+			Dialog.MapString("#Duniter0:MembersNb", s);
+			Views.OpenAux(TextViews.dir.New(t), s);
+			p:= HermesViews.New();
+			NEW(ts, m);
+			FOR i := 0 TO m - 1 DO
+				ts[i].x := (a[i].date - t0) / month;
+				ts[i].y := a[i].number;
+			END;
+			tr:= HermesScat.Insert(p, ts, scatShape, FALSE, FALSE, FALSE);
+			tr.ChangeColor(scatColor);
+			tr:= HermesAxes.Insert(p, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 't', 'd', 0, 3);
+			tr:= HermesAxes.Insert(p, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 'n', '', 0, 3);
+			Views.OpenAux(p, s);
+		END Do;
+	
+	END Duniter0Members2Print.
+
+DevDebug.UnloadThis Duniter0Members2Print Duniter0Members2 
+
+Duniter0Members2Print.Do;
