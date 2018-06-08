@@ -1,7 +1,7 @@
 (* 
 Duniter: WotWizard.
 
-Copyright (C) 2017 Gérard Meunier
+Copyright (C) 2017 GérardMeunier
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
 
@@ -43,14 +43,14 @@ MODULE DuniterLog;
 			log.f.Flush;
 		END Msg;
 	
-	PROCEDURE (VAR log: Log) MMsg* (IN m, p: ARRAY OF CHAR), NEW;
+	PROCEDURE (VAR log: Log) MMsg* (IN m, p1, p2: ARRAY OF CHAR), NEW;
 		
 		VAR
 			
 			s: Dialog.String;
 		
 		BEGIN (*MMsg*)
-			Dialog.MapParamString(m, p, '', '', s);
+			Dialog.MapParamString(m, p1, p2, '', s);
 			log.Msg(s);
 		END MMsg;
 	
@@ -75,14 +75,14 @@ MODULE DuniterLog;
 		BEGIN (*Err*)
 			CASE res OF
 				|noErr:
-				|invalidName: log.MMsg("#Duniter:invalidName", p);
-				|notFound: log.MMsg("#Duniter:notFound", p);
-				|existsAlready: log.MMsg("#Duniter:existsAlready", p);
-				|writeProtected: log.MMsg("#Duniter:writeProtected", p);
-				|ioError: log.MMsg("#Duniter:ioError", p);
-				|accessDenied: log.MMsg("#Duniter:accessDenied", p);
-				|notEnoughMem: log.MMsg("#Duniter:notEnoughMem", p);
-				|notEnoughDisk: log.MMsg("#Duniter:notEnoughDisk", p);
+				|invalidName: log.MMsg("#Duniter:invalidName", p, "");
+				|notFound: log.MMsg("#Duniter:notFound", p, "");
+				|existsAlready: log.MMsg("#Duniter:existsAlready", p, "");
+				|writeProtected: log.MMsg("#Duniter:writeProtected", p, "");
+				|ioError: log.MMsg("#Duniter:ioError", p, "");
+				|accessDenied: log.MMsg("#Duniter:accessDenied", p, "");
+				|notEnoughMem: log.MMsg("#Duniter:notEnoughMem", p, "");
+				|notEnoughDisk: log.MMsg("#Duniter:notEnoughDisk", p, "");
 				ELSE
 					Strings.IntToString(res, s);
 					Dialog.MapParamString("#Duniter:unknownError", p, s, '', ss);
@@ -90,6 +90,19 @@ MODULE DuniterLog;
 			END;
 			ASSERT(res = 0, 100);
 		END Err;
+	
+	PROCEDURE (VAR log: Log) Assert* (res: BOOLEAN; n: INTEGER; IN in: ARRAY OF CHAR), NEW;
+		
+		VAR
+			
+			s: Dialog.String;
+		
+		BEGIN (*Assert*)
+			IF ~res THEN
+				Strings.IntToString(n, s);
+				log.MMsg("#Duniter:Error", s, in);
+			END;
+		END Assert;
 	
 	PROCEDURE Init;
 		

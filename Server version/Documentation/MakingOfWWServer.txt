@@ -10,10 +10,9 @@ and extract it into the "Blackbox" directory (you may have copied this directory
 Then, run "Blackbox/BlackBox.exe", open this file itself in the BlackBox framework (Blackbox/Duniter/Docu/MakingOf.odc) and execute the commands below, by clicking on the successive following .
 
  DevCompiler.CompileThis 
-CpcUtf8Conv BabelCompil BabelInit BabelInit0 BabelCars BabelDef BabelLexique BabelSyntaxe BabelAnaSem BabelInterface BabelAvl BabelBabel UtilJson UtilAlea UtilSort BasicsBits BasicsAssert BasicsStrings BasicsFiles SQLiteHost SQLiteStrings SQLiteDriver UnicodeCase_Mapping UnicodeLetter_Mapping DuniterLog UtilAvlTree DuniterBasic UtilSets UtilBTree UtilBBTree DuniterBlockchain DuniterSandbox DuniterWotWizard DuniterServer 
+CpcUtf8Conv BabelCompil BabelInit BabelInit0 BabelCars BabelDef BabelLexique BabelSyntaxe BabelAnaSem BabelInterface BabelAvl BabelBabel UtilJson UtilAlea UtilSort BasicsBits BasicsAssert BasicsStrings BasicsFiles SQLiteHost SQLiteStrings SQLiteDriver UnicodeCase_Mapping UnicodeLetter_Mapping DuniterLog UtilAvlTree DuniterBasic UtilSets UtilBTree UtilBBTree DuniterBlockchain DuniterSandbox DuniterWotWizard DuniterServer DuniterSAConfig UtilMoveConfig 
 
- DevDebug.UnloadThis 
-DuniterServer DuniterWotWizard DuniterSandbox DuniterBlockchain UtilBBTree UtilBTree UtilSets DuniterBasic UtilAvlTree DuniterLog UnicodeLetter_Mapping UnicodeCase_Mapping SQLiteDriver SQLiteStrings SQLiteHost BasicsFiles BasicsStrings BasicsAssert BasicsBits UtilSort UtilAlea UtilJson BabelBabel BabelAvl BabelInterface BabelAnaSem BabelSyntaxe BabelLexique BabelDef BabelCars BabelInit0 BabelInit BabelCompil CpcUtf8Conv 
+"UtilMoveConfig.MoveCfg('Duniter', 'SAConfig.ocf')"
 
  BabelBabel.CompileThis 
 UtilJson 
@@ -30,7 +29,7 @@ Babel/Code/Compil.ocf Basics/Code/Assert.ocf Basics/Code/Bits.ocf Basics/Code/Fi
 Dev/Code/Browser.ocf
 Dev/Code/Commanders.ocf
 Dev/Code/Debug.ocf
-Duniter/Code/SA-Config.ocf => System/Code/Config.ocf
+Duniter/Code/SAConfig.ocf => System/Code/Config.ocf
 Duniter/Rsrc/SA-CommandLine.txt => System/Rsrc/CommandLine.txt
 Duniter/Rsrc/SA-Menus.odc => System/Rsrc/Menus.odc
 Duniter/Rsrc/Strings.odc

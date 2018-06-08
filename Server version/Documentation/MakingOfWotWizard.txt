@@ -6,10 +6,12 @@ First, carry out the instructions in the file "MakingOfWWServer.odc".
 Then open this file itself in the BlackBox framework (Blackbox/Duniter/Docu/MakingOfWWViews.odc) and execute the commands below.
 
  DevCompiler.CompileThis 
-UtilAvlTree DuniterBasic UtilJson UtilExternal DuniterWWViews 
+CpcUtf8Conv BabelCompil BabelInit BabelCars BabelDef BabelLexique BabelSyntaxe BabelAnaSem BabelInterface BabelAvl BabelBabel UtilJson UtilAvlTree DuniterBasic UtilExternal DuniterWWViews DuniterSAWWVConfig UtilMoveConfig 
 
- DevDebug.UnloadThis 
-DuniterWWViews UtilExternal UtilJson DuniterBasic UtilAvlTree 
+"UtilMoveConfig.MoveCfg('Duniter', 'SAWWVConfig.ocf')"
+
+ BabelBabel.CompileThis 
+UtilJson 
 
  DevLinker.Link WotWizard.exe := 
 Kernel$+ Files HostFiles HostPackedFiles StdLoader
@@ -26,7 +28,7 @@ Dev/Code/Commanders.ocf
 Dev/Code/Debug.ocf
 Dev/Rsrc/Strings.odc
 Dev/Rsrc/fr/Strings.odc
-Duniter/Code/SAWWV-Config.ocf => System/Code/Config.ocf
+Duniter/Code/SAWWVConfig.ocf => System/Code/Config.ocf
 Duniter/Docu/Manual.odc
 Duniter/Docu/fr/Manual.odc
 Duniter/Rsrc/about.odc

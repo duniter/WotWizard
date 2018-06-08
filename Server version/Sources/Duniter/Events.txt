@@ -1,0 +1,132 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE DuniterEvents;
+	
+	
+
+	IMPORT
+		
+		A := UtilAvlTree, B := DuniterBlockchain, BA := DuniterBasic, J := UtilJson, S := UtilSort, Dialog, TextMappers, TextModels, TextViews;
+	
+	TYPE
+		
+		Membership = POINTER TO RECORD
+			id: B.String;
+			exp: LONGINT;
+			expS: BA.DateTime;
+		END;
+		
+		Memberships = POINTER TO ARRAY OF Membership;
+		
+		MemSort = RECORD (S.T)
+			m: Memberships;
+		END;
+	
+	PROCEDURE (VAR ms: MemSort) Less (m1, m2: INTEGER): BOOLEAN;
+		
+		BEGIN (*Less*)
+			RETURN (ms.m[m1].exp < ms.m[m2].exp) OR (ms.m[m1].exp = ms.m[m2].exp) & (BA.CompP(ms.m[m1].id, ms.m[m2].id) = A.lt);
+		END Less;
+	
+	PROCEDURE (VAR ms: MemSort) Swap (m1, m2: INTEGER);
+		
+		VAR
+			
+			m: Membership;
+		
+		BEGIN (*Swap*)
+			m := ms.m[m1]; ms.m[m1] := ms.m[m2]; ms.m[m2] := m;
+		END Swap;
+	
+	PROCEDURE NextNoMembers (): Memberships;
+		
+		VAR
+			
+			ms: MemSort;
+			ok, mem, b: BOOLEAN;
+			id: B.String;
+			p: B.Pubkey;
+			h: B.Hash;
+			bnb, i: INTEGER;
+			exp: LONGINT;
+		
+		BEGIN (*NextNoMembers*)
+			NEW(ms.m, B.IdLenM());
+			i := 0;
+			ok := B.IdNextUidM(TRUE, id);
+			WHILE ok DO
+				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b & mem);
+				NEW(ms.m[i]);
+				ms.m[i].id := id; ms.m[i].exp := exp; BA.TimestampToString(exp, ms.m[i].expS);
+				INC(i);
+				ok := B.IdNextUidM(FALSE, id);
+			END;
+			ms.QuickSort(0, LEN(ms.m) - 1);
+			RETURN ms.m;
+		END NextNoMembers;
+	
+	PROCEDURE Json (): J.Json;
+		
+		VAR
+			
+			ms: Memberships;
+			i, m: INTEGER;
+			time: LONGINT;
+			ss: BA.DateTime;
+		
+		BEGIN (*Json*)
+			J.StartObject;
+			J.PushString("Membership_Limits");
+			J.BuildField("description");
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			time := B.Now();
+			J.PushInteger(time);
+			J.BuildField("date_integer");
+			BA.TimestampToString(time, ss);
+			J.PushString(ss + " (UTC+0)");
+			J.BuildField("date_string");
+			J.StartArray;
+			ms := NextNoMembers();
+			m := LEN(ms);
+			FOR i := 0 TO m - 1 DO
+				J.StartObject;
+				J.PushInteger(ms[i].exp);
+				J.BuildField("limit_integer");
+				J.PushString(ms[i].expS);
+				J.BuildField("limit_string");
+				J.PushString(ms[i].id);
+				J.BuildField("uid");
+				J.BuildObject;
+			END;
+			J.BuildArray;
+			J.BuildField("limits");
+			J.BuildObject;
+			RETURN J.GetJson();
+		END Json;
+	
+	PROCEDURE JsonText* (): TextViews.View;
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*JsonText*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			Json().Write(f);
+			RETURN TextViews.dir.New(t);
+		END JsonText;
+	
+	END DuniterEvents.
