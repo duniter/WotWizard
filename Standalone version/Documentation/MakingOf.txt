@@ -59,6 +59,8 @@ Duniter0/Mod/Events.odc
 Duniter0/Mod/IdentitiesPrint.odc
 Duniter0/Mod/IdentitySearch.odc
 Duniter0/Mod/Members.odc
+Duniter0/Mod/Members2.odc
+Duniter0/Mod/Members2Print.odc
 Duniter0/Mod/MembersPrint.odc
 Duniter0/Mod/ParametersPrint.odc
 Duniter0/Mod/Qualities.odc
@@ -82,6 +84,7 @@ Duniter0/Rsrc/fr/Strings.odc
 Form/Code/Controllers.ocf
 Form/Code/Models.ocf
 Form/Code/Views.ocf
+Hermes/Rsrc/Strings.odc
 Host/Code/Bitmaps.ocf
 Host/Code/Pictures.ocf
 Host/Code/TextConv.ocf

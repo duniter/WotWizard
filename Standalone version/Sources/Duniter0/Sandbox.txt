@@ -19,7 +19,7 @@ MODULE Duniter0Sandbox;
 	IMPORT
 		
 		(*
-		StdLog,
+		L := StdLog,
 		*)
 		
 		A := UtilAvlTree, B := Duniter0Blockchain, BA := Duniter0Basic, S := SqlDB, Strings;

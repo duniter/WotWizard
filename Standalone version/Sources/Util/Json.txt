@@ -25,13 +25,23 @@ MODULE UtilJson;
 	
 	TYPE
 		
+		StrPtr* = POINTER TO ARRAY OF CHAR;
+		
 		Directory = POINTER TO RECORD (B.Directory) (* For compiler internalizing *)
 			r: Stores.Reader;
 		END;
 		
-		Compilation = POINTER TO RECORD (B.Compilation)
-			r: TextModels.Reader;
+		Compilation = POINTER TO ABSTRACT RECORD (B.Compilation)
 			json: Json;
+		END;
+		
+		CompilationS = POINTER TO RECORD (Compilation)
+			s: StrPtr;
+			cur: INTEGER;
+		END;
+		
+		CompilationT = POINTER TO RECORD (Compilation)
+			r: TextModels.Reader;
 		END;
 		
 		StringP* = POINTER TO ARRAY OF CHAR;
@@ -114,7 +124,29 @@ MODULE UtilJson;
 			d.r.ReadInt(i);
 		END ReadInt;
 	
-	PROCEDURE (c: Compilation) Read (OUT ch: CHAR);
+	PROCEDURE (c: CompilationS) Read (OUT ch: CHAR);
+		
+		BEGIN (*Read*)
+			ch := c.s[c.cur];
+			IF ch = 0X THEN
+				ch := B.eOF1;
+			END;
+			INC(c.cur);
+		END Read;
+	
+	PROCEDURE (c: CompilationS) Pos (): INTEGER;
+		
+		BEGIN (*Pos*)
+			RETURN c.cur;
+		END Pos;
+	
+	PROCEDURE (c: CompilationS) SetPos (pos: INTEGER);
+		
+		BEGIN (*SetPos*)
+			c.cur := pos;
+		END SetPos;
+	
+	PROCEDURE (c: CompilationT) Read (OUT ch: CHAR);
 		
 		BEGIN (*Read*)
 			c.r.Read;
@@ -125,13 +157,13 @@ MODULE UtilJson;
 			END;
 		END Read;
 	
-	PROCEDURE (c: Compilation) Pos (): INTEGER;
+	PROCEDURE (c: CompilationT) Pos (): INTEGER;
 		
 		BEGIN (*Pos*)
 			RETURN c.r.Pos();
 		END Pos;
 	
-	PROCEDURE (c: Compilation) SetPos (pos: INTEGER);
+	PROCEDURE (c: CompilationT) SetPos (pos: INTEGER);
 		
 		BEGIN (*SetPos*)
 			IF pos <= c.r.Base().Length() THEN
@@ -297,11 +329,27 @@ MODULE UtilJson;
 			RETURN TRUE;
 		END Execution;
 	
+	PROCEDURE ReadString* (s: StrPtr): Json;
+		
+		VAR
+			
+			c: CompilationS;
+		
+		BEGIN (*ReadString*)
+			NEW(c);
+			c.s := s;
+			c.cur := 0;
+			IF ~c.Compile(comp, TRUE) THEN
+				RETURN NIL;
+			END;
+			RETURN c.json;
+		END ReadString;
+	
 	PROCEDURE ReadText* (t: TextModels.Model ): Json;
 		
 		VAR
 			
-			c: Compilation;
+			c: CompilationT;
 		
 		BEGIN (*ReadText*)
 			NEW(c);

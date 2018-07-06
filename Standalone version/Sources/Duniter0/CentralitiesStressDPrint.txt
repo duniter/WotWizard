@@ -51,7 +51,7 @@ MODULE Duniter0CentralitiesStressDPrint;
 			m := LEN(centers);
 			FOR i := 0 TO m - 1 DO
 				f.WriteTab;
-				f.WriteInt(i);
+				f.WriteInt(i + 1);
 				f.WriteTab;
 				f.WriteRealForm(100. * centers[i].c, 16, 6, - 2, '');
 				f.WriteTab;

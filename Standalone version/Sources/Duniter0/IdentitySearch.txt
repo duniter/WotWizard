@@ -212,7 +212,7 @@ MODULE Duniter0IdentitySearch;
 		
 		VAR
 			
-			t: A.Tree;
+			t, set: A.Tree;
 			idE: IdE;
 			e: A.Elem;
 			b, ok, active: BOOLEAN;
@@ -224,7 +224,7 @@ MODULE Duniter0IdentitySearch;
 			hintD: BA.String;
 		
 		BEGIN (*Find*)
-			A.New(t);
+			A.New(t); A.New(set);
 			hintD := BA.ToDown(hint);
 			B.IdPosUid(hintD);
 			nO := 0; nA := 0;
@@ -232,15 +232,20 @@ MODULE Duniter0IdentitySearch;
 			WHILE ok DO
 				ok := BA.Prefix(hintD, uid);
 				IF ok & B.IdUidComplete(uid, p, active, hash, bloc, exp) THEN
-					IF (identityDispOld & ~active) OR (identityDispMem & active) THEN
-						NEW(idE); idE.uid := uid; idE.hash := hash; idE.future := FALSE; idE.active := active;
-						e := idE;
-						b := t.SearchIns(e, n); ASSERT(~b);
-					END;
+					NEW(idE);
+					idE.uid := uid; idE.hash := hash;
+					e := idE;
+					b := set.SearchIns(e, n); ASSERT(~b);
 					IF active THEN
 						INC(nA);
 					ELSE
 						INC(nO);
+					END;
+					IF (identityDispOld & ~active) OR (identityDispMem & active) THEN
+						NEW(idE);
+						idE.uid := uid; idE.hash := hash; idE.future := FALSE; idE.active := active;
+						e := idE;
+						b := t.SearchIns(e, n); ASSERT(~b);
 					END;
 					ok := B.IdNextUid(FALSE, uid);
 				END;
@@ -253,19 +258,18 @@ MODULE Duniter0IdentitySearch;
 					Strings.Find(p, hint, 0, pos);
 					ok := pos = 0;
 					IF ok & B.IdPubComplete(p, uid, active, hash, bloc, exp) THEN
-						NEW(idE); idE.uid := uid; idE.hash := hash; idE.future := FALSE; idE.active := active;
+						NEW(idE);
+						idE.uid := uid; idE.hash := hash; idE.future := FALSE; idE.active := active;
 						e := idE;
-						b := (identityDispOld & ~active) OR (identityDispMem & active);
-						IF b THEN
-							b := ~t.SearchIns(e, n);
-						END;
-						IF b THEN
+						IF ~set.Search(e, n) THEN
 							IF active THEN
 								INC(nA);
 							ELSE
 								INC(nO);
 							END;
 						END;
+						e := idE;
+						b := ((identityDispOld & ~active) OR (identityDispMem & active)) & t.SearchIns(e, n);
 						ok := B.IdNextPubkey(FALSE, p);
 					END;
 				END;
@@ -276,12 +280,17 @@ MODULE Duniter0IdentitySearch;
 			WHILE ok DO
 				ok := BA.Prefix(hintD, uid);
 				IF ok THEN
-					NEW(idE); idE.uid := uid; idE.hash := hash; idE.future := TRUE; idE.active := FALSE;
+					NEW(idE);
+					idE.uid := uid; idE.hash := hash;
 					e := idE;
+					b := set.SearchIns(e, n); ASSERT(~b);
+					INC(nF);
 					IF identityDispFut THEN
+						NEW(idE);
+						idE.uid := uid; idE.hash := hash; idE.future := TRUE; idE.active := FALSE;
+						e := idE;
 						b := t.SearchIns(e, n); ASSERT(~b);
 					END;
-					INC(nF);
 					ok := S.IdNextUid(FALSE, uid, hash);
 				END;
 			END;
@@ -292,15 +301,14 @@ MODULE Duniter0IdentitySearch;
 					Strings.Find(p, hint, 0, pos);
 					ok := pos = 0;
 					IF ok & S.IdHash(hash, p, uid, exp) THEN
-						NEW(idE); idE.uid := uid; idE.hash := hash; idE.future := TRUE; idE.active := FALSE;
+						NEW(idE);
+						idE.uid := uid; idE.hash := hash; idE.future := TRUE; idE.active := FALSE;
 						e := idE;
-						b := identityDispFut;
-						IF b THEN
-							b := ~t.SearchIns(e, n);
-						END;
-						IF b THEN
+						IF ~set.Search(e, n) THEN
 							INC(nF);
 						END;
+						e := idE;
+						b := identityDispFut & t.SearchIns(e, n);
 						ok := S.IdNextPubkey(FALSE, p, hash);
 					END;
 				END;

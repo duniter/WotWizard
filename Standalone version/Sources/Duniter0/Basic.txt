@@ -22,9 +22,14 @@ MODULE Duniter0Basic;
 		
 		year0 = 1970; month0 = 1; day0 = 1; (* Start date of computing history *)
 		
+		oldIcon = '×';
+		
 		never* = MAX(LONGINT);
-		missing* = -1;
-		revoked* = -2;
+		revoked* = MIN(LONGINT);
+		
+		lt* = A.lt;
+		eq* = A.eq;
+		gt* = A.gt;
 	
 	TYPE
 		
@@ -32,7 +37,7 @@ MODULE Duniter0Basic;
 		
 		TimeString* = ARRAY 9 OF CHAR;
 		
-		DateTime* = ARRAY 20 OF CHAR;
+		DateTime* = ARRAY 21 OF CHAR;
 	
 	VAR
 		
@@ -76,15 +81,16 @@ MODULE Duniter0Basic;
 		BEGIN (*TimestampToString*)
 			IF t = never THEN
 				Dialog.MapString("#Duniter0:Never", dt);
-			ELSIF t = missing THEN
-				Dialog.MapString("#Duniter0:Missing", dt);
 			ELSIF t = revoked THEN
 				Dialog.MapString("#Duniter0:Revoked", dt);
 			ELSE
-				TimestampToDate(t, date, time);
+				TimestampToDate(ABS(t), date, time);
 				Dates.DateToString(date, Dates.short, da);
 				Dates.TimeToString(time, ti);
 				dt := da + " " + ti;
+				IF t < 0 THEN (* missing *)
+					dt := oldIcon + dt;
+				END;
 			END;
 		END TimestampToString;
 	
@@ -176,22 +182,22 @@ MODULE Duniter0Basic;
 				c2 := DownC(s2, i2);
 			UNTIL (c1 # c2) OR (c1 = 0X);
 			IF c1 < c2 THEN
-				RETURN A.lt;
+				RETURN lt;
 			END;
 			IF c1 > c2 THEN
-				RETURN A.gt;
+				RETURN gt;
 			END;
 			i1 := 0;
 			WHILE (s1[i1] = s2[i1]) & (s1[i1] # 0X) DO
 				INC(i1);
 			END;
 			IF s1[i1] < s2[i1] THEN
-				RETURN A.lt;
+				RETURN lt;
 			END;
 			IF s1[i1] > s2[i1] THEN
-				RETURN A.gt;
+				RETURN gt;
 			END;
-			RETURN A.eq;
+			RETURN eq;
 		END CompP;
 	
 	PROCEDURE Prefix* (IN s1, s2: ARRAY OF CHAR): BOOLEAN;
@@ -231,7 +237,7 @@ MODULE Duniter0Basic;
 			date.year := year0; date.month := month0; date.day := day0;
 			t0 := Dates.Day(date);
 			(* Can we mix both sets of constants *)
-			ASSERT((B.lt = A.lt) & (B.eq = A.eq) & (B.gt = A.gt), 100);
+			ASSERT((B.lt = lt) & (B.eq = eq) & (B.gt = gt), 100);
 		END Init;
 	
 	BEGIN (*Duniter0Basic*)

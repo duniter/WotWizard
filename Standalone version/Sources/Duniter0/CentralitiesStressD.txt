@@ -22,7 +22,7 @@ MODULE Duniter0CentralitiesStressD;
 		L := StdLog,
 		*)
 		
-		A := UtilAvlTree, BA := Duniter0Basic, B := Duniter0Blockchain, N := UtilNetStressD, Math, UtilSort;
+		BA := Duniter0Basic, B := Duniter0Blockchain, N := UtilNetStressD, Math, UtilSort;
 	
 	TYPE
 		
@@ -93,13 +93,13 @@ MODULE Duniter0CentralitiesStressD;
 	PROCEDURE (VAR s: CentralSort) Less (p1, p2: INTEGER): BOOLEAN, EXTENSIBLE;
 		
 		BEGIN (*Less*)
-			RETURN (s.c[p1].c > s.c[p2].c) OR (s.c[p1].c = s.c[p2].c) & (BA.CompP(s.c[p1].id, s.c[p2].id) = A.lt);
+			RETURN (s.c[p1].c > s.c[p2].c) OR (s.c[p1].c = s.c[p2].c) & (BA.CompP(s.c[p1].id, s.c[p2].id) = BA.lt);
 		END Less;
 	
 	PROCEDURE (VAR s: CentralSortId) Less (p1, p2: INTEGER): BOOLEAN;
 		
 		BEGIN (*Less*)
-			RETURN BA.CompP(s.c[p1].id, s.c[p2].id) = A.lt;
+			RETURN BA.CompP(s.c[p1].id, s.c[p2].id) = BA.lt;
 		END Less;
 	
 	PROCEDURE NewNode (IN p: B.Pubkey): Node;
@@ -145,12 +145,12 @@ MODULE Duniter0CentralitiesStressD;
 		BEGIN (*Compare*)
 			WITH n2: Node DO
 				IF n1.p < n2.p THEN
-					RETURN A.lt;
+					RETURN BA.lt;
 				END;
 				IF n1.p > n2.p THEN
-					RETURN A.gt;
+					RETURN BA.gt;
 				END;
-				RETURN A.eq;
+				RETURN BA.eq;
 			END;
 		END Compare;
 

@@ -50,7 +50,7 @@ MODULE Duniter0MembersPrint;
 				f.WriteInt(a[i]);
 				f.WriteLn;
 			END;
-			Dialog.MapString("#Duniter0:MembersNb", s);
+			Dialog.MapString("#Duniter0:MembersNbDay", s);
 			Views.OpenAux(TextViews.dir.New(t), s);
 			p:= HermesViews.New();
 			NEW(ts, m);

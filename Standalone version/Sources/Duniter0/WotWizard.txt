@@ -990,7 +990,7 @@ MODULE Duniter0WotWizard;
 			WHILE ok DO
 				b := S.IdHash(toHash, to, uid, exp); ASSERT(b);
 				b := B.IdPub(to, uid1); bb := B.IdUid(uid, to);
-				IF ~b & ~bb OR b & (uid$ = uid1$) & B.IdPubComplete(to, uid, b, h, bnb, exp) & (exp = BA.missing) THEN
+				IF ~b & ~bb OR b & (uid$ = uid1$) & B.IdPubComplete(to, uid, b, h, bnb, exp) & (exp < 0) & (exp # BA.revoked) (* missing *) THEN
 					nbCertifs := 0; certs := NIL;
 					IF S.CertTo(toHash, pos) THEN
 						posI := pos;

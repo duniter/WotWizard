@@ -26,15 +26,20 @@ MODULE DuniterBasic;
 		
 		textConv = "CpcUtf8Conv.ExportUtf8";
 		
+		oldIcon = '×';
+		
 		never* = MAX(LONGINT);
-		missing* = -1;
-		revoked* = -2;
+		revoked* = MIN(LONGINT);
+		
+		lt* = A.lt;
+		eq* = A.eq;
+		gt* = A.gt;
 	
 	TYPE
 		
 		TimeString* = ARRAY 9 OF CHAR;
 		
-		DateTime* = ARRAY 20 OF CHAR;
+		DateTime* = ARRAY 21 OF CHAR;
 	
 	VAR
 		
@@ -79,13 +84,16 @@ MODULE DuniterBasic;
 		BEGIN (*TimestampToString*)
 			IF t = never THEN
 				Dialog.MapString("#Duniter:Never", dt);
-			ELSIF (t = missing) OR (t = revoked) THEN
-				Dialog.MapString("#Duniter0:Missing", dt);
+			ELSIF t = revoked THEN
+				Dialog.MapString("#Duniter0:Revoked", dt);
 			ELSE
-				TimestampToDate(t, date, time);
+				TimestampToDate(ABS(t), date, time);
 				Dates.DateToString(date, Dates.short, da);
 				Dates.TimeToString(time, ti);
 				dt := da + " " + ti;
+				IF t < 0 THEN (* missing *)
+					dt := oldIcon + dt;
+				END;
 			END;
 		END TimestampToString;
 	
@@ -159,22 +167,22 @@ MODULE DuniterBasic;
 				c2 := DownC(s2, i2);
 			UNTIL (c1 # c2) OR (c1 = 0X);
 			IF c1 < c2 THEN
-				RETURN A.lt;
+				RETURN lt;
 			END;
 			IF c1 > c2 THEN
-				RETURN A.gt;
+				RETURN gt;
 			END;
 			i1 := 0;
 			WHILE (s1[i1] = s2[i1]) & (s1[i1] # 0X) DO
 				INC(i1);
 			END;
 			IF s1[i1] < s2[i1] THEN
-				RETURN A.lt;
+				RETURN lt;
 			END;
 			IF s1[i1] > s2[i1] THEN
-				RETURN A.gt;
+				RETURN gt;
 			END;
-			RETURN A.eq;
+			RETURN eq;
 		END CompP;
 	
 	(* Help emptying the memory by calling the garbage collector *)

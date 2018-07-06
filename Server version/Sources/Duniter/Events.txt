@@ -35,7 +35,7 @@ MODULE DuniterEvents;
 	PROCEDURE (VAR ms: MemSort) Less (m1, m2: INTEGER): BOOLEAN;
 		
 		BEGIN (*Less*)
-			RETURN (ms.m[m1].exp < ms.m[m2].exp) OR (ms.m[m1].exp = ms.m[m2].exp) & (BA.CompP(ms.m[m1].id, ms.m[m2].id) = A.lt);
+			RETURN (ABS(ms.m[m1].exp) < ABS(ms.m[m2].exp)) OR (ABS(ms.m[m1].exp) = ABS(ms.m[m2].exp)) & (BA.CompP(ms.m[m1].id, ms.m[m2].id) = A.lt);
 		END Less;
 	
 	PROCEDURE (VAR ms: MemSort) Swap (m1, m2: INTEGER);

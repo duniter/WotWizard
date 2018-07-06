@@ -18,7 +18,7 @@ MODULE Duniter0Qualities;
 
 	IMPORT
 		
-		A := UtilAvlTree, BA := Duniter0Basic, B := Duniter0Blockchain, UtilSort;
+		BA := Duniter0Basic, B := Duniter0Blockchain, UtilSort;
 	
 	TYPE
 	
@@ -49,13 +49,13 @@ MODULE Duniter0Qualities;
 	PROCEDURE (VAR s: PropsSort) Less (p1, p2: INTEGER): BOOLEAN, EXTENSIBLE;
 		
 		BEGIN (*Less*)
-			RETURN (s.t[p1].prop > s.t[p2].prop) OR (s.t[p1].prop = s.t[p2].prop) & (BA.CompP(s.t[p1].id, s.t[p2].id) = A.lt);
+			RETURN (s.t[p1].prop > s.t[p2].prop) OR (s.t[p1].prop = s.t[p2].prop) & (BA.CompP(s.t[p1].id, s.t[p2].id) = BA.lt);
 		END Less;
 	
 	PROCEDURE (VAR s: PropsSortId) Less (p1, p2: INTEGER): BOOLEAN;
 		
 		BEGIN (*Less*)
-			RETURN BA.CompP(s.t[p1].id, s.t[p2].id) = A.lt;
+			RETURN BA.CompP(s.t[p1].id, s.t[p2].id) = BA.lt;
 		END Less;
 	
 	PROCEDURE PercentOfSentries (IN pubkey: B.Pubkey): REAL;

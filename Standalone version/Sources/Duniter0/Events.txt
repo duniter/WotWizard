@@ -1,7 +1,7 @@
 (* 
 Duniter0: WotWizard.
 
-Copyright (C) 2018 GérardMeunier
+Copyright (C) 2017 GérardMeunier
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
 
@@ -16,7 +16,7 @@ MODULE Duniter0Events;
 
 	IMPORT
 		
-		A := UtilAvlTree, B := Duniter0Blockchain, BA := Duniter0Basic, S := UtilSort, L := StdLog, Services, Dialog, TextMappers, TextModels, TextViews, Views;
+		B := Duniter0Blockchain, BA := Duniter0Basic, J := UtilJson, S := UtilSort, L := StdLog, Dialog, Services, TextMappers, TextModels, TextViews, Views;
 	
 	TYPE
 		
@@ -35,7 +35,7 @@ MODULE Duniter0Events;
 	PROCEDURE (VAR ms: MemSort) Less (m1, m2: INTEGER): BOOLEAN;
 		
 		BEGIN (*Less*)
-			RETURN (ms.m[m1].exp < ms.m[m2].exp) OR (ms.m[m1].exp = ms.m[m2].exp) & (BA.CompP(ms.m[m1].id, ms.m[m2].id) = A.lt);
+			RETURN (ABS(ms.m[m1].exp) < ABS(ms.m[m2].exp)) OR (ABS(ms.m[m1].exp) = ABS(ms.m[m2].exp)) & (BA.CompP(ms.m[m1].id, ms.m[m2].id) = BA.lt);
 		END Less;
 	
 	PROCEDURE (VAR ms: MemSort) Swap (m1, m2: INTEGER);
@@ -80,7 +80,7 @@ MODULE Duniter0Events;
 		VAR
 			
 			ms: Memberships;
-			i, m: INTEGER;
+			i, j, m, l: INTEGER;
 			time: LONGINT;
 			s: Views.Title;
 			ss: BA.DateTime;
@@ -95,6 +95,7 @@ MODULE Duniter0Events;
 			f.WriteLn; f.WriteLn;
 			time := B.Now();
 			BA.TimestampToString(time, ss);
+			l := LEN(ss$);
 			f.WriteString(ss);
 			f.WriteString(" (UTC+0)");
 			f.WriteLn; f.WriteLn;
@@ -106,6 +107,9 @@ MODULE Duniter0Events;
 			FOR i := 0 TO m - 1 DO
 				f.WriteString('    ');
 				f.WriteString(ms[i].expS);
+				FOR j := LEN(ms[i].expS$) TO l DO
+					f.WriteString(" ");
+				END;
 				f.WriteString('    ');
 				f.WriteString(ms[i].id);
 				f.WriteLn;
@@ -113,6 +117,73 @@ MODULE Duniter0Events;
 			Views.OpenAux(TextViews.dir.New(t), s);
 		END Print;
 	
+	PROCEDURE Json (): J.Json;
+		
+		VAR
+			
+			ms: Memberships;
+			i, m: INTEGER;
+			time: LONGINT;
+			ss: BA.DateTime;
+		
+		BEGIN (*Json*)
+			J.StartObject;
+			J.PushString("Membership_Limits");
+			J.BuildField("description");
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			time := B.Now();
+			J.PushInteger(time);
+			J.BuildField("date_integer");
+			BA.TimestampToString(time, ss);
+			J.PushString(ss + " (UTC+0)");
+			J.BuildField("date_string");
+			J.StartArray;
+			ms := NextNoMembers();
+			m := LEN(ms);
+			FOR i := 0 TO m - 1 DO
+				J.StartObject;
+				J.PushInteger(ms[i].exp);
+				J.BuildField("limit_integer");
+				J.PushString(ms[i].expS);
+				J.BuildField("limit_string");
+				J.PushString(ms[i].id);
+				J.BuildField("uid");
+				J.BuildObject;
+			END;
+			J.BuildArray;
+			J.BuildField("limits");
+			J.BuildObject;
+			RETURN J.GetJson();
+		END Json;
+	
+	PROCEDURE JsonText (): TextViews.View;
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*JsonText*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			Json().Write(f);
+			RETURN TextViews.dir.New(t);
+		END JsonText;
+	
+	PROCEDURE JsonPrint*;
+		
+		VAR
+			
+			s: Views.Title;
+		
+		BEGIN (*JsonPrint*)
+			Dialog.MapString("#Duniter0:LimitsM", s);
+			Views.OpenAux(JsonText(), s);
+		END JsonPrint;
+	
 	END Duniter0Events.
 
 Duniter0Events.Print;
+
+Duniter0Events.JsonPrint;

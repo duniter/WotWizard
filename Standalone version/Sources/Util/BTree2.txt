@@ -22,6 +22,10 @@ MODULE UtilBTree2;
 		
 		(* Debug *)
 		
+		(*
+		L := StdLog,
+		*)
+		
 		A := UtilAvlTree;
 	
 	CONST
@@ -186,26 +190,26 @@ MODULE UtilBTree2;
 	
 	CONST
 		
-		sectSize = 400H; (* 1024: Standard size of sets of variable length keys *)
+		sectSize = 200H; (* 512: Standard size of sets of variable length keys *)
 	
 	TYPE
 		
 		Element = RECORD (* Element of a btree page *)
 			ptr: LONGINT; (* Pointer to the son page *)
-			endK: INTEGER; (* Position of the last byte of the key (or  its prefix) in the field keys of the page *)
+			endK: SHORTINT; (* Position of the last byte of the key (or  its prefix) in the field keys of the page *)
 		END;
 	
 	CONST
 		
-		ElemSize = LIS + INS; (* Size of Element *)
+		ElemSize = LIS + SIS; (* Size of Element *)
 		
-		minEl = (sectSize - LIS - INS) DIV (2 * ElemSize) - 1; (* Minimal number of elements in a btree page *)
+		minEl = (MAX(BYTE) - 1) DIV 2; (* Minimal number of elements in a btree page *)
 	
 	TYPE
 		
 		PageI = POINTER TO RECORD (Data) (* Btree page of an index *)
 			keys: LONGINT; (* Pointer to the concatenation of all key prefixes in the page *)
-			elNb: INTEGER; (* Number of elements *)
+			elNb: BYTE; (* Number of elements *)
 			elems: ARRAY 2 * (minEl + 1) OF Element; (* Elements of the page *)
 			(* p.elems[0].endK = 0,
 				p.elems[0].ptr -> (PageI or StringI) corresponding to keys < the first key (or prefix) of p (i.e. p.keys[p.elems[0].endK .. p.elems[1].endK]),
@@ -247,7 +251,7 @@ MODULE UtilBTree2;
 	
 	CONST
 		
-		pageIS = LIS + INS + 2 * (minEl + 1) * ElemSize; (* Size of PageI on disk *)
+		pageIS = LIS + BYS + 2 * (minEl + 1) * ElemSize; (* Size of PageI on disk *)
 		stringIS = 3 * LIS; (* Size of the fixed part of StringI (without key) on disk. *)
 		infoS = 2 * LIS + 5 * INS; (* Size of Info on disk. *)
 	
@@ -654,20 +658,33 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			
 			i: INTEGER;
 			n, c: LONGINT;
+			neg, min: BOOLEAN;
 		
 		BEGIN (*InLInt*)
 			ASSERT(r.pos + LIS <= r.len, 20);
-			n := 0;
-			FOR i := r.pos + LIS - 1 TO r.pos BY - 1 DO
-				c := r.s[i];
-				IF c < 0 THEN
-					INC(c, valOct);
+			min := FALSE;
+			n := r.s[r.pos + LIS - 1];
+			neg := n < 0;
+			IF neg THEN
+				INC(n, valOct DIV 2);
+				min := n = 0;
+				i := LIS - 2;
+				WHILE min & (i >= 0) DO
+					min := min & (r.s[r.pos + i] = 0);
+					DEC(i);
 				END;
-				IF n > MAX(LONGINT) DIV valOct THEN
-					n := (7FFFFFFFFFFFFFL - n) * valOct  + 7FFFFFFFFFFFFF00L + c;
-				ELSE
+			END;
+			IF min THEN
+				n := MIN(LONGINT);
+			ELSE
+				FOR i := r.pos + LIS - 2 TO r.pos BY - 1 DO
+					c := r.s[i];
+					IF c < 0 THEN
+						INC(c, valOct);
+					END;
 					n := n * valOct + c;
 				END;
+				IF neg THEN n := - n END;
 			END;
 			INC(r.pos, LIS);
 			RETURN n;
@@ -880,10 +897,24 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		VAR
 			
 			i: INTEGER;
+			m: LONGINT;
+			neg, min: BOOLEAN;
 		
 		BEGIN (*OutLInt*)
+			min := n = MIN(LONGINT);
+			IF min THEN n := - 1 END;
+			neg := n < 0;
+			n := ABS(n);
 			FOR i := 1 TO LIS DO
-				w.OutByte(SHORT(SHORT(SHORT(n MOD valOct))));
+				m := n MOD valOct;
+				IF (i = 1) & min THEN
+					m := 0;
+				ELSIF m >= valOct DIV 2 THEN
+					DEC(m, valOct);
+				ELSIF (i = LIS) & neg THEN
+					DEC(m, valOct DIV 2);
+				END;
+				w.OutByte(SHORT(SHORT(SHORT(m))));
 				n := n DIV valOct;
 			END;
 		END OutLInt;
@@ -2156,10 +2187,10 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		
 		BEGIN (*Write*)
 			w.OutLInt(pa.keys);
-			w.OutInt(pa.elNb);
+			w.OutByte(pa.elNb);
 			FOR i := 0 TO 2 * (minEl + 1) - 1 DO
 				w.OutLInt(pa.elems[i].ptr);
-				w.OutInt(pa.elems[i].endK);
+				w.OutSInt(pa.elems[i].endK);
 			END;
 		END Write;
 	
@@ -2171,10 +2202,10 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		
 		BEGIN (*Read*)
 			pa.keys := r.InLInt();
-			pa.elNb := r.InInt();
+			pa.elNb := r.InByte();
 			FOR i := 0 TO 2 * (minEl + 1) - 1 DO
 				pa.elems[i].ptr := r.InLInt();
-				pa.elems[i].endK := r.InInt();
+				pa.elems[i].endK := r.InSInt();
 			END;
 		END Read;
 	
@@ -2460,6 +2491,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				REPEAT
 					INC(l1, sectSize);
 				UNTIL l1 >= l2;
+				ASSERT(l1 <= MAX(SHORTINT) + 1, 100);
 				nK := ind.baseI.NewDiskPage(l1, kf, nKeys)(KeyCont).c;
 				k := ind.baseI.ReadPage(p.keys, kf)(KeyCont);
 				FOR i := 0 TO l - 1 DO
@@ -2545,7 +2577,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				pa.elems[i + 1] := pa.elems[i];
 			END;
 			pa.elems[dst].ptr := el;
-			pa.elems[dst].endK := pa.elems[dst - 1].endK + lC;
+			pa.elems[dst].endK := SHORT(pa.elems[dst - 1].endK + lC);
 			INC(pa.elNb);
 		END TransIn;
 	
