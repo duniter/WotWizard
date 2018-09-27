@@ -13,6 +13,8 @@ You should have received a copy of the GNU General Public License along with thi
 MODULE Duniter0Members;
 	
 	
+	
+	(* Number of members, day by day *)
 
 	IMPORT
 		

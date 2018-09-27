@@ -35,10 +35,13 @@ MODULE Duniter0Blockchain;
 		initDir = "Duniter0/Rsrc";
 		initName = "Init.odc";
 		
-		pageNb = 2000; (* Number of pages used by UtilBTree *)
+		(* Number of pages used by UtilBTree *)
+		pageNb = 2000;
 		
-		pubkeyLen* = 44; (* Max length of a Pubkey *)
+		(* Max length of a Pubkey *)
+		pubkeyLen* = 44;
 		
+		(* Max length of a Hash *)
 		hashLen* = 64;
 		
 		secureGap = 100; (* Number of last blocks to be read again at every update, since they could have changed *)
@@ -46,14 +49,14 @@ MODULE Duniter0Blockchain;
 		dBase = "Duniter0\DBase.data"; (* Name of the WotWizard database, in the WotWizard.exe directory *)
 		
 		(* Numbers of the places of the indexes in dBase *)
-		timePlace = 0;
-		joinAndLeavePlace = 1;
-		idPubPlace = 2;
-		idUidPlace = 3;
-		idTimePlace = 4;
-		certFromPlace = 5;
-		certToPlace = 6;
-		certTimePlace = 7;
+		timePlace = 0; (* Index timeT *)
+		joinAndLeavePlace = 1; (* Index joinAndLeaveT *)
+		idPubPlace = 2; (* Index idPubT *)
+		idUidPlace = 3; (* Index idUidT *)
+		idTimePlace = 4; (* Index idTimeT *)
+		certFromPlace = 5; (* Index certFromT *)
+		certToPlace = 6; (* Index certToT *)
+		certTimePlace = 7; (* Index certTimeT *)
 		undoListPlace = 8; (* Head of the chained list of the operations to be undone before every update *)
 		lastNPlace = 9; (* Last read block *)
 		idLenPlace = 10; (* Number of actual members *)
@@ -62,13 +65,16 @@ MODULE Duniter0Blockchain;
 	
 	TYPE
 		
-		UpdateProc* = PROCEDURE (VAR changed: BOOLEAN); (* Procedure called at every update *)
+		(* Procedure called at every update *)
+		UpdateProc* = PROCEDURE (VAR changed: BOOLEAN);
 		
-		UpdateList = POINTER TO RECORD (* Chained list of procedures called at every update *)
+		(* Chained list of procedures called at every update *)
+		UpdateList = POINTER TO RECORD
 			next: UpdateList;
 			update: UpdateProc;
 		END;
-	
+		
+		(* Action for updating DBase.data *)
 		UpdateAction = POINTER TO RECORD (Services.Action)
 		END;
 		
@@ -76,35 +82,82 @@ MODULE Duniter0Blockchain;
 		Pubkey* = ARRAY pubkeyLen + 1 OF CHAR;
 		Hash* = ARRAY hashLen + 1 OF CHAR;
 		
+		StringArr* = POINTER TO ARRAY OF String;
+		
 		(* Duniter Parameters *)
 		Parameters* = RECORD
+			
+			(* The %growth of the UD every [dtReeval] period = 0.0488 /  (6 months) = 4.88% / (6 months) *)
 			c-: REAL;
+			
+			(* Time period between two UD = 86400 s = 1 day *)
 			dt-,
+			
+			(* UD(0), i.e. initial Universal Dividend = 1000 cents = 10 Ğ1 *)
 			ud0-,
+			
+			(* Minimum delay between 2 certifications of a same issuer = 432000 s = 5 days *)
 			sigPeriod-,
+			
+			(* Maximum quantity of active certifications made by member = 100 *)
 			sigStock-,
+			
+			(* Maximum delay a certification can wait before being expired for non-writing = 5259600 s = 2 months *)
 			sigWindow-,
+			
+			(* Maximum age of an active certification = 63115200 s = 2 years *)
 			sigValidity-,
+			
+			(* Minimum quantity of signatures to be part of the WoT = 5 *)
 			sigQty-,
+			
+			(* Maximum delay an identity can wait before being expired for non-writing = 5259600 s = 2 months *)
 			idtyWindow-,
+			
+			(* Maximum delay a membership can wait before being expired for non-writing = 5259600 s = 2 months *)
 			msWindow-,
+			
+			(* Minimum delay between 2 memberships of a same issuer = 5259600 s = 2 months *)
 			msPeriod-: INTEGER;
+			
+			(* Minimum percent of sentries to reach to match the distance rule = 0.8 = 80% *)
 			xpercent-: REAL;
+			
+			(* Maximum age of an active membership = 31557600 s = 1 year *)
 			msValidity-,
+			
+			(* Maximum distance between a newcomer and [xpercent] of sentries = 5 *)
 			stepMax-,
+			
+			(* Number of blocks used for calculating median time = 24 *)
 			medianTimeBlocks-,
+			
+			(* The average time for writing 1 block (wished time) = 300 s = 5 min *)
 			avgGenTime-,
+			
+			(* The number of blocks required to evaluate again PoWMin value = 12 *)
 			dtDiffEval-: INTEGER;
+			
+			(* The percent of previous issuers to reach for personalized difficulty = 0.67 = 67% *)
 			percentRot-: REAL;
+			
+			(* Time of first UD = 1488970800 s = 2017/03/08 11:00:00 UTC+0 *)
 			udTime0-,
-			udReevalTime0-,
+			
+			(* Time of first reevaluation of the UD = 1490094000 s = 2017/03/21 11:00:00 UTC+0 *)
+			udReevalTime0-: LONGINT;
+			
+			(* Time period between two re-evaluation of the UD = 15778800 s = 6 months *)
 			dtReeval-,
+			
+			(* Maximum delay a transaction can wait before being expired for non-writing = 604800 s = 7 days *)
 			txWindow-: INTEGER;
+			
 		END;
 	
 	CONST
 		
-		(* Types of elements in UndoList *)
+		(* Types of elements in UndoList *) (******************)
 		timeList = 0;
 		idAddList = 1;
 		joinList = 2;
@@ -114,6 +167,8 @@ MODULE Duniter0Blockchain;
 		idRemoveTimeList = 6;
 		certAddList = 7;
 		certRemoveList = 8;
+		remCertifiers = 9;
+		remCertified = 10;
 		
 		hasNotLeaved* = -1;
 	
@@ -124,12 +179,13 @@ MODULE Duniter0Blockchain;
 			dataType: BYTE;
 			next: LONGINT;
 			type: BYTE;
-			(* timeList -> Time; joinList, activeList, leaveList -> Identity; certAddList, certRemoveList -> Certification *)
+			(* timeList -> Time; joinList, activeList, leaveList -> Identity; certAddList, certRemoveList -> Certification *) (***************)
 			ref,
 			aux: LONGINT;
 		END;
 		
-		UndoListFac = POINTER TO RECORD (B.DataFac) (* Factory of UndoList *)
+		(* Factory of UndoList *)
+		UndoListFac = POINTER TO RECORD (B.DataFac)
 		END;
 		
 		(* Blocks and their times *)
@@ -140,7 +196,8 @@ MODULE Duniter0Blockchain;
 			time: LONGINT;
 		END;
 		
-		TimeFac = POINTER TO RECORD (B.DataFac) (* Factory of Time *)
+		(* Factory of Time *)
+		TimeFac = POINTER TO RECORD (B.DataFac)
 		END;
 		
 		JoinAndLeaveL = POINTER TO RECORD (B.Data)
@@ -150,7 +207,8 @@ MODULE Duniter0Blockchain;
 			leavingBlock: INTEGER;
 		END;
 		
-		JoinAndLeaveLFac = POINTER TO RECORD (B.DataFac) (* Factory of JoinAndLeaveL *)
+		(* Factory of JoinAndLeaveL *)
+		JoinAndLeaveLFac = POINTER TO RECORD (B.DataFac)
 		END;
 		
 		JoinAndLeave = POINTER TO RECORD (B.Data)
@@ -159,7 +217,8 @@ MODULE Duniter0Blockchain;
 			list: LONGINT; (* JoinAndLeaveL *)
 		END;
 		
-		JoinAndLeaveFac = POINTER TO RECORD (B.DataFac) (* Factory of JoinAndLeave *)
+		(* Factory of JoinAndLeave *)
+		JoinAndLeaveFac = POINTER TO RECORD (B.DataFac)
 		END;
 		
 		Identity = POINTER TO RECORD (B.Data)
@@ -169,10 +228,13 @@ MODULE Duniter0Blockchain;
 			member: BOOLEAN;
 			hash: Hash;
 			block_number: INTEGER; (* Where the Identity is written *)
-			expires_on: LONGINT;
+			expires_on,
+			certifiers, (* Index of all certifiers uid, old or present, of this Identity ; B.String -> nothing *)
+			certified: LONGINT; (* Index of all uid, old or present, certified by this Identity ; B.String -> nothing *)
 		END;
 		
-		IdentityFac = POINTER TO RECORD (B.DataFac) (* Factory of Identity *)
+		(* Factory of Identity *)
+		IdentityFac = POINTER TO RECORD (B.DataFac)
 		END;
 		
 		Certification = POINTER TO RECORD (B.Data)
@@ -183,7 +245,8 @@ MODULE Duniter0Blockchain;
 			expires_on: LONGINT;
 		END;
 		
-		CertificationFac = POINTER TO RECORD (B.DataFac) (* Factory of Certification *)
+		(* Factory of Certification *)
+		CertificationFac = POINTER TO RECORD (B.DataFac)
 		END;
 		
 		(* INTEGER index key *)
@@ -192,10 +255,12 @@ MODULE Duniter0Blockchain;
 			ref: INTEGER;
 		END;
 		
-		IntKeyFac = POINTER TO RECORD (B.DataFac) (* Factory of IntKey *)
+		(* Factory of IntKey *)
+		IntKeyFac = POINTER TO RECORD (B.DataFac)
 		END;
 		
-		IntKeyMan = POINTER TO RECORD (B.KeyManager) (* Manager of IntKey *)
+		(* Manager of IntKey *)
+		IntKeyMan = POINTER TO RECORD (B.KeyManager)
 		END;
 		
 		(* LONGINT index key *)
@@ -204,10 +269,8 @@ MODULE Duniter0Blockchain;
 			ref: LONGINT;
 		END;
 		
-		LIntKeyFac = POINTER TO RECORD (B.DataFac) (* Factory of LIntKey *)
-		END;
-		
-		LIntKeyMan = POINTER TO RECORD (B.KeyManager) (* Manager of LIntKey *)
+		(* Factory of LIntKey *)
+		LIntKeyFac = POINTER TO RECORD (B.DataFac)
 		END;
 		
 		(* Pubkey index key *)
@@ -216,10 +279,12 @@ MODULE Duniter0Blockchain;
 			ref: Pubkey;
 		END;
 		
-		PubKeyFac = POINTER TO RECORD (B.DataFac) (* Factory of PubKey *)
+		(* Factory of PubKey *)
+		PubKeyFac = POINTER TO RECORD (B.DataFac)
 		END;
 		
-		PubKeyMan = POINTER TO RECORD (B.KeyManager) (* Manager of PubKey *)
+		(* Manager of PubKey *)
+		PubKeyMan = POINTER TO RECORD (B.KeyManager)
 		END;
 		
 		(* Uid index key manager *)
@@ -240,7 +305,7 @@ MODULE Duniter0Blockchain;
 			posCur: B.IndexPos; (* Position in the sub-index *)
 		END;
 		
-		(* Member, Members, MembersFind, MemberLinks: Distance Rule *)
+		(* Member, Members, MembersFind: Distance Rule *)
 		Member = RECORD
 			p: Pubkey;
 			links: U.Set;
@@ -346,7 +411,6 @@ MODULE Duniter0Blockchain;
 		pubKeyMan: PubKeyMan;
 		uidKeyMan: UidKeyMan;
 		intKeyMan: IntKeyMan;
-		lIntKeyMan: LIntKeyMan;
 		idKTimeMan: IdKTimeMan;
 		certKTimeMan: CertKTimeMan;
 	
@@ -473,6 +537,8 @@ MODULE Duniter0Blockchain;
 			r.InChars(id.hash);
 			id.block_number := r.InInt();
 			id.expires_on := r.InLInt();
+			id.certifiers := r.InLInt();
+			id.certified := r.InLInt();
 		END Read;
 	
 	PROCEDURE (id: Identity) Write (VAR w: B.Writer);
@@ -485,6 +551,8 @@ MODULE Duniter0Blockchain;
 			w.OutChars(id.hash);
 			w.OutInt(id.block_number);
 			w.OutLInt(id.expires_on);
+			w.OutLInt(id.certifiers);
+			w.OutLInt(id.certified);
 		END Write;
 	
 	PROCEDURE (idf: IdentityFac) New (size: INTEGER): Identity;
@@ -666,31 +734,6 @@ MODULE Duniter0Blockchain;
 						RETURN B.lt;
 					END;
 					IF i1.ref > i2.ref THEN
-						RETURN B.gt;
-					END;
-					RETURN B.eq;
-				END;
-			END;
-		END CompP;
-	
-	PROCEDURE (lm: LIntKeyMan) CompP (l1, l2: B.Data): BYTE;
-		
-		BEGIN (*CompP*)
-			IF l1 = NIL THEN
-				IF l2 = NIL THEN
-					RETURN B.eq;
-				END;
-				RETURN B.lt;
-			END;
-			IF l2 = NIL THEN
-				RETURN B.gt;
-			END;
-			WITH l1: LIntKey DO
-				WITH l2: LIntKey DO
-					IF l1.ref < l2.ref THEN
-						RETURN B.lt;
-					END;
-					IF l1.ref > l2.ref THEN
 						RETURN B.gt;
 					END;
 					RETURN B.eq;
@@ -1433,6 +1476,74 @@ MODULE Duniter0Blockchain;
 			RETURN TRUE;
 		END CertNextTo;
 	
+	PROCEDURE AllCertifiers* (IN to: ARRAY OF CHAR; OUT from: StringArr);
+		
+		VAR
+			
+			idU: B.String;
+			id: Identity;
+			ind: B.Index;
+			i: INTEGER;
+		
+		BEGIN (*AllCertifiers*)
+			NEW(idU);
+			NEW(idU.c, LEN(to$) + 1); idU.c^ := to$;
+			IF ~idUidT.Search(idU) THEN
+				from := NIL;
+				RETURN;
+			END;
+			id := idMan.ReadData(idUidT.ReadValue())(Identity);
+			IF id.certifiers = B.bNil THEN
+				from := NIL;
+				RETURN;
+			END;
+			ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
+			NEW(from, ind.NumberOfKeys());
+			ind.Next; i := 0;
+			WHILE ind.PosSet() DO
+				idU := ind.CurrentKey()(B.String);
+				from[i] := idU.c;
+				INC(i);
+				ind.Next;
+			END;
+			ind.Close;
+			ASSERT(i = LEN(from));
+		END AllCertifiers;
+	
+	PROCEDURE AllCertified* (IN from: ARRAY OF CHAR; OUT to: StringArr);
+		
+		VAR
+			
+			idU: B.String;
+			id: Identity;
+			ind: B.Index;
+			i: INTEGER;
+		
+		BEGIN (*AllCertified*)
+			NEW(idU);
+			NEW(idU.c, LEN(from$) + 1); idU.c^ := from$;
+			IF ~idUidT.Search(idU) THEN
+				to := NIL;
+				RETURN;
+			END;
+			id := idMan.ReadData(idUidT.ReadValue())(Identity);
+			IF id.certified = B.bNil THEN
+				to := NIL;
+				RETURN;
+			END;
+			ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
+			NEW(to, ind.NumberOfKeys());
+			ind.Next; i := 0;
+			WHILE ind.PosSet() DO
+				idU := ind.CurrentKey()(B.String);
+				to[i] := idU.c;
+				INC(i);
+				ind.Next;
+			END;
+			ind.Close;
+			ASSERT(i = LEN(to));
+		END AllCertified;
+	
 	PROCEDURE IsSentry* (IN pubkey: Pubkey): BOOLEAN;
 		
 		VAR
@@ -1663,8 +1774,8 @@ MODULE Duniter0Blockchain;
 			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.avgGenTime, res); ASSERT(res = 0, 104);
 			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.dtDiffEval, res); ASSERT(res = 0, 104);
 			ScanS(ss, ':', s, i); Strings.StringToReal(s, pars.percentRot, res); ASSERT(res = 0, 104);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.udTime0, res); ASSERT(res = 0, 104);
-			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.udReevalTime0, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToLInt(s, pars.udTime0, res); ASSERT(res = 0, 104);
+			ScanS(ss, ':', s, i); Strings.StringToLInt(s, pars.udReevalTime0, res); ASSERT(res = 0, 104);
 			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.dtReeval, res); ASSERT(res = 0, 104);
 			pars.txWindow := txWindow;
 			pars.msPeriod := pars.msWindow;
@@ -1700,12 +1811,89 @@ MODULE Duniter0Blockchain;
 			rNow := MAX(rNow, t.time);
 		END Times;
 	
-	(* For one block, add joining & leaving identities in joinAndLeaveT and updade identities in idPubT and idUidT; update certFromT & certToT too *)
+	PROCEDURE RemoveCertifiersCertified (withList: BOOLEAN; idRef: LONGINT; id: Identity);
+		
+		VAR
+			
+			c1, c2: B.Index;
+			idU1, idU2: B.String;
+			id2Ref: LONGINT;
+			id2: Identity;
+			b: BOOLEAN;
+			rL: UndoList; (*remCertifiers & remCertified *)
+		
+		BEGIN (*RemoveCertifiersCertified*)
+			NEW(idU1); idU1.c := id.uid;
+			
+			IF id.certifiers # B.bNil THEN
+				c1 := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
+				c1.Next;
+				WHILE c1.PosSet() DO
+					idU2 := c1.CurrentKey()(B.String);
+					b := idUidT.Search(idU2); ASSERT(b);
+					id2Ref := idUidT.ReadValue();
+					id2 := idMan.ReadData(id2Ref)(Identity);
+					ASSERT(id2.certified # B.bNil);
+					c2 := database.OpenIndex(id2.certified, uidKeyMan, uidKeyFac);
+					b := c2.Erase(idU1); ASSERT(b);
+					b := c2.NumberOfKeys() = 0;
+					c2.Close;
+					IF b THEN
+						database.DeleteIndex(id2.certified); id2.certified := B.bNil;
+						idMan.WriteData(id2Ref, id2);
+					END;
+					IF withList THEN
+						NEW(rL); rL.next := undoList; rL.type := remCertified; rL.ref := id2Ref; rL.aux := idRef;
+						undoList := undoListMan.WriteAllocateData(rL);
+					END;
+					c1.Next;
+				END;
+				c1.Close;
+			END;
+			
+			IF id.certified # B.bNil THEN
+				c1 := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
+				c1.Next;
+				WHILE c1.PosSet() DO
+					idU2 := c1.CurrentKey()(B.String);
+					b := idUidT.Search(idU2); ASSERT(b);
+					id2Ref := idUidT.ReadValue();
+					id2 := idMan.ReadData(id2Ref)(Identity);
+					ASSERT(id2.certifiers # B.bNil);
+					c2 := database.OpenIndex(id2.certifiers, uidKeyMan, uidKeyFac);
+					b := c2.Erase(idU1); ASSERT(b);
+					b := c2.NumberOfKeys() = 0;
+					c2.Close;
+					IF b THEN
+						database.DeleteIndex(id2.certifiers); id2.certifiers := B.bNil;
+						idMan.WriteData(id2Ref, id2);
+					END;
+					IF withList THEN
+						NEW(rL); rL.next := undoList; rL.type := remCertifiers; rL.ref := id2Ref; rL.aux := idRef;
+						undoList := undoListMan.WriteAllocateData(rL);
+					END;
+					c1.Next;
+				END;
+				c1.Close;
+			END;
+		END RemoveCertifiersCertified;
+	
 	(*
 	- Le membre demande à partir ; il passe par les champs leavers et excluded ; ses éléments d'identité (uid et clé publique) peuvent être réutilisés par lui-même mais pas par d'autres.
 	- Le membre révoque son identité explicitement ; champs revoked et excluded ; ses éléments d'identité sont bloqués à jamais.
-	- Le membre ne renouvelle pas son appartenance dans les temps ; champ excluded uniquement ; au bout d'un an, ses éléments d'identité sont bloqués à jamais (mais il n'apparaît dans aucun champ supplémentaire).
+	- Le membre ne renouvelle pas son appartenance dans les temps (ou perd ses sigQty certifications ???) ; champ excluded uniquement ; au bout d'un an, ses éléments d'identité sont bloqués à jamais (mais il n'apparaît dans aucun champ supplémentaire).
 	*)
+	(*
+	La perte de certif ne provoque pas la révocation implicite. C’est bien le défaut de renouvellement qui provoque la révocation, les 2 mécanismes sont indépendants de ce point de vue.
+Si les certifications reviennent, ça rend simplement l’adhésion possible à nouveau. C’est bien elle qui gère le cycle de vie du membre, les certifications ne sont qu’un prérequis.
+Ainsi un membre qui n’a plus que 4 certifs est non seulement exclu mais ne peut pas se renouveler. Au moment de la perte le membre est exclu, puis si le membre ne se renouvelle pas au moment des 1 an de délai depuis sa dernière adhésion il ne se passe rien (on ne peut pas exclure un membre déjà exclu), puis au bout de 2 ans c’est la révocation implicite.
+Faut vraiment voir l’adhésion comme le fil conducteur, et les certifications comme un moyen de prolonger ce fil.
+.Ce qui se passe en BDD, 2 choses :
+    - Etape 1 (bloc n) : la certification expire, si le membre a moins de 5 certifications valides restants celui-ci est marqué comme “à exclure” (champ kick)
+    -Etape 2 (bloc n+1) : le membre doit être inscrit dans le champ Excluded du bloc.
+Si le membre retrouve ses cinq certifications, il doit se renvoueler pour revenir. Revenir n’est jamais automatique.
+	*)
+	(* For one block, add joining & leaving identities in joinAndLeaveT and updade identities in idPubT and idUidT; update certFromT & certToT too *)
 	PROCEDURE Identities (withList: BOOLEAN; IN ssJ, ssA, ssL, ssR, ssE, nb: ARRAY OF CHAR; t: S.Table);
 		
 		VAR
@@ -1845,7 +2033,7 @@ MODULE Duniter0Blockchain;
 					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
-				id.expires_on := -ABS(id.expires_on);
+				id.expires_on := - ABS(id.expires_on);
 				idMan.WriteData(idRef, id);
 			END;
 			
@@ -1866,6 +2054,7 @@ MODULE Duniter0Blockchain;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
 				id.expires_on := BA.revoked;
+				RemoveCertifiersCertified(withList, idRef, id);
 				idMan.WriteData(idRef, id);
 			END;
 			
@@ -1912,7 +2101,7 @@ MODULE Duniter0Blockchain;
 			END;
 		END Identities;
 	
-	(* Add certificatoins of one block in certFromT, certToT and certTimeT *)
+	(* Add certifications of one block in certFromT, certToT and certTimeT *)
 	PROCEDURE Certifications (withList: BOOLEAN; IN ss, nb: ARRAY OF CHAR);
 		
 		VAR
@@ -1922,6 +2111,9 @@ MODULE Duniter0Blockchain;
 			b: BOOLEAN;
 			c: Certification;
 			idP: PubKey;
+			idU: B.String;
+			idRef: LONGINT;
+			id: Identity;
 			cL: UndoList; (*certAddList *)
 			ind: B.Index;
 			iK: LIntKey;
@@ -1944,8 +2136,20 @@ MODULE Duniter0Blockchain;
 				b := TimeOf(n, c.expires_on, exp); ASSERT(b, 102);
 				INC(c.expires_on, pars.sigValidity);
 				pC := certMan.WriteAllocateData(c);
+				NEW(idU);
 				NEW(idP);
 				idP.ref := c.from;
+				b := idPubT.Search(idP); ASSERT(b);
+				idRef := idPubT.ReadValue();
+				id := idMan.ReadData(idRef)(Identity);
+				b := IdPub(c.to, idU.c); ASSERT(b);
+				IF id.certified = B.bNil THEN
+					id.certified := database.CreateIndex(0);
+					idMan.WriteData(idRef, id);
+				END;
+				ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
+				b := ind.SearchIns(idU);
+				ind.Close;
 				IF certFromT.SearchIns(idP) THEN
 					v := certFromT.ReadValue();
 				ELSE
@@ -1956,6 +2160,17 @@ MODULE Duniter0Blockchain;
 				ind := database.OpenIndex(v, pubKeyMan, pubKeyFac);
 				b := ind.SearchIns(idP); ASSERT(~b, 103);
 				ind.WriteValue(pC);
+				ind.Close;
+				b := idPubT.Search(idP); ASSERT(b);
+				idRef := idPubT.ReadValue();
+				id := idMan.ReadData(idRef)(Identity);
+				b := IdPub(c.from, idU.c); ASSERT(b);
+				IF id.certifiers = B.bNil THEN
+					id.certifiers := database.CreateIndex(0);
+					idMan.WriteData(idRef, id);
+				END;
+				ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
+				b := ind.SearchIns(idU);
 				ind.Close;
 				IF certToT.SearchIns(idP) THEN
 					v := certToT.ReadValue();
@@ -2115,6 +2330,7 @@ MODULE Duniter0Blockchain;
 			t: Time;
 			jlL: JoinAndLeaveL;
 			jl: JoinAndLeave;
+			idRef: LONGINT;
 			id: Identity;
 			c: Certification;
 			l: UndoList;
@@ -2191,6 +2407,34 @@ MODULE Duniter0Blockchain;
 						RemoveCert(c);
 						NEW(li); li.ref := l.ref;
 						b := certTimeT.Erase(li); ASSERT(b, 112);
+						NEW(u);
+						NEW(p);
+						p.ref := c.from;
+						b := idPubT.Search(p); ASSERT(b);
+						idRef := idPubT.ReadValue();
+						id := idMan.ReadData(idRef)(Identity);
+						b := IdPub(c.to, u.c); ASSERT(b);
+						ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
+						b := ind.Erase(u); ASSERT(b);
+						b := ind.NumberOfKeys() = 0;
+						ind.Close;
+						IF b THEN
+							database.DeleteIndex(id.certified); id.certified := B.bNil;
+							idMan.WriteData(idRef, id);
+						END;
+						p.ref := c.to;
+						b := idPubT.Search(p); ASSERT(b);
+						idRef := idPubT.ReadValue();
+						id := idMan.ReadData(idRef)(Identity);
+						b := IdPub(c.from, u.c); ASSERT(b);
+						ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
+						b := ind.Erase(u); ASSERT(b);
+						b := ind.NumberOfKeys() = 0;
+						ind.Close;
+						IF b THEN
+							database.DeleteIndex(id.certifiers); id.certifiers := B.bNil;
+							idMan.WriteData(idRef, id);
+						END;
 						certMan.EraseData(l.ref);
 					|certRemoveList:
 						(* Insert the keys corresponding to the Certification pointed by l.ref into certFromT, certToT and certTimeT *)
@@ -2221,13 +2465,35 @@ MODULE Duniter0Blockchain;
 						ind.Close;
 						NEW(li); li.ref := l.ref;
 						b := certTimeT.SearchIns(li); ASSERT(~b, 115);
+					|remCertifiers:
+						id := idMan.ReadData(l.aux)(Identity);
+						NEW(u); u.c := id.uid;
+						id := idMan.ReadData(l.ref)(Identity);
+						IF id.certifiers = B.bNil THEN
+							id.certifiers := database.CreateIndex(0);
+							idMan.WriteData(l.ref, id);
+						END;
+						ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
+						b := ind.SearchIns(u); ASSERT(~b);
+						ind.Close;
+					|remCertified:
+						id := idMan.ReadData(l.aux)(Identity);
+						NEW(u); u.c := id.uid;
+						id := idMan.ReadData(l.ref)(Identity);
+						IF id.certified = B.bNil THEN
+							id.certified := database.CreateIndex(0);
+							idMan.WriteData(l.ref, id);
+						END;
+						ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
+						b := ind.SearchIns(u); ASSERT(~b);
+						ind.Close;
 				END;
 				undoListMan.EraseData(undoList);
 				undoList := l.next;
 			END;
 		END RemoveSecureGap;
 	
-	(* Initialize sentriesT *)
+	(* Initialize members and sentriesS/sentriesI *)
 	PROCEDURE CalculateSentries;
 		
 		VAR
@@ -2582,7 +2848,7 @@ MODULE Duniter0Blockchain;
 			NEW(identityFac); NEW(certificationFac);
 			NEW(intKeyFac); NEW(lIntKeyFac); NEW(uidKeyFac); NEW(pubKeyFac);
 			NEW(pubKeyMan); NEW(uidKeyMan);
-			NEW(intKeyMan); NEW(lIntKeyMan); NEW(idKTimeMan); NEW(certKTimeMan);
+			NEW(intKeyMan); NEW(idKTimeMan); NEW(certKTimeMan);
 			OpenB;
 			NEW(update);
 			updateChanged := TRUE;

@@ -78,18 +78,17 @@ MODULE UtilSort;
 			
 			VAR
 				
-				n, i, j, p0, p, p2, q: INTEGER;
+				i, j, p0, p, p2, q: INTEGER;
 			
 			BEGIN (*Sort*)
 				LOOP
-					n := r - l + 1;
-					IF n <= maxIns THEN
-						Insertion (l, r);
+					IF r - l + 1 <= maxIns THEN
+						Insertion(l, r);
 						EXIT;
 					ELSE
-						p0 := l + SHORT(ENTIER(n * g.Random()));
-						p := l + SHORT(ENTIER(n * g.Random()));
-						p2 := l + SHORT(ENTIER(n * g.Random()));
+						p0 := SHORT(g.IntRand(l, r + 1));
+						p := SHORT(g.IntRand(l, r + 1));
+						p2 := SHORT(g.IntRand(l, r + 1));
 						IF t.Less(p, p0) THEN
 							q := p; p := p0; p0 := q;
 						END;

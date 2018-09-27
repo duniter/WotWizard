@@ -18,7 +18,7 @@ MODULE Duniter0IdentitiesPrint;
 		
 		B := Duniter0Blockchain, BA := Duniter0Basic, Dialog, TextMappers, TextModels, TextViews, Views;
 	
-	PROCEDURE Print*;
+	PROCEDURE Revoked*;
 		
 		VAR
 			
@@ -34,7 +34,129 @@ MODULE Duniter0IdentitiesPrint;
 			tt: TextModels.Model;
 			f: TextMappers.Formatter;
 		
-		BEGIN (*Print*)
+		BEGIN (*Revoked*)
+			tt := TextModels.dir.New();
+			f.ConnectTo(tt);
+			ok := B.IdNextPubkey(TRUE, pubkey);
+			WHILE ok DO
+				b := B.IdPubComplete(pubkey, uid, member, hash, bnb, exp); ASSERT(b);
+				IF exp = BA.revoked THEN
+					ASSERT(~member);
+					f.WriteString(pubkey); f.WriteTab;
+					f.WriteString(uid); f.WriteLn; f.WriteTab;
+					b := B.TimeOf(bnb, mt, t); ASSERT(b);
+					BA.TimestampToString(mt, s);
+					f.WriteString(s);
+					f.WriteLn;
+				END;
+				ok := B.IdNextPubkey(FALSE, pubkey);
+			END;
+			f.WriteLn;
+			n := 0;
+			ok := B.IdNextUid(TRUE, uid);
+			WHILE ok DO
+				b := B.IdUidComplete(uid, pubkey, member, hash, bnb, exp); ASSERT(b);
+				IF exp = BA.revoked THEN
+					ASSERT(~member);
+					f.WriteString(uid); f.WriteTab;
+					INC(n);
+					f.WriteString(pubkey); f.WriteLn; f.WriteTab;
+					b := B.TimeOf(bnb, mt, t); ASSERT(b);
+					BA.TimestampToString(mt, s);
+					f.WriteString(s);
+					f.WriteLn;
+				END;
+				ok := B.IdNextUid(FALSE, uid);
+			END;
+			f.WriteLn;
+			f.WriteMsg("#Duniter0:RevokedNb");
+			f.WriteString(" = ");
+			f.WriteInt(n);
+			f.WriteLn;
+			Dialog.MapString("#Duniter0:RevokedM", ss);
+			Views.OpenAux(TextViews.dir.New(tt), ss);
+		END Revoked;
+	
+	PROCEDURE Missing*;
+		
+		VAR
+			
+			uid: B.String;
+			pubkey: B.Pubkey;
+			hash: B.Hash;
+			bnb: INTEGER;
+			ok, b, member: BOOLEAN;
+			n: INTEGER;
+			mt, t, exp: LONGINT;
+			s: BA.DateTime;
+			ss: Views.Title;
+			tt: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*Missing*)
+			tt := TextModels.dir.New();
+			f.ConnectTo(tt);
+			ok := B.IdNextPubkey(TRUE, pubkey);
+			WHILE ok DO
+				b := B.IdPubComplete(pubkey, uid, member, hash, bnb, exp); ASSERT(b);
+				IF ~member & (exp # BA.revoked) THEN
+					f.WriteString(pubkey); f.WriteTab;
+					f.WriteString(uid); f.WriteLn; f.WriteTab;
+					b := B.TimeOf(bnb, mt, t); ASSERT(b);
+					BA.TimestampToString(mt, s);
+					f.WriteString(s);
+					f.WriteString(" → ");
+					BA.TimestampToString(exp, s);
+					f.WriteString(s);
+					f.WriteLn;
+				END;
+				ok := B.IdNextPubkey(FALSE, pubkey);
+			END;
+			f.WriteLn;
+			n := 0;
+			ok := B.IdNextUid(TRUE, uid);
+			WHILE ok DO
+				b := B.IdUidComplete(uid, pubkey, member, hash, bnb, exp); ASSERT(b);
+				IF ~member & (exp # BA.revoked) THEN
+					f.WriteString(uid); f.WriteTab;
+					INC(n);
+					f.WriteString(pubkey); f.WriteLn; f.WriteTab;
+					b := B.TimeOf(bnb, mt, t); ASSERT(b);
+					BA.TimestampToString(mt, s);
+					f.WriteString(s);
+					f.WriteString(" → ");
+					BA.TimestampToString(exp, s);
+					f.WriteString(s);
+					f.WriteLn;
+				END;
+				ok := B.IdNextUid(FALSE, uid);
+			END;
+			f.WriteLn;
+			f.WriteMsg("#Duniter0:MissingNb");
+			f.WriteString(" = ");
+			f.WriteInt(n);
+			f.WriteLn;
+			Dialog.MapString("#Duniter0:Missing", ss);
+			Views.OpenAux(TextViews.dir.New(tt), ss);
+		END Missing;
+	
+	PROCEDURE Members*;
+		
+		VAR
+			
+			uid: B.String;
+			pubkey: B.Pubkey;
+			hash: B.Hash;
+			bnb: INTEGER;
+			ok, b, member: BOOLEAN;
+			n: INTEGER;
+			mt, t, exp: LONGINT;
+			s: BA.DateTime;
+			ss: Views.Title;
+			tt: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*Members*)
 			tt := TextModels.dir.New();
 			f.ConnectTo(tt);
 			ok := B.IdNextPubkeyM(TRUE, pubkey);
@@ -57,9 +179,7 @@ MODULE Duniter0IdentitiesPrint;
 			WHILE ok DO
 				f.WriteString(uid); f.WriteTab;
 				b := B.IdUidComplete(uid, pubkey, member, hash, bnb, exp); ASSERT(b);
-				IF member THEN
-					INC(n);
-				END;
+				INC(n);
 				f.WriteString(pubkey); f.WriteLn; f.WriteTab;
 				b := B.TimeOf(bnb, mt, t); ASSERT(b);
 				BA.TimestampToString(mt, s);
@@ -78,8 +198,12 @@ MODULE Duniter0IdentitiesPrint;
 			f.WriteLn;
 			Dialog.MapString("#Duniter0:Identities", ss);
 			Views.OpenAux(TextViews.dir.New(tt), ss);
-		END Print;
+		END Members;
 	
 	END Duniter0IdentitiesPrint.
 
-Duniter0IdentitiesPrint.Print;
+Duniter0IdentitiesPrint.Revoked;
+
+Duniter0IdentitiesPrint.Missing;
+
+Duniter0IdentitiesPrint.Members;

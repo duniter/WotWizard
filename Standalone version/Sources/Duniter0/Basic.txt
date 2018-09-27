@@ -22,10 +22,10 @@ MODULE Duniter0Basic;
 		
 		year0 = 1970; month0 = 1; day0 = 1; (* Start date of computing history *)
 		
-		oldIcon = '×';
+		oldIcon = '×'; (* Icon for old items (old or missing members) *)
 		
-		never* = MAX(LONGINT);
-		revoked* = MIN(LONGINT);
+		never* = MAX(LONGINT); (* In WotWizard window *)
+		revoked* = MIN(LONGINT); (* Limit date for revoked members *)
 		
 		lt* = A.lt;
 		eq* = A.eq;
@@ -35,13 +35,13 @@ MODULE Duniter0Basic;
 		
 		String* = POINTER TO ARRAY OF CHAR;
 		
-		TimeString* = ARRAY 9 OF CHAR;
+		TimeString* = ARRAY 8 + 1 OF CHAR;
 		
-		DateTime* = ARRAY 21 OF CHAR;
+		DateTime* = ARRAY 1 + 10 + 1 + 8 + 1 OF CHAR;
 	
 	VAR
 		
-		t0*: INTEGER; (* Origin of dates *)
+		t0-: INTEGER; (* Origin of dates *)
 	
 	(* Convert the time t to the string ts *)
 	PROCEDURE TimeToString* (t: LONGINT; OUT ts: TimeString);
@@ -149,25 +149,26 @@ MODULE Duniter0Basic;
 			RETURN c;
 		END DownC;
 	
+	(* Extract the significant characters in s; only alphanumeric characters are significant, and their case of lowest rank is returned *)
 	PROCEDURE ToDown* (IN s: ARRAY OF CHAR): String;
 		
 		VAR
 			
 			ss: String;
-			c: CHAR;
-			i: INTEGER;
+			i, j: INTEGER;
 		
 		BEGIN (*ToDown*)
-			NEW(ss, LEN(s$) + 1); ss^ := s$;
-			i := 0;
-			WHILE ss[i] # 0X DO
-				c := DownC(ss, i);
-				ss[i - 1] := c;
+			NEW(ss, LEN(s$) + 1);
+			i := 0; j := 0;
+			WHILE s[i] # 0X DO
+				ss[j] := DownC(s, i);
+				INC(j);
 			END;
+			ss[j] := 0X;
 			RETURN ss;
 		END ToDown;
 	
-	(* Standard comparison procedure for identifiers; they are first compared with ~strict, and if still equal, with strict *)
+	(* Standard comparison procedure for identifiers; they are first compared with only significant characters and case ignored, and if still equal, with all characters and case taken into account *)
 	PROCEDURE CompP* (IN s1, s2: ARRAY OF CHAR): BYTE;
 		
 		VAR
@@ -200,6 +201,7 @@ MODULE Duniter0Basic;
 			RETURN eq;
 		END CompP;
 	
+	(* Compare the significant characters of s1 and s2 and return whether the first one is a prefix of the second one or not *)
 	PROCEDURE Prefix* (IN s1, s2: ARRAY OF CHAR): BOOLEAN;
 		
 		VAR

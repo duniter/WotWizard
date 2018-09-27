@@ -20,7 +20,7 @@ MODULE Duniter0Members2;
 		L := StdLog,
 		*)
 		
-		A := UtilAvlTree, B := Duniter0Blockchain;
+		A := UtilAvlTree, B := Duniter0Blockchain, U := HermesUtil, O := HermesOperations;
 	
 	TYPE
 		
@@ -32,6 +32,11 @@ MODULE Duniter0Members2;
 		Events* = POINTER TO ARRAY OF RECORD
 			date-: LONGINT;
 			number-: INTEGER;
+		END;
+		
+		EventsR* = POINTER TO ARRAY OF RECORD
+			date-: LONGINT;
+			number-: REAL;
 		END;
 	
 	PROCEDURE (ev1: Event) Compare (ev2: A.Elem): BYTE;
@@ -49,6 +54,8 @@ MODULE Duniter0Members2;
 		END Compare;
 	
 	PROCEDURE Count* (OUT counts: Events);
+		
+		(* Number of members, event by event *)
 		
 		VAR
 			
@@ -97,5 +104,98 @@ MODULE Duniter0Members2;
 				INC(counts[n].number, counts[n - 1].number);
 			END;
 		END Count;
+	
+	PROCEDURE FirstEntries* (OUT fE: Events);
+		
+		(* Number of first entries, event by event *)
+		
+		VAR
+			
+			ok, ok2, b: BOOLEAN;
+			pk: B.Pubkey;
+			jb, jb0, lb, n: INTEGER;
+			mT, time, list: LONGINT;
+			t: A.Tree;
+			ev: Event;
+			e: A.Elem;
+		
+		BEGIN (*FirstEntries*)
+			A.New(t);
+			ok := B.JLNextPubkey(TRUE, pk);
+			WHILE ok DO
+				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
+				WHILE ok2 DO
+					jb0 := jb;
+					ok2 := B.JLPubLNext(list, jb, lb);
+				END;
+				b := B.TimeOf(jb0, mT, time); ASSERT(b);
+				NEW(ev); e := ev;
+				ev.date := time; ev.number := 0;
+				b := t.SearchIns(e, n);
+				INC(e(Event).number);
+				ok := B.JLNextPubkey(FALSE, pk);
+			END;
+			NEW(fE, t.NumberOfElems());
+			n := 0;
+			e := t.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: Event DO
+					fE[n].date := e.date;
+					fE[n].number := e.number;
+				END;
+				INC(n);
+				e := t.Next(e);
+			END;
+			FOR n := 1 TO LEN(fE) - 1 DO
+				INC(fE[n].number, fE[n - 1].number);
+			END;
+		END FirstEntries;
+	
+	PROCEDURE FEFlux* (timeUnit: LONGINT; OUT fER: EventsR);
+		
+		(* Flux of first entries, event by event *)
+		
+		VAR
+			
+			fE: Events;
+			dots, dotsD: U.Dots;
+			i: INTEGER;
+			b: BOOLEAN;
+		
+		BEGIN (*FEFlux*)
+			FirstEntries(fE);
+			NEW(dots, LEN(fE));
+			FOR i := 0 TO LEN(fE) - 1 DO
+				dots[i].x := fE[i].date / timeUnit;
+				dots[i].y := fE[i].number;
+			END;
+			b := O.Derive(dots, dotsD);
+			NEW(fER, LEN(fE));
+			FOR i := 0 TO LEN(fE) - 1 DO
+				fER[i].date := fE[i].date;
+				fER[i].number := dotsD[i].y;
+			END;
+		END FEFlux;
+	
+	PROCEDURE FEFluxPerMember* (timeUnit: LONGINT; OUT fER: EventsR);
+		
+		(* Flux of first entries per member, event by event *)
+		
+		VAR
+			
+			counts: Events;
+			c, f: INTEGER;
+		
+		BEGIN (*FEFluxPerMember*)
+			FEFlux(timeUnit, fER);
+			Count(counts);
+			c := 0;
+			FOR f := 0 TO LEN(fER) - 1 DO
+				WHILE (c < LEN(counts) - 1) & (counts[c + 1].date <= fER[f].date) DO
+					INC(c);
+				END;
+				fER[f].number := fER[f].number / counts[c].number;
+			END;
+		END FEFluxPerMember;
 	
 	END Duniter0Members2.

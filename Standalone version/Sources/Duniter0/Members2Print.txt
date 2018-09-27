@@ -17,22 +17,25 @@ MODULE Duniter0Members2Print;
 	IMPORT
 		
 		B := Duniter0Blockchain, BA := Duniter0Basic, M := Duniter0Members2, Dialog, HermesAxes, HermesScat, HermesUtil, HermesViews, Ports, TextMappers, TextModels, TextViews, Views;
-
-	PROCEDURE Do*;
+	
+	CONST
 		
-		CONST
-			
-			day = 60 * 60 * 24;
-			month = 365.25 * day / 12;
-			
-			scatColor= 00BF00BFH;
-			scatShape= HermesScat.point;
+		day = 60 * 60 * 24;
+		month = (365 * 4 + 1) * day DIV 4 DIV 12;
+		
+		scatColor = 00BF00BFH;
+		scatShape = HermesScat.point;
+	
+	VAR
+		
+		tUnit: Dialog.String;
+
+	PROCEDURE Print (a: M.Events; IN title, label, unit: ARRAY OF CHAR);
 		
 		VAR
 			
 			t: TextModels.Model;
 			f: TextMappers.Formatter;
-			a: M.Events;
 			d: BA.DateTime;
 			i, m: INTEGER;
 			s: Views.Title;
@@ -41,8 +44,7 @@ MODULE Duniter0Members2Print;
 			tr: HermesViews.Trace;
 			t0: LONGINT;
 		
-		BEGIN (*Do*)
-			M.Count(a);
+		BEGIN (*Print*)
 			t := TextModels.dir.New();
 			f.ConnectTo(t);
 			f.WriteMsg("#Duniter0:Block"); f.WriteString(" "); f.WriteInt(B.LastBlock());
@@ -51,7 +53,7 @@ MODULE Duniter0Members2Print;
 			m := LEN(a);
 			FOR i := 0 TO m - 1 DO
 				f.WriteTab;
-				f.WriteRealForm((a[i].date - t0) / month, 16, 21, -16, '');
+				f.WriteRealForm((a[i].date - t0) / month, 16, 21, - 16, '');
 				f.WriteTab;
 				f.WriteIntForm(a[i].number, 10, 7, '', FALSE);
 				f.WriteLn;
@@ -66,23 +68,147 @@ MODULE Duniter0Members2Print;
 				f.WriteIntForm(a[i].number, 10, 7, '', FALSE);
 				f.WriteLn;
 			END;
-			Dialog.MapString("#Duniter0:MembersNb", s);
+			Dialog.MapString(title, s);
 			Views.OpenAux(TextViews.dir.New(t), s);
-			p:= HermesViews.New();
+			p := HermesViews.New();
 			NEW(ts, m);
 			FOR i := 0 TO m - 1 DO
 				ts[i].x := (a[i].date - t0) / month;
 				ts[i].y := a[i].number;
 			END;
-			tr:= HermesScat.Insert(p, ts, scatShape, FALSE, FALSE, FALSE);
+			tr := HermesScat.Insert(p, ts, scatShape, FALSE, FALSE, FALSE);
 			tr.ChangeColor(scatColor);
-			tr:= HermesAxes.Insert(p, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 't', 'd', 0, 3);
-			tr:= HermesAxes.Insert(p, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 'n', '', 0, 3);
+			tr := HermesAxes.Insert(p, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 't', tUnit, 0, 3);
+			tr := HermesAxes.Insert(p, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, label, unit, 0, 3);
 			Views.OpenAux(p, s);
-		END Do;
+		END Print;
 	
+	PROCEDURE PrintMembers*;
+		
+		(* Print and display the number of members, event by event *)
+		
+		VAR
+			
+			a: M.Events;
+		
+		BEGIN (*PrintMembers*)
+			M.Count(a);
+			Print(a, "#Duniter0:MembersNb", "n", "");
+		END PrintMembers;
+
+	PROCEDURE PrintFirstEntries*;
+		
+		(* Print and display the number of first entries, event by event *)
+		
+		VAR
+			
+			a: M.Events;
+		
+		BEGIN (*PrintFirstEntries*)
+			M.FirstEntries(a);
+			Print(a, "#Duniter0:FirstEntries", "e", "");
+		END PrintFirstEntries;
+
+	PROCEDURE PrintR (a: M.EventsR; percent: BOOLEAN; IN title, label, unit: ARRAY OF CHAR);
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			d: BA.DateTime;
+			i, m: INTEGER;
+			s: Views.Title;
+			p: HermesViews.View;
+			ts: POINTER TO ARRAY OF HermesUtil.Dot;
+			tr: HermesViews.Trace;
+			t0: LONGINT;
+			r: REAL;
+		
+		BEGIN (*PrintR*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			f.WriteMsg("#Duniter0:Block"); f.WriteString(" "); f.WriteInt(B.LastBlock());
+			f.WriteLn; f.WriteLn;
+			t0 := a[0].date;
+			m := LEN(a);
+			FOR i := 0 TO m - 1 DO
+				f.WriteTab;
+				f.WriteRealForm((a[i].date - t0) / month, 16, 21, - 16, '');
+				f.WriteTab;
+				r := a[i].number;
+				IF percent THEN
+					r := 100 * r;
+				END;
+				f.WriteReal(r);
+				f.WriteLn;
+			END;
+			f.WriteString("~");
+			f.WriteLn;
+			FOR i := 0 TO m - 1 DO
+				f.WriteTab;
+				BA.TimestampToString(a[i].date, d);
+				f.WriteString(d);
+				f.WriteTab;
+				f.WriteReal(a[i].number);
+				f.WriteLn;
+			END;
+			Dialog.MapString(title, s);
+			Dialog.MapString("#Duniter0:month", tUnit);
+			Views.OpenAux(TextViews.dir.New(t), s);
+			p := HermesViews.New();
+			NEW(ts, m);
+			FOR i := 0 TO m - 1 DO
+				ts[i].x := (a[i].date - t0) / month;
+				IF percent THEN
+					ts[i].y := 100 * a[i].number;
+				ELSE
+					ts[i].y := a[i].number;
+				END;
+			END;
+			tr := HermesScat.Insert(p, ts, scatShape, FALSE, FALSE, FALSE);
+			tr.ChangeColor(scatColor);
+			tr := HermesAxes.Insert(p, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 't', tUnit, 0, 3);
+			tr := HermesAxes.Insert(p, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, label, unit, 0, 3);
+			Views.OpenAux(p, s);
+		END PrintR;
+
+	PROCEDURE PrintFEFlux*;
+		
+		(* Print and display the flux of first entries, event by event *)
+		
+		VAR
+			
+			a: M.EventsR;
+		
+		BEGIN (*PrintFEFlux*)
+			M.FEFlux(month, a);
+			PrintR(a, FALSE, "#Duniter0:FEFlux", "\frac{\d e}{\d t}", tUnit + "^{-1}");
+		END PrintFEFlux;
+
+	PROCEDURE PrintFEFluxPerMember*;
+		
+		(* Print and display the flux of first entries per member, event by event *)
+		
+		VAR
+			
+			a: M.EventsR;
+			i: INTEGER;
+		
+		BEGIN (*PrintFEFluxPerMember*)
+			M.FEFluxPerMember(month, a);
+			PrintR(a, TRUE, "#Duniter0:FEFluxPerMember", "\frac{\d e}{n\d t}", "% / " + tUnit);
+		END PrintFEFluxPerMember;
+	
+	BEGIN (*Duniter0Members2Print*)
+		Dialog.MapString("#Duniter0:month", tUnit);
 	END Duniter0Members2Print.
 
 DevDebug.UnloadThis Duniter0Members2Print Duniter0Members2 
 
-Duniter0Members2Print.Do;
+Duniter0Members2Print.PrintMembers;
+
+Duniter0Members2Print.PrintFirstEntries;
+
+Duniter0Members2Print.PrintFEFlux;
+
+Duniter0Members2Print.PrintFEFluxPerMember;

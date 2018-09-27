@@ -16,11 +16,11 @@ MODULE Duniter0Events;
 
 	IMPORT
 		
-		B := Duniter0Blockchain, BA := Duniter0Basic, J := UtilJson, S := UtilSort, L := StdLog, Dialog, Services, TextMappers, TextModels, TextViews, Views;
+		A := UtilAvlTree, B := Duniter0Blockchain, BA := Duniter0Basic, J := UtilJson, S := UtilSort, L := StdLog, Dialog, Services, TextMappers, TextModels, TextViews, Views;
 	
 	TYPE
 		
-		Membership = POINTER TO RECORD
+		Membership = POINTER TO EXTENSIBLE RECORD
 			id: B.String;
 			exp: LONGINT;
 			expS: BA.DateTime;
@@ -28,8 +28,17 @@ MODULE Duniter0Events;
 		
 		Memberships = POINTER TO ARRAY OF Membership;
 		
+		CertifEnd = POINTER TO RECORD (Membership)
+			criticalCertifier: B.String;
+		END;
+		
 		MemSort = RECORD (S.T)
 			m: Memberships;
+		END;
+		
+		Certif = POINTER TO RECORD (A.Elem)
+			from: B.String;
+			exp: LONGINT;
 		END;
 	
 	PROCEDURE (VAR ms: MemSort) Less (m1, m2: INTEGER): BOOLEAN;
@@ -48,7 +57,27 @@ MODULE Duniter0Events;
 			m := ms.m[m1]; ms.m[m1] := ms.m[m2]; ms.m[m2] := m;
 		END Swap;
 	
-	PROCEDURE NextNoMembers (): Memberships;
+	PROCEDURE (c1: Certif) Compare (c2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH c2: Certif DO
+				IF c1.exp < c2.exp THEN
+					RETURN A.lt;
+				END;
+				IF c1.exp > c2.exp THEN
+					RETURN A.gt;
+				END;
+				IF c1.from$ < c2.from$ THEN
+					RETURN A.lt;
+				END;
+				IF c1.from$ > c2.from$ THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	PROCEDURE MembershipsEnds (): Memberships;
 		
 		VAR
 			
@@ -60,7 +89,7 @@ MODULE Duniter0Events;
 			bnb, i: INTEGER;
 			exp: LONGINT;
 		
-		BEGIN (*NextNoMembers*)
+		BEGIN (*MembershipsEnds*)
 			NEW(ms.m, B.IdLenM());
 			i := 0;
 			ok := B.IdNextUidM(TRUE, id);
@@ -73,9 +102,92 @@ MODULE Duniter0Events;
 			END;
 			ms.QuickSort(0, LEN(ms.m) - 1);
 			RETURN ms.m;
-		END NextNoMembers;
+		END MembershipsEnds;
 	
-	PROCEDURE Print*;
+	PROCEDURE MissingEnds (): Memberships;
+		
+		VAR
+			
+			ms: MemSort;
+			ok, mem, b: BOOLEAN;
+			id: B.String;
+			p: B.Pubkey;
+			h: B.Hash;
+			bnb, i: INTEGER;
+			exp: LONGINT;
+		
+		BEGIN (*MissingEnds*)
+			i := 0;
+			ok := B.IdNextUid(TRUE, id);
+			WHILE ok DO
+				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b);
+				IF ~mem & (exp # BA.revoked) THEN
+					INC(i);
+				END;
+				ok := B.IdNextUid(FALSE, id);
+			END;
+			NEW(ms.m, i);
+			i := 0;
+			ok := B.IdNextUid(TRUE, id);
+			WHILE ok DO
+				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b);
+				IF ~mem & (exp # BA.revoked) THEN
+					NEW(ms.m[i]);
+					ms.m[i].id := id; ms.m[i].exp := exp; BA.TimestampToString(exp, ms.m[i].expS);
+					INC(i);
+				END;
+				ok := B.IdNextUid(FALSE, id);
+			END;
+			ms.QuickSort(0, LEN(ms.m) - 1);
+			RETURN ms.m;
+		END MissingEnds;
+	
+	PROCEDURE CertifsEnds (): Memberships;
+		
+		VAR
+			
+			ms: MemSort;
+			ok, b: BOOLEAN;
+			id: B.String;
+			p, from, to: B.Pubkey;
+			bnb, i, n: INTEGER;
+			pos: B.CertPos;
+			cT: A.Tree;
+			c: Certif;
+			e: A.Elem;
+			cE: CertifEnd;
+		
+		BEGIN (*CertifsEnds*)
+			NEW(ms.m, B.IdLenM());
+			i := 0;
+			ok := B.IdNextUidM(TRUE, id);
+			WHILE ok DO
+				b := B.IdUid(id, p); ASSERT(b);
+				A.New(cT);
+				ok := B.CertTo(p, pos) & pos.CertNextPos(from, to);
+				WHILE ok DO
+					NEW(c);
+					b := B.IdPub(from, c.from); ASSERT(b);
+					b := B.Cert(from, to, bnb, c.exp); ASSERT(b);
+					e := c;
+					b := cT.SearchIns(e, n); ASSERT(~b);
+					ok := pos.CertNextPos(from, to);
+				END;
+				NEW(cE);
+				ms.m[i] := cE;
+				cT.Find(cT.NumberOfElems() - B.pars.sigQty + 1, e); ASSERT(e # NIL);
+				WITH e: Certif DO
+					cE.exp := e.exp; cE.criticalCertifier := e.from;
+				END;
+				cE.id := id; BA.TimestampToString(cE.exp, cE.expS);
+				INC(i);
+				ok := B.IdNextUidM(FALSE, id);
+			END;
+			ms.QuickSort(0, LEN(ms.m) - 1);
+			RETURN ms.m;
+		END CertifsEnds;
+	
+	PROCEDURE PrintMembershipsEnds*;
 		
 		VAR
 			
@@ -87,7 +199,7 @@ MODULE Duniter0Events;
 			t: TextModels.Model;
 			f: TextMappers.Formatter;
 		
-		BEGIN (*Print*)
+		BEGIN (*PrintMembershipsEnds*)
 			t := TextModels.dir.New();
 			f.ConnectTo(t);
 			Dialog.MapString("#Duniter0:LimitsM", s);
@@ -100,7 +212,7 @@ MODULE Duniter0Events;
 			f.WriteString(" (UTC+0)");
 			f.WriteLn; f.WriteLn;
 			time := Services.Ticks();
-			ms := NextNoMembers();
+			ms := MembershipsEnds();
 			L.Int(Services.Ticks() - time);
 			L.Ln;
 			m := LEN(ms);
@@ -115,9 +227,9 @@ MODULE Duniter0Events;
 				f.WriteLn;
 			END;
 			Views.OpenAux(TextViews.dir.New(t), s);
-		END Print;
+		END PrintMembershipsEnds;
 	
-	PROCEDURE Json (): J.Json;
+	PROCEDURE JsonMembershipsEnds (): J.Json;
 		
 		VAR
 			
@@ -126,7 +238,7 @@ MODULE Duniter0Events;
 			time: LONGINT;
 			ss: BA.DateTime;
 		
-		BEGIN (*Json*)
+		BEGIN (*JsonMembershipsEnds*)
 			J.StartObject;
 			J.PushString("Membership_Limits");
 			J.BuildField("description");
@@ -139,7 +251,7 @@ MODULE Duniter0Events;
 			J.PushString(ss + " (UTC+0)");
 			J.BuildField("date_string");
 			J.StartArray;
-			ms := NextNoMembers();
+			ms := MembershipsEnds();
 			m := LEN(ms);
 			FOR i := 0 TO m - 1 DO
 				J.StartObject;
@@ -155,35 +267,262 @@ MODULE Duniter0Events;
 			J.BuildField("limits");
 			J.BuildObject;
 			RETURN J.GetJson();
-		END Json;
+		END JsonMembershipsEnds;
 	
-	PROCEDURE JsonText (): TextViews.View;
+	PROCEDURE JsonMembershipsEndsText (): TextViews.View;
 		
 		VAR
 			
 			t: TextModels.Model;
 			f: TextMappers.Formatter;
 		
-		BEGIN (*JsonText*)
+		BEGIN (*JsonMembershipsEndsText*)
 			t := TextModels.dir.New();
 			f.ConnectTo(t);
-			Json().Write(f);
+			JsonMembershipsEnds().Write(f);
 			RETURN TextViews.dir.New(t);
-		END JsonText;
+		END JsonMembershipsEndsText;
 	
-	PROCEDURE JsonPrint*;
+	PROCEDURE JsonMembershipsEndsPrint*;
 		
 		VAR
 			
 			s: Views.Title;
 		
-		BEGIN (*JsonPrint*)
+		BEGIN (*JsonMembershipsEndsPrint*)
 			Dialog.MapString("#Duniter0:LimitsM", s);
-			Views.OpenAux(JsonText(), s);
-		END JsonPrint;
+			Views.OpenAux(JsonMembershipsEndsText(), s);
+		END JsonMembershipsEndsPrint;
+	
+	PROCEDURE PrintMissingEnds*;
+		
+		VAR
+			
+			ms: Memberships;
+			i, j, m, l: INTEGER;
+			time: LONGINT;
+			s: Views.Title;
+			ss: BA.DateTime;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*PrintMissingEnds*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			Dialog.MapString("#Duniter0:LimitsMissing", s);
+			f.WriteString(s);
+			f.WriteLn; f.WriteLn;
+			time := B.Now();
+			BA.TimestampToString(time, ss);
+			l := LEN(ss$);
+			f.WriteString(ss);
+			f.WriteString(" (UTC+0)");
+			f.WriteLn; f.WriteLn;
+			time := Services.Ticks();
+			ms := MissingEnds();
+			L.Int(Services.Ticks() - time);
+			L.Ln;
+			m := LEN(ms);
+			FOR i := 0 TO m - 1 DO
+				f.WriteString('    ');
+				f.WriteString(ms[i].expS);
+				FOR j := LEN(ms[i].expS$) TO l DO
+					f.WriteString(" ");
+				END;
+				f.WriteString('    ');
+				f.WriteString(ms[i].id);
+				f.WriteLn;
+			END;
+			Views.OpenAux(TextViews.dir.New(t), s);
+		END PrintMissingEnds;
+	
+	PROCEDURE JsonMissingEnds (): J.Json;
+		
+		VAR
+			
+			ms: Memberships;
+			i, m: INTEGER;
+			time: LONGINT;
+			ss: BA.DateTime;
+		
+		BEGIN (*JsonMissingEnds*)
+			J.StartObject;
+			J.PushString("Missing_Membership_Limits");
+			J.BuildField("description");
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			time := B.Now();
+			J.PushInteger(time);
+			J.BuildField("date_integer");
+			BA.TimestampToString(time, ss);
+			J.PushString(ss + " (UTC+0)");
+			J.BuildField("date_string");
+			J.StartArray;
+			ms := MissingEnds();
+			m := LEN(ms);
+			FOR i := 0 TO m - 1 DO
+				J.StartObject;
+				J.PushInteger(ms[i].exp);
+				J.BuildField("limit_integer");
+				J.PushString(ms[i].expS);
+				J.BuildField("limit_string");
+				J.PushString(ms[i].id);
+				J.BuildField("uid");
+				J.BuildObject;
+			END;
+			J.BuildArray;
+			J.BuildField("limits");
+			J.BuildObject;
+			RETURN J.GetJson();
+		END JsonMissingEnds;
+	
+	PROCEDURE JsonMissingEndsText (): TextViews.View;
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*JsonMissingEndsText*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			JsonMissingEnds().Write(f);
+			RETURN TextViews.dir.New(t);
+		END JsonMissingEndsText;
+	
+	PROCEDURE JsonMissingEndsPrint*;
+		
+		VAR
+			
+			s: Views.Title;
+		
+		BEGIN (*JsonMissingEndsPrint*)
+			Dialog.MapString("#Duniter0:LimitsMissing", s);
+			Views.OpenAux(JsonMissingEndsText(), s);
+		END JsonMissingEndsPrint;
+	
+	PROCEDURE PrintCertifsEnds*;
+		
+		VAR
+			
+			ms: Memberships;
+			i, j, m, l: INTEGER;
+			time: LONGINT;
+			s: Views.Title;
+			ss: BA.DateTime;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*PrintCertifsEnds*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			Dialog.MapString("#Duniter0:LimitsC", s);
+			f.WriteString(s);
+			f.WriteLn; f.WriteLn;
+			time := B.Now();
+			BA.TimestampToString(time, ss);
+			l := LEN(ss$);
+			f.WriteString(ss);
+			f.WriteString(" (UTC+0)");
+			f.WriteLn; f.WriteLn;
+			time := Services.Ticks();
+			ms := CertifsEnds();
+			L.Int(Services.Ticks() - time);
+			L.Ln;
+			m := LEN(ms);
+			FOR i := 0 TO m - 1 DO
+				f.WriteString('    ');
+				f.WriteString(ms[i].expS);
+				FOR j := LEN(ms[i].expS$) TO l DO
+					f.WriteString(" ");
+				END;
+				f.WriteString('    ');
+				f.WriteString(ms[i].id);
+				f.WriteString('    (');
+				f.WriteString(ms[i](CertifEnd).criticalCertifier);
+				f.WriteString(")");
+				f.WriteLn;
+			END;
+			Views.OpenAux(TextViews.dir.New(t), s);
+		END PrintCertifsEnds;
+	
+	PROCEDURE JsonCertifsEnds (): J.Json;
+		
+		VAR
+			
+			ms: Memberships;
+			i, m: INTEGER;
+			time: LONGINT;
+			ss: BA.DateTime;
+		
+		BEGIN (*JsonCertifsEnds*)
+			J.StartObject;
+			J.PushString("Certifications_Limits");
+			J.BuildField("description");
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			time := B.Now();
+			J.PushInteger(time);
+			J.BuildField("date_integer");
+			BA.TimestampToString(time, ss);
+			J.PushString(ss + " (UTC+0)");
+			J.BuildField("date_string");
+			J.StartArray;
+			ms := CertifsEnds();
+			m := LEN(ms);
+			FOR i := 0 TO m - 1 DO
+				J.StartObject;
+				J.PushInteger(ms[i].exp);
+				J.BuildField("limit_integer");
+				J.PushString(ms[i].expS);
+				J.BuildField("limit_string");
+				J.PushString(ms[i].id);
+				J.BuildField("uid");
+				J.PushString(ms[i](CertifEnd).criticalCertifier);
+				J.BuildField("critical_certifier");
+				J.BuildObject;
+			END;
+			J.BuildArray;
+			J.BuildField("limits");
+			J.BuildObject;
+			RETURN J.GetJson();
+		END JsonCertifsEnds;
+	
+	PROCEDURE JsonCertifsEndsText (): TextViews.View;
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*JsonCertifsEndsText*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			JsonCertifsEnds().Write(f);
+			RETURN TextViews.dir.New(t);
+		END JsonCertifsEndsText;
+	
+	PROCEDURE JsonCertifsEndsPrint*;
+		
+		VAR
+			
+			s: Views.Title;
+		
+		BEGIN (*JsonCertifsEndsPrint*)
+			Dialog.MapString("#Duniter0:LimitsC", s);
+			Views.OpenAux(JsonCertifsEndsText(), s);
+		END JsonCertifsEndsPrint;
 	
 	END Duniter0Events.
 
-Duniter0Events.Print;
+Duniter0Events.PrintMembershipsEnds;
 
-Duniter0Events.JsonPrint;
+Duniter0Events.JsonMembershipsEndsPrint;
+
+Duniter0Events.PrintMissingEnds;
+
+Duniter0Events.JsonMissingEndsPrint;
+
+Duniter0Events.PrintCertifsEnds;
+
+Duniter0Events.JsonCertifsEndsPrint;

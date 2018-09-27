@@ -20,7 +20,7 @@ MODULE Duniter0IdentitySearch;
 		L := StdLog,
 		*)
 		
-		A := UtilAvlTree, B := Duniter0Blockchain, Dialog, S := Duniter0Sandbox, BA := Duniter0Basic, C := Duniter0CentralitiesStressD, Strings;
+		A := UtilAvlTree, B := Duniter0Blockchain, Dialog, S := Duniter0Sandbox, BA := Duniter0Basic, C := Duniter0CentralitiesStressD, Fonts, Ports, Strings, TextMappers, TextModels, TextViews, UtilSort, Views;
 	
 	CONST
 		
@@ -52,6 +52,12 @@ MODULE Duniter0IdentitySearch;
 		END;
 		
 		RingEl = POINTER TO RECORD (Ring)
+		END;
+		
+		ExpSort = RECORD (UtilSort.T)
+			ids: POINTER TO ARRAY OF Dialog.String;
+			dates: POINTER TO ARRAY OF BA.DateTime;
+			exps: POINTER TO ARRAY OF LONGINT;
 		END;
 	
 	VAR
@@ -316,14 +322,13 @@ MODULE Duniter0IdentitySearch;
 			RETURN t;
 		END Find;
 	
-	PROCEDURE GetCDate (IN from, to, toH: ARRAY OF CHAR; OUT date: ARRAY OF CHAR);
+	PROCEDURE GetCDate (IN from, to, toH: ARRAY OF CHAR; OUT exp: LONGINT; OUT date: ARRAY OF CHAR);
 		
 		VAR
 			
 			b, member: BOOLEAN;
 			fromP, toP, p: B.Pubkey;
 			bloc: INTEGER;
-			exp: LONGINT;
 			d: BA.DateTime;
 		
 		BEGIN (*GetCDate*)
@@ -433,7 +438,7 @@ MODULE Duniter0IdentitySearch;
 			ELSE
 				sentCerts.GetItem(sentCerts.index, s);
 				FilterItem(s);
-				GetCDate(identity.fields[0], s, sentHash[sentCerts.index], identity.fields[8]);
+				GetCDate(identity.fields[0], s, sentHash[sentCerts.index], exp, identity.fields[8]);
 			END;
 			identity.fields[9] := identity.fields[8];
 			
@@ -502,7 +507,7 @@ MODULE Duniter0IdentitySearch;
 			ELSE
 				receivedCerts.GetItem(receivedCerts.index, s);
 				FilterItem(s);
-				GetCDate(s, identity.fields[0], receivedHash[receivedCerts.index], identity.fields[6]);
+				GetCDate(s, identity.fields[0], receivedHash[receivedCerts.index], exp, identity.fields[6]);
 			END;
 			identity.fields[7] := identity.fields[6];
 		END Certs;
@@ -871,6 +876,172 @@ MODULE Duniter0IdentitySearch;
 			END;
 		END CopySent;
 	
+	PROCEDURE (VAR e: ExpSort) Less (i, j: INTEGER): BOOLEAN;
+		
+		BEGIN (*Less*)
+			RETURN (e.exps[i] < e.exps[j]) OR (e.exps[i] = e.exps[j]) & (BA.CompP(e.ids[i], e.ids[j]) = BA.lt);
+		END Less;
+	
+	PROCEDURE (VAR e: ExpSort) Swap (i, j: INTEGER);
+		
+		VAR
+			
+			id: Dialog.String;
+			date: BA.DateTime;
+			exp: LONGINT;
+		
+		BEGIN (*Swap*)
+			id := e.ids[i]; e.ids[i] := e.ids[j]; e.ids[j] := id;
+			date := e.dates[i]; e.dates[i] := e.dates[j]; e.dates[j] := date;
+			exp := e.exps[i]; e.exps[i] := e.exps[j]; e.exps[j] := exp;
+		END Swap;
+	
+	PROCEDURE PrintCertifiers*;
+		
+		VAR
+			
+			cert: B.StringArr;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			i, j: INTEGER;
+			item: Dialog.String;
+			title: Views.Title;
+			a: TextModels.Attributes;
+			es: ExpSort;
+		
+		BEGIN (*PrintCertifiers*)
+			IF identity.fields[0] # "" THEN
+				t := TextModels.dir.New();
+				f.ConnectTo(t);
+				f.WriteString(identity.fields[0]);
+				f.WriteLn; f.WriteLn;
+				IF receivedCerts.len > 0 THEN
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter0:PresentCertifiers");
+					f.rider.SetAttr(a);
+					f.WriteString(" ("); f.WriteInt(receivedCertsNb);
+					f.WriteString(" + "); f.WriteInt(receivedCertsFutNb); f.WriteString(")");
+					f.WriteLn; f.WriteLn;
+					NEW(es.ids, receivedCerts.len);
+					NEW(es.dates, receivedCerts.len);
+					NEW(es.exps, receivedCerts.len);
+					FOR i := 0 TO receivedCerts.len - 1 DO
+						receivedCerts.GetItem(i, item);
+						f.WriteString(item); f.WriteLn;
+						es.ids[i] := item;
+						FilterItem(item);
+						GetCDate(item, identity.fields[0], receivedHash[i], es.exps[i], es.dates[i]);
+					END;
+					f.WriteLn;
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter0:SortedByExpDates");
+					f.rider.SetAttr(a);
+					f.WriteLn; f.WriteLn;
+					es.QuickSort(0, receivedCerts.len - 1);
+					j := receivedCerts.len; i := B.pars.sigQty;
+					WHILE (i > 0) & (j > 0) DO
+						DEC(j);
+						IF es.ids[j][0] # futureIcon THEN
+							DEC(i);
+						END;
+					END;
+					IF i > 0 THEN (* Less than B.pars.sigQty certifications : don't display. *)
+						j := - 1;
+					END;
+					FOR i := 0 TO receivedCerts.len - 1 DO
+						IF i = j THEN
+							a := f.rider.attr; f.rider.SetAttr(TextModels.NewColor(f.rider.attr, Ports.red));
+						END;
+						f.WriteString(es.dates[i]); f.WriteTab;
+						f.WriteString(es.ids[i]);
+						IF i = j THEN
+							f.rider.SetAttr(a);
+						END;
+						f.WriteLn;
+					END;
+					f.WriteLn;
+				END;
+				B.AllCertifiers(identity.fields[0], cert);
+				IF cert # NIL THEN
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter0:AllCertifiers");
+					f.rider.SetAttr(a);
+					f.WriteString(" ("); f.WriteInt(LEN(cert)); f.WriteString(")");
+					f.WriteLn; f.WriteLn;
+					FOR i := 0 TO LEN(cert) - 1 DO
+						f.WriteString(cert[i]); f.WriteLn;
+					END;
+				END;
+				Dialog.MapString("#Duniter0:Certifiers", title);
+				Views.OpenAux(TextViews.dir.New(t), title);
+			END;
+		END PrintCertifiers;
+	
+	PROCEDURE PrintCertified*;
+		
+		VAR
+			
+			cert: B.StringArr;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			i: INTEGER;
+			item: Dialog.String;
+			title: Views.Title;
+			a: TextModels.Attributes;
+			es: ExpSort;
+		
+		BEGIN (*PrintCertified*)
+			IF identity.fields[0] # "" THEN
+				t := TextModels.dir.New();
+				f.ConnectTo(t);
+				f.WriteString(identity.fields[0]);
+				f.WriteLn; f.WriteLn;
+				IF sentCerts.len > 0 THEN
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter0:PresentCertified");
+					f.rider.SetAttr(a);
+					f.WriteString(" ("); f.WriteInt(sentCertsNb);
+					f.WriteString(" + "); f.WriteInt(sentCertsFutNb); f.WriteString(")");
+					f.WriteLn; f.WriteLn;
+					NEW(es.ids, sentCerts.len);
+					NEW(es.dates, sentCerts.len);
+					NEW(es.exps, sentCerts.len);
+					FOR i := 0 TO sentCerts.len - 1 DO
+						sentCerts.GetItem(i, item);
+						f.WriteString(item); f.WriteLn;
+						es.ids[i] := item;
+						FilterItem(item);
+						GetCDate(identity.fields[0], item, sentHash[i], es.exps[i], es.dates[i]);
+					END;
+					f.WriteLn;
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter0:SortedByExpDates");
+					f.rider.SetAttr(a);
+					f.WriteLn; f.WriteLn;
+					es.QuickSort(0, sentCerts.len - 1);
+					FOR i := 0 TO sentCerts.len - 1 DO
+						f.WriteString(es.dates[i]); f.WriteTab;
+						f.WriteString(es.ids[i]);
+						f.WriteLn;
+					END;
+					f.WriteLn;
+				END;
+				B.AllCertified(identity.fields[0], cert);
+				IF cert # NIL THEN
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter0:AllCertified");
+					f.rider.SetAttr(a);
+					f.WriteString(" ("); f.WriteInt(LEN(cert)); f.WriteString(")");
+					f.WriteLn; f.WriteLn;
+					FOR i := 0 TO LEN(cert) - 1 DO
+						f.WriteString(cert[i]); f.WriteLn;
+					END;
+				END;
+				Dialog.MapString("#Duniter0:Certified", title);
+				Views.OpenAux(TextViews.dir.New(t), title);
+			END;
+		END PrintCertified;
+	
 	PROCEDURE CopyReceivedGuard* (VAR par: Dialog.Par);
 		
 		BEGIN (*CopyReceivedGuard*)
@@ -882,6 +1053,12 @@ MODULE Duniter0IdentitySearch;
 		BEGIN (*CopySentGuard*)
 			par.disabled := sentCerts.len = 0;
 		END CopySentGuard;
+	
+	PROCEDURE PrintCertGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*PrintCertGuard*)
+			par.disabled := identity.fields[0] = "";
+		END PrintCertGuard;
 	
 	PROCEDURE IdentityListNotifier* (op, from, to: INTEGER);
 		
@@ -907,6 +1084,7 @@ MODULE Duniter0IdentitySearch;
 		VAR
 			
 			s: Dialog.String;
+			exp: LONGINT;
 		
 		BEGIN (*CertsNotifier*)
 			IF op = Dialog.changed THEN
@@ -915,7 +1093,7 @@ MODULE Duniter0IdentitySearch;
 						IF receivedCerts.len > 0 THEN
 							receivedCerts.GetItem(MIN(MAX(receivedCerts.index, 0), receivedCerts.len - 1), s);
 							FilterItem(s);
-							GetCDate(s, identity.fields[0], receivedHash[receivedCerts.index], identity.fields[2 * n]);
+							GetCDate(s, identity.fields[0], receivedHash[receivedCerts.index], exp, identity.fields[2 * n]);
 						ELSE
 							identity.fields[2 * n] := ""
 						END;
@@ -923,7 +1101,7 @@ MODULE Duniter0IdentitySearch;
 						IF sentCerts.len > 0 THEN
 							sentCerts.GetItem(MIN(MAX(sentCerts.index, 0), sentCerts.len - 1), s);
 							FilterItem(s);
-							GetCDate(identity.fields[0], s, sentHash[sentCerts.index], identity.fields[2 * n]);
+							GetCDate(identity.fields[0], s, sentHash[sentCerts.index], exp, identity.fields[2 * n]);
 						ELSE
 							identity.fields[2 * n] := ""
 						END;
