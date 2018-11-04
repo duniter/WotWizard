@@ -94,7 +94,7 @@ MODULE Duniter0Events;
 			i := 0;
 			ok := B.IdNextUidM(TRUE, id);
 			WHILE ok DO
-				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b & mem);
+				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b & mem, 100);
 				NEW(ms.m[i]);
 				ms.m[i].id := id; ms.m[i].exp := exp; BA.TimestampToString(exp, ms.m[i].expS);
 				INC(i);
@@ -120,7 +120,7 @@ MODULE Duniter0Events;
 			i := 0;
 			ok := B.IdNextUid(TRUE, id);
 			WHILE ok DO
-				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b);
+				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b, 100);
 				IF ~mem & (exp # BA.revoked) THEN
 					INC(i);
 				END;
@@ -130,7 +130,7 @@ MODULE Duniter0Events;
 			i := 0;
 			ok := B.IdNextUid(TRUE, id);
 			WHILE ok DO
-				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b);
+				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b, 101);
 				IF ~mem & (exp # BA.revoked) THEN
 					NEW(ms.m[i]);
 					ms.m[i].id := id; ms.m[i].exp := exp; BA.TimestampToString(exp, ms.m[i].expS);
@@ -162,20 +162,20 @@ MODULE Duniter0Events;
 			i := 0;
 			ok := B.IdNextUidM(TRUE, id);
 			WHILE ok DO
-				b := B.IdUid(id, p); ASSERT(b);
+				b := B.IdUid(id, p); ASSERT(b, 100);
 				A.New(cT);
 				ok := B.CertTo(p, pos) & pos.CertNextPos(from, to);
 				WHILE ok DO
 					NEW(c);
-					b := B.IdPub(from, c.from); ASSERT(b);
-					b := B.Cert(from, to, bnb, c.exp); ASSERT(b);
+					b := B.IdPub(from, c.from); ASSERT(b, 101);
+					b := B.Cert(from, to, bnb, c.exp); ASSERT(b, 102);
 					e := c;
-					b := cT.SearchIns(e, n); ASSERT(~b);
+					b := cT.SearchIns(e, n); ASSERT(~b, 103);
 					ok := pos.CertNextPos(from, to);
 				END;
 				NEW(cE);
 				ms.m[i] := cE;
-				cT.Find(cT.NumberOfElems() - B.pars.sigQty + 1, e); ASSERT(e # NIL);
+				cT.Find(cT.NumberOfElems() - B.pars.sigQty + 1, e); ASSERT(e # NIL, 104);
 				WITH e: Certif DO
 					cE.exp := e.exp; cE.criticalCertifier := e.from;
 				END;

@@ -550,7 +550,7 @@ MODULE UtilSets;
 			i.cour := NIL;
 		END Attach;
 	
-		(* On return, min and max contain the first interval of the set s. Returns TRUE if such an interval exists. Usage: ok:= s.First(a, b); WHILE ok DO ... ok:= s.Next(a, b) END; *)
+	(* On return, min and max contain the first interval of the set attached to i. Returns TRUE if such an interval exists. Usage: ok:= i.First(a, b); WHILE ok DO ... ok:= i.Next(a, b) END; *)
 	PROCEDURE (VAR i: SetIterator) First* (OUT min, max: INTEGER): BOOLEAN, NEW;
 		
 		BEGIN (*First*)
@@ -565,7 +565,7 @@ MODULE UtilSets;
 			RETURN TRUE;
 		END First;
 	
-		(* On return, min and max contain the next interval of the set s. Returns TRUE if such an interval exists. s.First must have been called once before s.Next. Usage: ok:= s.First(a, b); WHILE ok DO ... ok:= s.Next(a, b) END; *)
+	(* On return, min and max contain the next interval of the set attached to i. Returns TRUE if such an interval exists. i.First must have been called once before i.Next. Usage: ok:= i.First(a, b); WHILE ok DO ... ok:= i.Next(a, b) END; *)
 	PROCEDURE (VAR i: SetIterator) Next* (OUT min, max: INTEGER): BOOLEAN, NEW;
 		
 		BEGIN (*Next*)
@@ -582,6 +582,7 @@ MODULE UtilSets;
 			RETURN TRUE;
 		END Next;
 	
+	(* On return, e contains the first element of the set attached to i. Returns TRUE if such an element exists. Usage: ok:= i.FirstE(e); WHILE ok DO ... ok:= i.NextE(e) END; *)
 	PROCEDURE (VAR i: SetIterator) FirstE* (OUT e: INTEGER): BOOLEAN, NEW;
 		
 		BEGIN (*FirstE*)
@@ -596,6 +597,7 @@ MODULE UtilSets;
 			RETURN TRUE;
 		END FirstE;
 	
+	(* On return, e contains the next element of the set attached to i. Returns TRUE if such an element exists. i.FirstE must have been called once before i.NextE. Usage: ok:= i.FirstE(e); WHILE ok DO ... ok:= i.NextE(e) END; *)
 	PROCEDURE (VAR i: SetIterator) NextE* (OUT e: INTEGER): BOOLEAN, NEW;
 		
 		VAR

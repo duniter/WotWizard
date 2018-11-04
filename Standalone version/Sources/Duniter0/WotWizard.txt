@@ -988,7 +988,7 @@ MODULE Duniter0WotWizard;
 			dNb := 0;
 			ok := S.IdNextHash(TRUE, toHash);
 			WHILE ok DO
-				b := S.IdHash(toHash, to, uid, exp); ASSERT(b);
+				b := S.IdHash(toHash, to, uid, exp); ASSERT(b, 100);
 				b := B.IdPub(to, uid1); bb := B.IdUid(uid, to);
 				IF ~b & ~bb OR b & (uid$ = uid1$) & B.IdPubComplete(to, uid, b, h, bnb, exp) & (exp < 0) & (exp # BA.revoked) (* missing *) THEN
 					nbCertifs := 0; certs := NIL;
@@ -997,7 +997,7 @@ MODULE Duniter0WotWizard;
 						REPEAT
 							okP := pos.CertNextPos(from, toHash);
 							IF okP THEN
-								b := S.Cert(from, toHash, to, exp) ; ASSERT(b, 100);
+								b := S.Cert(from, toHash, to, exp) ; ASSERT(b, 101);
 								FixCertNextDate(from, date);
 								IF date <= exp THEN (* Not-expired certification *)
 									INC(nbCertifs);
@@ -1017,21 +1017,21 @@ MODULE Duniter0WotWizard;
 						END;
 						d.princCertif := princCertif;
 						d.proportionOfSentries := proportionOfSentries;
-						b := S.IdHash(toHash, d.pub, d.id, d.limit); ASSERT(b, 101);
+						b := S.IdHash(toHash, d.pub, d.id, d.limit); ASSERT(b, 102);
 						IF nbCertifs = 0 THEN
 							d.certifs := NIL;
 						ELSE
 							NEW(d.certifs, nbCertifs);
 							j := 0;
 							pos := posI;
-							okP := pos.CertNextPos(from, toHash); ASSERT(okP, 102);
+							okP := pos.CertNextPos(from, toHash); ASSERT(okP, 103);
 							REPEAT
-								b := S.Cert(from, toHash, to, exp); ASSERT(b, 103);
+								b := S.Cert(from, toHash, to, exp); ASSERT(b, 104);
 								FixCertNextDate(from, date);
 								IF date <= exp THEN
 									NEW(c); NEW(c.fromP);
 									c.fromP^ := from;
-									b := B.IdPub(from, c.from); ASSERT(b, 104);
+									b := B.IdPub(from, c.from); ASSERT(b, 105);
 									c.date := date;
 									c.limit := exp;
 									d.certifs[j] := c;
@@ -1052,13 +1052,13 @@ MODULE Duniter0WotWizard;
 						IF B.IdPubComplete(to, uid, b, h, bnb, t) & b THEN
 							NEW(c); NEW(c.fromP);
 							c.fromP^ := from;
-							b := B.IdPub(from, c.from); ASSERT(b, 105);
+							b := B.IdPub(from, c.from); ASSERT(b, 106);
 							c.to := uid;
 							FixCertNextDate(from, c.date);
 							c.limit := exp;
 							(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite ; peut-être inutile maintenant *)
 							mt := 0;
-							b := B.TimeOf(B.LastBlock() - 1, mt, t); ASSERT(b OR (B.LastBlock() = 0), 106);
+							b := B.TimeOf(B.LastBlock() - 1, mt, t); ASSERT(b OR (B.LastBlock() = 0), 107);
 							IF (c.date <= c.limit) & (c.date > mt) THEN
 								INC(cNb);
 								NEW(l.next); l := l.next;

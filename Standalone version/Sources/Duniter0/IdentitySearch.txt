@@ -241,7 +241,7 @@ MODULE Duniter0IdentitySearch;
 					NEW(idE);
 					idE.uid := uid; idE.hash := hash;
 					e := idE;
-					b := set.SearchIns(e, n); ASSERT(~b);
+					b := set.SearchIns(e, n); ASSERT(~b, 100);
 					IF active THEN
 						INC(nA);
 					ELSE
@@ -251,7 +251,7 @@ MODULE Duniter0IdentitySearch;
 						NEW(idE);
 						idE.uid := uid; idE.hash := hash; idE.future := FALSE; idE.active := active;
 						e := idE;
-						b := t.SearchIns(e, n); ASSERT(~b);
+						b := t.SearchIns(e, n); ASSERT(~b, 101);
 					END;
 					ok := B.IdNextUid(FALSE, uid);
 				END;
@@ -289,13 +289,13 @@ MODULE Duniter0IdentitySearch;
 					NEW(idE);
 					idE.uid := uid; idE.hash := hash;
 					e := idE;
-					b := set.SearchIns(e, n); ASSERT(~b);
+					b := set.SearchIns(e, n); ASSERT(~b, 102);
 					INC(nF);
 					IF identityDispFut THEN
 						NEW(idE);
 						idE.uid := uid; idE.hash := hash; idE.future := TRUE; idE.active := FALSE;
 						e := idE;
-						b := t.SearchIns(e, n); ASSERT(~b);
+						b := t.SearchIns(e, n); ASSERT(~b, 103);
 					END;
 					ok := S.IdNextUid(FALSE, uid, hash);
 				END;
@@ -332,12 +332,12 @@ MODULE Duniter0IdentitySearch;
 			d: BA.DateTime;
 		
 		BEGIN (*GetCDate*)
-			b := B.IdUid(from, fromP); ASSERT(b);
+			b := B.IdUid(from, fromP); ASSERT(b, 100);
 			member := B.IdUid(to, toP);
 			IF member THEN
-				b := B.Cert(fromP, toP, bloc, exp) OR S.Cert(fromP, toH$, p, exp); ASSERT(b);
+				b := B.Cert(fromP, toP, bloc, exp) OR S.Cert(fromP, toH$, p, exp); ASSERT(b, 101);
 			ELSE
-				b := S.Cert(fromP, toH$, p, exp); ASSERT(b);
+				b := S.Cert(fromP, toH$, p, exp); ASSERT(b, 102);
 			END;
 			BA.TimestampToString(exp, d);
 			date := d$;
@@ -393,20 +393,20 @@ MODULE Duniter0IdentitySearch;
 				okB := okB & posB.CertNextPos(from, to);
 				WHILE okB DO
 					NEW(idE);
-					b := B.IdPubComplete(to, idE.uid, m, idE.hash, bnb, exp); ASSERT(b);
+					b := B.IdPubComplete(to, idE.uid, m, idE.hash, bnb, exp); ASSERT(b, 100);
 					idE.future := FALSE;
 					e := idE;
-					b := t.SearchIns(e, n); ASSERT(~b);
+					b := t.SearchIns(e, n); ASSERT(~b, 101);
 					okB := posB.CertNextPos(from, to);
 				END;
 				okS := okS & posS.CertNextPos(from, toH);
 				WHILE okS DO
 					NEW(idE);
 					idE.hash := toH;
-					b := S.Cert(from, toH, to, exp) & (B.IdPubComplete(to, idE.uid, m, idE.hash, bnb, exp) OR S.IdHash(toH, p, idE.uid, exp)); ASSERT(b);
+					b := S.Cert(from, toH, to, exp) & (B.IdPubComplete(to, idE.uid, m, idE.hash, bnb, exp) OR S.IdHash(toH, p, idE.uid, exp)); ASSERT(b, 102);
 					idE.future := TRUE;
 					e := idE;
-					b := t.SearchIns(e, n); ASSERT(~b);
+					b := t.SearchIns(e, n); ASSERT(~b, 103);
 					okS := posS.CertNextPos(from, toH);
 				END;
 				i := 0;
@@ -468,20 +468,20 @@ MODULE Duniter0IdentitySearch;
 			okB := okB & posB.CertNextPos(from, to);
 			WHILE okB DO
 				NEW(idE);
-				b := B.IdPubComplete(from, idE.uid, m, idE.hash, bnb, exp); ASSERT(b);
+				b := B.IdPubComplete(from, idE.uid, m, idE.hash, bnb, exp); ASSERT(b, 104);
 				idE.future := FALSE;
 				e := idE;
-				b := t.SearchIns(e, n); ASSERT(~b);
+				b := t.SearchIns(e, n); ASSERT(~b, 105);
 				okB := posB.CertNextPos(from, to);
 			END;
 			okS := okS & posS.CertNextPos(from, toH);
 			WHILE okS DO
 				NEW(idE);
-				b := B.IdPub(from, idE.uid); ASSERT(b);
+				b := B.IdPub(from, idE.uid); ASSERT(b, 106);
 				idE.hash := toH;
 				idE.future := TRUE;
 				e := idE;
-				b := t.SearchIns(e, n); ASSERT(~b);
+				b := t.SearchIns(e, n); ASSERT(~b, 107);
 				okS := posS.CertNextPos(from, toH);
 			END;
 			i := 0;
@@ -529,10 +529,10 @@ MODULE Duniter0IdentitySearch;
 			member := inBC & m;
 			IF inBC THEN
 				Strings.IntToString(bnb, bloc);
-				b := B.TimeOf(bnb, mt, t); ASSERT(b);
+				b := B.TimeOf(bnb, mt, t); ASSERT(b, 100);
 				BA.TimestampToString(mt, d);
 			ELSE
-				b := S.IdHash(hash, p, uid2, exp); ASSERT(b);
+				b := S.IdHash(hash, p, uid2, exp); ASSERT(b, 101);
 				bloc := "";
 				d := "";
 			END;
@@ -574,7 +574,7 @@ MODULE Duniter0IdentitySearch;
 				receivedCerts.GetItem(j, s);
 				IF (s[0] # futureIcon) OR ~member THEN
 					FilterItem(s);
-					b := B.IdUid(s, certifiers[i]); ASSERT(b);
+					b := B.IdUid(s, certifiers[i]); ASSERT(b, 100);
 					INC(i);
 				END;
 			END;

@@ -1507,7 +1507,7 @@ MODULE Duniter0Blockchain;
 				ind.Next;
 			END;
 			ind.Close;
-			ASSERT(i = LEN(from));
+			ASSERT(i = LEN(from), 60);
 		END AllCertifiers;
 	
 	PROCEDURE AllCertified* (IN from: ARRAY OF CHAR; OUT to: StringArr);
@@ -1541,7 +1541,7 @@ MODULE Duniter0Blockchain;
 				ind.Next;
 			END;
 			ind.Close;
-			ASSERT(i = LEN(to));
+			ASSERT(i = LEN(to), 60);
 		END AllCertified;
 	
 	PROCEDURE IsSentry* (IN pubkey: Pubkey): BOOLEAN;
@@ -1830,13 +1830,13 @@ MODULE Duniter0Blockchain;
 				c1.Next;
 				WHILE c1.PosSet() DO
 					idU2 := c1.CurrentKey()(B.String);
-					b := idUidT.Search(idU2); ASSERT(b);
+					b := idUidT.Search(idU2); ASSERT(b, 100);
 					id2Ref := idUidT.ReadValue();
 					id2 := idMan.ReadData(id2Ref)(Identity);
-					ASSERT(id2.certified # B.bNil);
+					ASSERT(id2.certified # B.bNil, 101);
 					c2 := database.OpenIndex(id2.certified, uidKeyMan, uidKeyFac);
-					b := c2.Erase(idU1); ASSERT(b);
-					b := c2.NumberOfKeys() = 0;
+					b := c2.Erase(idU1); ASSERT(b, 102);
+					b := c2.IsEmpty();
 					c2.Close;
 					IF b THEN
 						database.DeleteIndex(id2.certified); id2.certified := B.bNil;
@@ -1856,13 +1856,13 @@ MODULE Duniter0Blockchain;
 				c1.Next;
 				WHILE c1.PosSet() DO
 					idU2 := c1.CurrentKey()(B.String);
-					b := idUidT.Search(idU2); ASSERT(b);
+					b := idUidT.Search(idU2); ASSERT(b, 103);
 					id2Ref := idUidT.ReadValue();
 					id2 := idMan.ReadData(id2Ref)(Identity);
-					ASSERT(id2.certifiers # B.bNil);
+					ASSERT(id2.certifiers # B.bNil, 104);
 					c2 := database.OpenIndex(id2.certifiers, uidKeyMan, uidKeyFac);
-					b := c2.Erase(idU1); ASSERT(b);
-					b := c2.NumberOfKeys() = 0;
+					b := c2.Erase(idU1); ASSERT(b, 105);
+					b := c2.IsEmpty();
 					c2.Close;
 					IF b THEN
 						database.DeleteIndex(id2.certifiers); id2.certifiers := B.bNil;
@@ -1891,7 +1891,7 @@ Faut vraiment voir l’adhésion comme le fil conducteur, et les certifications 
 .Ce qui se passe en BDD, 2 choses :
     - Etape 1 (bloc n) : la certification expire, si le membre a moins de 5 certifications valides restants celui-ci est marqué comme “à exclure” (champ kick)
     -Etape 2 (bloc n+1) : le membre doit être inscrit dans le champ Excluded du bloc.
-Si le membre retrouve ses cinq certifications, il doit se renvoueler pour revenir. Revenir n’est jamais automatique.
+Si le membre retrouve ses cinq certifications, il doit se renouveler pour revenir. Revenir n’est jamais automatique.
 	*)
 	(* For one block, add joining & leaving identities in joinAndLeaveT and updade identities in idPubT and idUidT; update certFromT & certToT too *)
 	PROCEDURE Identities (withList: BOOLEAN; IN ssJ, ssA, ssL, ssR, ssE, nb: ARRAY OF CHAR; t: S.Table);
@@ -1950,18 +1950,19 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 				IF idPubT.SearchIns(idP) THEN
 					idRef := idPubT.ReadValue();
 					oldId := idMan.ReadData(idRef)(Identity);
-					ASSERT(~oldId.member & (oldId.uid$ = id.uid$) (**)  & (oldId.hash = id.hash)(**), 106);
+					ASSERT(~oldId.member & (oldId.uid$ = id.uid$) & (oldId.hash = id.hash), 106);
 					id.block_number := oldId.block_number;
+					id.certifiers := oldId.certifiers; id.certified := oldId.certified;
 					idMan.WriteData(idRef, id);
-					(**)
+					(* Les deux lignes suivantes sont superflues *)
 					b := idUidT.SearchIns(idU); ASSERT(b, 107);
 					ASSERT(idUidT.ReadValue() = idRef, 108);
-					(**)
 					IF withList THEN
 						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := oldId.expires_on;
 						undoList := undoListMan.WriteAllocateData(idL);
 					END;
 				ELSE
+					id.certifiers := B.bNil; id.certified := B.bNil;
 					idRef := idMan.WriteAllocateData(id);
 					idPubT.WriteValue(idRef);
 					b := idUidT.SearchIns(idU); ASSERT(~b, 109);
@@ -2139,10 +2140,10 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 				NEW(idU);
 				NEW(idP);
 				idP.ref := c.from;
-				b := idPubT.Search(idP); ASSERT(b);
+				b := idPubT.Search(idP); ASSERT(b, 103);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
-				b := IdPub(c.to, idU.c); ASSERT(b);
+				b := IdPub(c.to, idU.c); ASSERT(b, 104);
 				IF id.certified = B.bNil THEN
 					id.certified := database.CreateIndex(0);
 					idMan.WriteData(idRef, id);
@@ -2158,13 +2159,13 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 				END;
 				idP.ref := c.to;
 				ind := database.OpenIndex(v, pubKeyMan, pubKeyFac);
-				b := ind.SearchIns(idP); ASSERT(~b, 103);
+				b := ind.SearchIns(idP); ASSERT(~b, 105);
 				ind.WriteValue(pC);
 				ind.Close;
-				b := idPubT.Search(idP); ASSERT(b);
+				b := idPubT.Search(idP); ASSERT(b, 106);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
-				b := IdPub(c.from, idU.c); ASSERT(b);
+				b := IdPub(c.from, idU.c); ASSERT(b, 107);
 				IF id.certifiers = B.bNil THEN
 					id.certifiers := database.CreateIndex(0);
 					idMan.WriteData(idRef, id);
@@ -2180,11 +2181,11 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 				END;
 				idP.ref := c.from;
 				ind := database.OpenIndex(v, pubKeyMan, pubKeyFac);
-				b := ind.SearchIns(idP); ASSERT(~b, 104);
+				b := ind.SearchIns(idP); ASSERT(~b, 108);
 				ind.WriteValue(pC);
 				ind.Close;
 				NEW(iK); iK.ref := pC;
-				b := certTimeT.SearchIns(iK); ASSERT(~b, 105);
+				b := certTimeT.SearchIns(iK); ASSERT(~b, 109);
 				IF withList THEN
 					NEW(cL); cL.next := undoList; cL.type := certAddList; cL.ref := pC; cL.aux := 0;
 					undoList := undoListMan.WriteAllocateData(cL);
@@ -2210,7 +2211,7 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 			n := certFromT.ReadValue();
 			ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
 			b := ind.Erase(pKTo); ASSERT(b, 101);
-			empty := ind.NumberOfKeys() = 0;
+			empty := ind.IsEmpty();
 			ind.Close;
 			IF empty THEN
 				database.DeleteIndex(n);
@@ -2221,7 +2222,7 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 			n := certToT.ReadValue();
 			ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
 			b := ind.Erase(pKFrom); ASSERT(b, 104);
-			empty := ind.NumberOfKeys() = 0;
+			empty := ind.IsEmpty();
 			ind.Close;
 			IF empty THEN
 				database.DeleteIndex(n);
@@ -2362,15 +2363,15 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 						idMan.WriteData(l.ref, id);
 						DEC(idLenM);
 						NEW(p); p.ref := id.pubkey;
-						b := joinAndLeaveT.Search(p); ASSERT(b, 105);
+						b := joinAndLeaveT.Search(p); ASSERT(b, 103);
 						jlRef := joinAndLeaveT.ReadValue();
 						jl := joinAndLeaveMan.ReadData(jlRef)(JoinAndLeave);
 						jlLRef := jl.list;
 						jlL := joinAndLeaveLMan.ReadData(jlLRef)(JoinAndLeaveL);
-						ASSERT(jlL.leavingBlock = hasNotLeaved, 106);
+						ASSERT(jlL.leavingBlock = hasNotLeaved, 104);
 						IF jlL.next = B.bNil THEN
 							joinAndLeaveMan.EraseData(jlRef);
-							b := joinAndLeaveT.Erase(p); ASSERT(b, 107);
+							b := joinAndLeaveT.Erase(p); ASSERT(b, 105);
 						ELSE
 							jl.list := jlL.next;
 							joinAndLeaveMan.WriteData(jlRef, jl);
@@ -2388,48 +2389,48 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 						idMan.WriteData(l.ref, id);
 						INC(idLenM);
 						NEW(p); p.ref := id.pubkey;
-						b := joinAndLeaveT.Search(p); ASSERT(b, 108);
+						b := joinAndLeaveT.Search(p); ASSERT(b, 106);
 						jlRef := joinAndLeaveT.ReadValue();
 						jl := joinAndLeaveMan.ReadData(jlRef)(JoinAndLeave);
 						jlL := joinAndLeaveLMan.ReadData(jl.list)(JoinAndLeaveL);
-						ASSERT(jlL.leavingBlock # hasNotLeaved, 109);
+						ASSERT(jlL.leavingBlock # hasNotLeaved, 107);
 						jlL.leavingBlock := hasNotLeaved;
 						joinAndLeaveLMan.WriteData(jl.list, jlL);
 					|idAddTimeList:
 						NEW(li); li.ref := l.ref;
-						b := idTimeT.Erase(li); ASSERT(b, 110);
+						b := idTimeT.Erase(li); ASSERT(b, 108);
 					|idRemoveTimeList:
 						NEW(li); li.ref := l.ref;
-						b := idTimeT.SearchIns(li); ASSERT(~b, 111);
+						b := idTimeT.SearchIns(li); ASSERT(~b, 109);
 					|certAddList:
 						(* Erase the keys corresponding to the certification pointed by l.ref in certFromT and certToT *)
 						c := certMan.ReadData(l.ref)(Certification);
 						RemoveCert(c);
 						NEW(li); li.ref := l.ref;
-						b := certTimeT.Erase(li); ASSERT(b, 112);
+						b := certTimeT.Erase(li); ASSERT(b, 110);
 						NEW(u);
 						NEW(p);
 						p.ref := c.from;
-						b := idPubT.Search(p); ASSERT(b);
+						b := idPubT.Search(p); ASSERT(b, 111);
 						idRef := idPubT.ReadValue();
 						id := idMan.ReadData(idRef)(Identity);
-						b := IdPub(c.to, u.c); ASSERT(b);
+						b := IdPub(c.to, u.c); ASSERT(b, 112);
 						ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
-						b := ind.Erase(u); ASSERT(b);
-						b := ind.NumberOfKeys() = 0;
+						b := ind.Erase(u); ASSERT(b, 113);
+						b := ind.IsEmpty();
 						ind.Close;
 						IF b THEN
 							database.DeleteIndex(id.certified); id.certified := B.bNil;
 							idMan.WriteData(idRef, id);
 						END;
 						p.ref := c.to;
-						b := idPubT.Search(p); ASSERT(b);
+						b := idPubT.Search(p); ASSERT(b, 114);
 						idRef := idPubT.ReadValue();
 						id := idMan.ReadData(idRef)(Identity);
-						b := IdPub(c.from, u.c); ASSERT(b);
+						b := IdPub(c.from, u.c); ASSERT(b, 115);
 						ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
-						b := ind.Erase(u); ASSERT(b);
-						b := ind.NumberOfKeys() = 0;
+						b := ind.Erase(u); ASSERT(b, 116);
+						b := ind.IsEmpty();
 						ind.Close;
 						IF b THEN
 							database.DeleteIndex(id.certifiers); id.certifiers := B.bNil;
@@ -2449,7 +2450,7 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 						END;
 						p.ref := c.to;
 						ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
-						b := ind.SearchIns(p); ASSERT(~b, 113);
+						b := ind.SearchIns(p); ASSERT(~b, 117);
 						ind.WriteValue(l.ref);
 						ind.Close;
 						IF certToT.SearchIns(p) THEN
@@ -2460,11 +2461,11 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 						END;
 						p.ref := c.from;
 						ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
-						b := ind.SearchIns(p); ASSERT(~b, 114);
+						b := ind.SearchIns(p); ASSERT(~b, 118);
 						ind.WriteValue(l.ref);
 						ind.Close;
 						NEW(li); li.ref := l.ref;
-						b := certTimeT.SearchIns(li); ASSERT(~b, 115);
+						b := certTimeT.SearchIns(li); ASSERT(~b, 119);
 					|remCertifiers:
 						id := idMan.ReadData(l.aux)(Identity);
 						NEW(u); u.c := id.uid;
@@ -2474,7 +2475,7 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 							idMan.WriteData(l.ref, id);
 						END;
 						ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
-						b := ind.SearchIns(u); ASSERT(~b);
+						b := ind.SearchIns(u); ASSERT(~b, 120);
 						ind.Close;
 					|remCertified:
 						id := idMan.ReadData(l.aux)(Identity);
@@ -2485,7 +2486,7 @@ Si le membre retrouve ses cinq certifications, il doit se renvoueler pour reveni
 							idMan.WriteData(l.ref, id);
 						END;
 						ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
-						b := ind.SearchIns(u); ASSERT(~b);
+						b := ind.SearchIns(u); ASSERT(~b, 121);
 						ind.Close;
 				END;
 				undoListMan.EraseData(undoList);

@@ -49,11 +49,15 @@ MODULE UtilBTree2;
 	
 	TYPE
 		
+		FilePos* = LONGINT;
+		
 		Bytes* = POINTER TO ARRAY OF BYTE;
 		
-		Factory* = POINTER TO ABSTRACT RECORD (* Factory for files and databases. *)
+		(* Factory for files and databases. *)
+		Factory* = POINTER TO ABSTRACT RECORD
 		END;
 		
+		(* File management *)
 		File* = POINTER TO ABSTRACT RECORD
 		END;
 		
@@ -61,7 +65,7 @@ MODULE UtilBTree2;
 			ref: File; (* File containing the database. *)
 			root, (* Root of the leftist tree of free clusters. *)
 			end-, (* Length of file, or at least its used part. *)
-			writtenLim, (* Position following the last cluster actually written on disk *)
+			writtenLim: FilePos; (* Position following the last cluster actually written on disk *)
 			max: LONGINT; (* Size of the largest free cluster. *)
 			placeNb-, (* Number of fixed places in database. *)
 			pageNb: INTEGER; (* Number of allocated pages. *)
@@ -74,57 +78,69 @@ MODULE UtilBTree2;
 			f: DataFac; (* Factory of keys *)
 		END;
 		
-		String* = POINTER TO EXTENSIBLE RECORD (Data) (* String, a kind of data. *)
+		(* String, a kind of data. *)
+		String* = POINTER TO EXTENSIBLE RECORD (Data)
 			c*: POINTER TO ARRAY OF CHAR;
 		END;
 		
-		StringFac* = POINTER TO EXTENSIBLE RECORD (DataFac) (* Factory of String *)
+		(* Factory of String *)
+		StringFac* = POINTER TO EXTENSIBLE RECORD (DataFac)
 		END;
 		
 		StringKeyManager* = POINTER TO EXTENSIBLE RECORD (KeyManager) (* Key manager for String. *)
 		END;
 		
-		IndexPos* = POINTER TO LIMITED RECORD (* Store a position in an index *)
-			posI: LONGINT;
+		(* Store a position in an index *)
+		IndexPos* = POINTER TO LIMITED RECORD
+			posI: FilePos;
 		END;
 		
-		Index* = POINTER TO LIMITED RECORD (* Index, structured as a btree. *)
+		(* Index, structured as a btree. *)
+		Index* = POINTER TO LIMITED RECORD
 			nextI, prevI: Index; (* Ring (Database.indRing) of indexes *)
 			baseI: Database; (* Database owning the index *)
 			manager: KeyManager; (* Key manager of index *)
 			refI, (* Reference of the index in its database *)
 			rootI, (* Root of btree *)
 			stringI, (* Doubly linked ring of keys and associated datas (see StringI) *)
-			posI: LONGINT; (* Current position in index *)
+			posI: FilePos; (* Current position in index *)
 			keySize, (* Size of a key *)
 			keysSize, (* Size reserved for the concatenation of all key prefixes in btree pages *)
 			height, (* Height of btree *)
 			size: INTEGER; (* Number of keys *)
 		END;
+		
+		(* Result of a comparaison *)
+		Comp* = BYTE;
 	
 	CONST
 		
-		(* Result of a comparaison. *)
+		(* Comp; result of a comparaison. *)
 		lt* = -1; (* Less than. *)
 		eq* = 0; (* Equal. *)
 		gt* = + 1; (* Greater than. *)
 		
-		guard1 = 1548793025; (* "Proofs" of base and index *)
+		(* "Proofs" of base and index *)
+		guard1 = 1548793025;
 		guard2 = 2015876309;
 	
 	TYPE
 		
-		ClusterHead = POINTER TO ABSTRACT RECORD (Data) (* Header of a cluster. *)
+		(* Header of a cluster. *)
+		ClusterHead = POINTER TO ABSTRACT RECORD (Data)
 			size: LONGINT; (* Size of the used part for reserved clusters, total size for free ones *)
 		END;
 		
-		RClusterHead = POINTER TO RECORD (ClusterHead) (* Header of a reserved cluster. *)
+		(* Header of a reserved cluster. *)
+		RClusterHead = POINTER TO RECORD (ClusterHead)
 		END;
 		
-		RClusterHeadFac = POINTER TO RECORD (DataFac) (* Factory of RClusterHead *)
+		(* Factory of RClusterHead *)
+		RClusterHeadFac = POINTER TO RECORD (DataFac)
 		END;
 		
-		FClusterHead = POINTER TO RECORD (ClusterHead) (* Header of a free cluster. *)
+		(* Header of a free cluster. *)
+		FClusterHead = POINTER TO RECORD (ClusterHead)
 			(* Structure of leftist tree. Cf. Knuth, The art of computer programming, vol. 3, ch. 5.2.3 and exercises 32 & 35. *)
 			(* For any p: FClusterHead,
 				p.size >= p.left.size, p.size >= p.right.size (priority queue: the root has the biggest size),
@@ -134,28 +150,34 @@ MODULE UtilBTree2;
 				p.father = bNil (root) or p = p.father.left or p = p.father.right *)
 			father,
 			left,
-			right: LONGINT;
+			right: FilePos;
 			lDist,
 			rDist: BYTE;
 		END;
 		
-		FClusterHeadFac = POINTER TO RECORD (DataFac) (* Factory of FClusterHead *)
+		(* Factory of FClusterHead *)
+		FClusterHeadFac = POINTER TO RECORD (DataFac)
 		END;
 		
-		ClusterTail = POINTER TO ABSTRACT RECORD (Data) (* Tail of a cluster. Pointers to ClusterTail on disk point to its last field, i.e. the free / reserved boolean *)
+		(* Tail of a cluster. Pointers to ClusterTail on disk point to its last field, i.e. the free / reserved boolean *)
+		ClusterTail = POINTER TO ABSTRACT RECORD (Data)
 		END;
 		
-		RClusterTail = POINTER TO RECORD (ClusterTail) (* Tail of a reserved cluster. *)
+		(* Tail of a reserved cluster. *)
+		RClusterTail = POINTER TO RECORD (ClusterTail)
 		END;
 		
-		RClusterTailFac = POINTER TO RECORD (DataFac) (* Factory of RClusterTail *)
+		(* Factory of RClusterTail *)
+		RClusterTailFac = POINTER TO RECORD (DataFac)
 		END;
 		
-		FClusterTail = POINTER TO RECORD (ClusterTail) (* Tail of a free cluster. *)
-			 size: LONGINT; (* Total size of the cluster. *)
-		 END;
+		(* Tail of a free cluster. *)
+		FClusterTail = POINTER TO RECORD (ClusterTail)
+			size: LONGINT; (* Total size of the cluster. *)
+		END;
 		
-		FClusterTailFac = POINTER TO RECORD (DataFac) (* Factory of FClusterTail *)
+		(* Factory of FClusterTail *)
+		FClusterTailFac = POINTER TO RECORD (DataFac)
 		END;
 	
 	CONST
@@ -169,46 +191,56 @@ MODULE UtilBTree2;
 	
 	TYPE
 		
-		Data* = POINTER TO ABSTRACT RECORD (* Content of a page, used to store data or key. *)
+		(* Content of a page, used to store data or key. *)
+		Data* = POINTER TO ABSTRACT RECORD
 		END;
 		
-		DataFac* = POINTER TO ABSTRACT RECORD (* Factory of Data. *)
+		(* Factory of Data. *)
+		DataFac* = POINTER TO ABSTRACT RECORD
 		END;
 		
-		DataMan* = POINTER TO LIMITED RECORD (* Manager of Data *)
+		(* Manager of Data *)
+		DataMan* = POINTER TO LIMITED RECORD
 			base: Database; (* Database *)
 			fac: DataFac; (* Factory of Data *)
 		END;
 		
-		Page = POINTER TO RECORD (A.Elem) (* Page of buffered data *)
+		(* Page of buffered data *)
+		Page = POINTER TO RECORD (A.Elem)
 			nextP, prevP: Page; (* Ring of pages *)
 			pageP: Data; (* Buffered data *)
-			posP: LONGINT; (* Position of the page in the file *)
-			sizeP: INTEGER; (* Size of the page *)
+			posP: FilePos; (* Position of the page in the file *)
+			sizeP, (* Size of the page *)
+			locked: INTEGER; (* The page is still in use *)
 			dirty: BOOLEAN; (* Dirty data; must be written to the file *)
 		END;
 	
 	CONST
 		
-		sectSize = 200H; (* 512: Standard size of sets of variable length keys *)
+		(* 512 bytes: Standard size of sets of variable length keys *)
+		sectSize = 200H;
 	
 	TYPE
 		
-		Element = RECORD (* Element of a btree page *)
-			ptr: LONGINT; (* Pointer to the son page *)
+		(* Element of a btree page *)
+		Element = RECORD
+			ptr: FilePos; (* Pointer to the son page *)
 			endK: SHORTINT; (* Position of the last byte of the key (or  its prefix) in the field keys of the page *)
 		END;
 	
 	CONST
 		
-		ElemSize = LIS + SIS; (* Size of Element *)
+		(* Size of Element *)
+		ElemSize = LIS + SIS;
 		
-		minEl = (MAX(BYTE) - 1) DIV 2; (* Minimal number of elements in a btree page *)
+		(* Minimal number of elements in a btree page *)
+		minEl = (MAX(BYTE) - 1) DIV 2; (* 63 *)
 	
 	TYPE
 		
-		PageI = POINTER TO RECORD (Data) (* Btree page of an index *)
-			keys: LONGINT; (* Pointer to the concatenation of all key prefixes in the page *)
+		(* Btree page of an index *)
+		PageI = POINTER TO RECORD (Data)
+			keys: FilePos; (* Pointer to the concatenation of all key prefixes in the page *)
 			elNb: BYTE; (* Number of elements *)
 			elems: ARRAY 2 * (minEl + 1) OF Element; (* Elements of the page *)
 			(* p.elems[0].endK = 0,
@@ -216,64 +248,81 @@ MODULE UtilBTree2;
 				p.elems[i].ptr (i > 0) -> (PageI or StringI) corresponding to keys >= the ith key (or prefix) of p (i.e. p.keys[p.elems[i - 1].endK .. p.elems[i].endK]) and < the (i + 1)th prefix, if present *)
 		END;
 		
-		PageIFac = POINTER TO RECORD (DataFac) (* Factory of PageI *)
+		(* Factory of PageI *)
+		PageIFac = POINTER TO RECORD (DataFac)
 		END;
 		
-		Key = Bytes; (* Key in indexes *)
+		(* Key in indexes *)
+		Key = Bytes;
 		
-		KeyCont = POINTER TO RECORD (Data) (* Key as Data *)
+		(* Key as Data *)
+		KeyCont = POINTER TO RECORD (Data)
 			c: Key;
 		END;
 		
-		KeyFac = POINTER TO RECORD (DataFac) (* Factory of KeyCont *)
+		(* Factory of KeyCont *)
+		KeyFac = POINTER TO RECORD (DataFac)
 		END;
 		
-		StringI = POINTER TO RECORD (Data) (* Doubly linked ring of keys and associated datas in indexes *)
+		(* Doubly linked ring of keys and associated datas in indexes *)
+		StringI = POINTER TO RECORD (Data)
 			next, (* Next item *)
 			prev, (* Previous item *)
-			dataPos: LONGINT; (* Pointer to associated data *)
+			dataPos: FilePos; (* Pointer to associated data *)
 			key: Key; (* Key *)
 		END;
 		
-		StringIFac = POINTER TO RECORD (DataFac) (* Factory of StringI *)
+		(* Factory of StringI *)
+		StringIFac = POINTER TO RECORD (DataFac)
 		END;
 		
-		Info = POINTER TO RECORD (Data) (* Root data, on disk, of an index *)
+		(* Root data, on disk, of an index *)
+		Info = POINTER TO RECORD (Data)
 			iRoot, (* Root of btree *)
-			iString: LONGINT; (* Start item of the ring of keys *)
+			iString: FilePos; (* Start item of the ring of keys *)
 			iKSize, (* Size of keys, or 0 for variable length keys *)
 			iH, (* Height of btree *)
 			iSize: INTEGER; (* Number of keys *)
 		END;
 		
-		InfoFac = POINTER TO RECORD (DataFac) (* Factory of Info *)
+		(* Factory of Info *)
+		InfoFac = POINTER TO RECORD (DataFac)
 		END;
 	
 	CONST
 		
-		pageIS = LIS + BYS + 2 * (minEl + 1) * ElemSize; (* Size of PageI on disk *)
-		stringIS = 3 * LIS; (* Size of the fixed part of StringI (without key) on disk. *)
-		infoS = 2 * LIS + 5 * INS; (* Size of Info on disk. *)
+		(* Size of PageI on disk *)
+		pageIS = LIS + BYS + 2 * (minEl + 1) * ElemSize;
+		
+		(* Size of the fixed part of StringI (without key) on disk. *)
+		stringIS = 3 * LIS;
+		
+		(* Size of Info on disk. *)
+		infoS = 2 * LIS + 5 * INS;
 	
 	TYPE
 		
-		Reader* = LIMITED RECORD (* Reader of a byte stream. *)
+		(* Reader of a byte stream. *)
+		Reader* = LIMITED RECORD
 			len-, (* Length of the input stream of the reader. *)
 			pos-: INTEGER; (* Position of the reader in the input stream. *)
 			ref: File; (* Used for real <-> bytes translations. *)
 			s: Bytes; (* Contain the input stream. *)
 		END;
 		
-		Writer* = LIMITED RECORD (* Writer on a byte stream. *)
+		(* Writer on a byte stream. *)
+		Writer* = LIMITED RECORD
 			ref: File; (* Used for real <-> bytes translations. *)
 			s: A.Tree; (* Output stream. *)
 		END;
 		
-		Char = POINTER TO RECORD (A.Elem) (* Element of Writer.s *)
+		(* Element of Writer.s *)
+		Char = POINTER TO RECORD (A.Elem)
 			c: BYTE; (* Written byte *)
 		END;
 		
-		BaseList = POINTER TO RECORD (* List of open databases; used to close bases left open *)
+		(* List of open databases; used to close bases left open *)
+		BaseList = POINTER TO RECORD
 			nextB: BaseList; (* Next open database *)
 			name: POINTER TO ARRAY OF CHAR; (* Name of the base file *)
 			ref: File; (* The base file *)
@@ -296,7 +345,7 @@ MODULE UtilBTree2;
 		bL: BaseList; (* List of open databases *)
 	
 	(* Comparison method. s1 and s2 are the keys to be compared. The result can be lt (s1 < s2), eq (s1 = s2) or gt (s1 > s2). KeyManager.CompP must induce a total order on the set of keys. *)
-	PROCEDURE (man: KeyManager) CompP- (s1, s2: Data): BYTE, NEW, ABSTRACT;
+	PROCEDURE (man: KeyManager) CompP- (s1, s2: Data): Comp, NEW, ABSTRACT;
 	
 	(* Create a prefix of a key. On input key1 and key2 are two keys, with key1 < key2. On output, key2 may be modified, but cannot be enlarged, so that it becomes a prefix of its previous value. A prefix Pref(key1, key2) of  the key key2 in relation to the key key1 is defined by:
 		1) Pref(key1, key2) is a key, which can be compared to other keys by the mean of the method KeyManager.CompP;
@@ -306,7 +355,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 	PROCEDURE (man: KeyManager) PrefP- (key1: Data; VAR key2: Data), NEW, EMPTY;
 	
 	(* Comparison method of two Strings. Use the lexical order. *)
-	PROCEDURE (man: StringKeyManager) CompP- (key1, key2: Data): BYTE, EXTENSIBLE;
+	PROCEDURE (man: StringKeyManager) CompP- (key1, key2: Data): Comp, EXTENSIBLE;
 		
 		VAR
 			
@@ -380,22 +429,22 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 	PROCEDURE (ref: File) Flush-, NEW, EMPTY;
 	
 	(* Set the reading position of the file ref to pos; the firt position is 0. *)
-	PROCEDURE (ref: File) PosReader- (pos: LONGINT), NEW, ABSTRACT;
+	PROCEDURE (ref: File) PosReader- (pos: FilePos), NEW, ABSTRACT;
 	
 	(* Read the array a from the file ref at reading position. *)
 	PROCEDURE (ref: File) Read- (OUT a: ARRAY OF BYTE), NEW, ABSTRACT;
 	
 	(* Set the writing position of the file ref to pos; the first position is 0. *)
-	PROCEDURE (ref: File) PosWriter- (pos: LONGINT), NEW, ABSTRACT;
+	PROCEDURE (ref: File) PosWriter- (pos: FilePos), NEW, ABSTRACT;
 	
 	(* Write the array a to the file ref at writing position. *)
 	PROCEDURE (ref: File) Write- (IN a: ARRAY OF BYTE), NEW, ABSTRACT;
 	
 	(* Return in end the length of the file ref. *)
-	PROCEDURE (ref: File) End- (OUT end: LONGINT), NEW, ABSTRACT;
+	PROCEDURE (ref: File) End- (OUT end: FilePos), NEW, ABSTRACT;
 	
 	(* Truncate the file ref at the length end. *)
-	PROCEDURE (ref: File) Truncate- (end: LONGINT), NEW, ABSTRACT;
+	PROCEDURE (ref: File) Truncate- (end: FilePos), NEW, ABSTRACT;
 	
 	(* Read and return a real from the array a at position pos; put pos at the position following the real. *)
 	PROCEDURE (ref: File) BytesToReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): REAL, NEW, ABSTRACT;
@@ -1211,7 +1260,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END Read;
 	
 	(* Read LEN(a) bytes from position ptr on disk into a *)
-	PROCEDURE (base: Database) ReadBase (ptr: LONGINT; OUT a: ARRAY OF BYTE), NEW;
+	PROCEDURE (base: Database) ReadBase (ptr: FilePos; OUT a: ARRAY OF BYTE), NEW;
 		
 		BEGIN (*ReadBase*)
 			base.ref.PosReader(ptr);
@@ -1219,7 +1268,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END ReadBase;
 	
 	(* Write LEN(a) bytes from a to disk at position ptr *)
-	PROCEDURE (base: Database) WriteBase (ptr: LONGINT; IN a: ARRAY OF BYTE), NEW;
+	PROCEDURE (base: Database) WriteBase (ptr: FilePos; IN a: ARRAY OF BYTE), NEW;
 		
 		BEGIN (*WriteBase*)
 			base.ref.PosWriter(ptr);
@@ -1242,7 +1291,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END Compare;
 	
 	(* Look for the buffer page p at position pos; return true if found *)
-	PROCEDURE (base: Database) FindPage (pos: LONGINT; OUT p: Page): BOOLEAN, NEW;
+	PROCEDURE (base: Database) FindPage (pos: FilePos; OUT p: Page): BOOLEAN, NEW;
 		
 		VAR
 			
@@ -1270,10 +1319,11 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			p.prevP := base.pagesRing;
 			base.pagesRing.nextP.prevP := p;
 			base.pagesRing.nextP := p;
+			INC(p.locked); (* Keep it in RAM *)
 		END PromotePage;
 	
 	(* Create an empty buffer page in ram for position pos and size pageSize on disk; if buffer is already full, remove the least promoted page *)
-	PROCEDURE (base: Database) CreatePage (pageSize: INTEGER; pos: LONGINT): Page, NEW;
+	PROCEDURE (base: Database) CreatePage (pageSize: INTEGER; pos: FilePos): Page, NEW;
 		
 		VAR
 			
@@ -1281,7 +1331,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			q: A.Elem;
 			b: BOOLEAN;
 			n, i: INTEGER;
-			po: LONGINT;
+			po: FilePos;
 			w: Writer;
 			a: ARRAY 1 OF BYTE;
 			aP: Bytes;
@@ -1292,9 +1342,14 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				p.nextP := base.pagesRing.nextP;
 				p.prevP := base.pagesRing;
 				base.pagesRing.nextP.prevP := p;
-				base.pagesRing.nextP := p
+				base.pagesRing.nextP := p;
+				p.locked := 1; (* Keep it in RAM *)
 			ELSE (* No more new page available: recycle an old one, the oldest *)
 				p := base.pagesRing.prevP;
+				WHILE (p # base.pagesRing) & (p.locked > 0) DO (* Don't erase a locked page *)
+					p := p.prevP;
+				END;
+				ASSERT(p # base.pagesRing, 100); (* Not enough pages; increase base.pageNb *)
 				base.PromotePage(p);
 				IF p.dirty THEN (* Page not up to date on disk: write it *)
 					IF p.posP >= base.writtenLim THEN (* Not yet written: write all pages with smaller addresses that are not still written (no hole on disk file) *)
@@ -1359,7 +1414,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END CreatePage;
 	
 	(* Create a new buffer page in ram for position pos and size pageSize (on disk); create a new empty Data in it with the help of fac and return it *)
-	PROCEDURE (base: Database) NewPage (pageSize: INTEGER; fac: DataFac; pos: LONGINT): Data, NEW;
+	PROCEDURE (base: Database) NewPage (pageSize: INTEGER; fac: DataFac; pos: FilePos): Data, NEW;
 		
 		VAR
 			
@@ -1372,7 +1427,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END NewPage;
 	
 	(* Erase buffer page with position pos by removing it from base.pagesRing and base.pages *)
-	PROCEDURE (base: Database) ErasePage (pos: LONGINT), NEW;
+	PROCEDURE (base: Database) ErasePage (pos: FilePos), NEW;
 		
 		VAR
 			
@@ -1389,7 +1444,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END ErasePage;
 	
 	(* Find the buffer page at position pos, or create it empty with size pageSize if not found; promote and return it *)
-	PROCEDURE (base: Database) SelectSysPage (pos: LONGINT; pageSize: INTEGER): Page, NEW;
+	PROCEDURE (base: Database) SelectSysPage (pos: FilePos; pageSize: INTEGER): Page, NEW;
 		
 		VAR
 			
@@ -1405,7 +1460,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END SelectSysPage;
 	
 	(* Find, or create and fill if not found, the buffer page at position pos; creation, if any, is made with size pageSize and the help of fac *)
-	PROCEDURE (base: Database) ReadSysPage (pos: LONGINT; pageSize: INTEGER; fac: DataFac): Data, NEW;
+	PROCEDURE (base: Database) ReadSysPage (pos: FilePos; pageSize: INTEGER; fac: DataFac): Data, NEW;
 		
 		VAR
 			
@@ -1429,7 +1484,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END ReadSysPage;
 	
 	(* Mark the buffer page at position pos for writing on disk; the page must exist and not be empty *)
-	PROCEDURE (base: Database) WritePage (pos: LONGINT), NEW;
+	PROCEDURE (base: Database) WritePage (pos: FilePos), NEW;
 		
 		VAR
 			
@@ -1440,53 +1495,20 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			p.dirty := TRUE;
 		END WritePage;
 	
-	(* Return whether the header at position pos is free or not; return in cont this header *)
-	PROCEDURE (base: Database) FreeHead (pos: LONGINT; OUT cont: ClusterHead): BOOLEAN, NEW;
+	(* Release a locked page when it is no more in use *)
+	PROCEDURE (base: Database) Release (pos: FilePos), NEW;
 		
 		VAR
 			
 			p: Page;
-			b: BOOLEAN;
 		
-		BEGIN (*FreeHead*)
-			IF base.FindPage(pos, p) THEN
-				cont := p.pageP(ClusterHead);
-				RETURN cont IS FClusterHead;
-			ELSE
-				base.ref.PosReader(pos);
-				b := base.ref.ReadBool();
-				IF b THEN
-					cont := base.ReadSysPage(pos, FClusterHeadSize, fCH)(ClusterHead);
-				ELSE
-					cont := base.ReadSysPage(pos, RClusterHeadSize, rCH)(ClusterHead);
-				END;
-				RETURN b;
+		BEGIN (*Release*)
+			IF pos # bNil THEN
+				ASSERT(base.FindPage(pos, p), 100);
+				ASSERT(p.locked > 0, 101);
+				DEC(p.locked);
 			END;
-		END FreeHead;
-	
-	(* Return whether the tail at position pos is free or not; return in cont this tail *)
-	PROCEDURE (base: Database) FreeTail (pos: LONGINT; OUT cont: ClusterTail): BOOLEAN, NEW;
-		
-		VAR
-			
-			p: Page;
-			b: BOOLEAN;
-		
-		BEGIN (*FreeTail*)
-			IF base.FindPage(pos, p) THEN
-				cont := p.pageP(ClusterTail);
-				RETURN cont IS FClusterTail;
-			ELSE
-				base.ref.PosReader(pos);
-				b := base.ref.ReadBool();
-				IF b THEN
-					cont := base.ReadSysPage(pos, FClusterTailSize, fCT)(ClusterTail);
-				ELSE
-					cont := base.ReadSysPage(pos, RClusterTailSize, rCT)(ClusterTail);
-				END;
-				RETURN b;
-			END;
-		END FreeTail;
+		END Release;
 	
 	(* Used by Database.UpdatePages *)
 	PROCEDURE (p: Page) Do (base: ANYPTR);
@@ -1494,7 +1516,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		VAR
 			
 			i: INTEGER;
-			n: LONGINT;
+			n: FilePos;
 			w: Writer;
 			a: ARRAY 1 OF BYTE;
 			aP: Bytes;
@@ -1543,7 +1565,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			IF ~fac.Create(nF) THEN
 				RETURN FALSE;
 			END;
-			ref := fac.Open(nF);
+			ref := fac.Open(nF); ASSERT(ref # NIL, 100);
 			ref.PosWriter(0);
 			ref.WriteInt(guard1); (* First "proof" *)
 			ref.WriteLInt(bNil); (* root *)
@@ -1579,10 +1601,10 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			base.ref.PosReader(0);
 			ASSERT(base.ref.ReadInt() = guard1, 20);
 			base.root := base.ref.ReadLInt();
-			ASSERT(base.ref.ReadInt() = guard2, 20);
+			ASSERT(base.ref.ReadInt() = guard2, 21);
 			base.placeNb := base.ref.ReadInt();
 			base.ref.PosReader((base.placeNb + 1) * LIS + 3 * INS);
-			ASSERT(~base.ref.ReadBool(), 21);
+			ASSERT(~base.ref.ReadBool(), 22);
 			base.ref.PosWriter((base.placeNb + 1) * LIS + 3 * INS);
 			base.ref.WriteBool(TRUE);
 			base.ref.End(base.end);
@@ -1599,6 +1621,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				base.max := 0;
 			ELSE
 				base.max := base.ReadSysPage(base.root, FClusterHeadSize, fCH)(FClusterHead).size;
+				base.Release(base.root);
 			END;
 			RETURN base;
 		END OpenBase;
@@ -1653,7 +1676,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				ref.PosReader(0);
 				ASSERT(ref.ReadInt() = guard1, 20);
 				ref.PosReader(INS + LIS);
-				ASSERT(ref.ReadInt() = guard2, 20);
+				ASSERT(ref.ReadInt() = guard2, 21);
 				placeNb := ref.ReadInt();
 				ref.PosWriter((placeNb + 1) * LIS + 3 * INS);
 				ref.WriteBool(FALSE);
@@ -1689,6 +1712,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			
 			ind: Index;
 			l, ll: BaseList;
+			p: Page;
 		
 		BEGIN (*CloseBase*)
 			ASSERT(base.ref # NIL, 20);
@@ -1696,13 +1720,18 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			WHILE (l # NIL) & (l.ref # base.ref) DO
 				ll := l; l := l.nextB;
 			END;
-			ASSERT(l # NIL, 60);
+			ASSERT(l # NIL, 100);
 			IF ll = NIL THEN
 				bL := l.nextB;
 			ELSE
 				ll.nextB := l.nextB;
 			END;
 			base.UpdatePages;
+			p := base.pagesRing.nextP;
+			WHILE p # base.pagesRing DO
+				ASSERT(p.locked = 0, 101); (* Otherwise, the page was never released *)
+				p := p.nextP;
+			END;
 			base.ref.PosWriter(INS);
 			base.ref.WriteLInt(base.root);
 			base.ref.PosWriter((base.placeNb + 1) * LIS + 3 * INS);
@@ -1720,7 +1749,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END CloseBase;
 	
 	(* Read on disk, and return, the size of the page at position ptr *)
-	PROCEDURE (base: Database) ReadBaseLength (ptr: LONGINT): INTEGER, NEW;
+	PROCEDURE (base: Database) ReadBaseLength (ptr: FilePos): INTEGER, NEW;
 		
 		BEGIN (*ReadBaseLength*)
 			base.ref.PosReader(ptr - LIS); (* Point to the last field (size) of the preceding RClusterHead *)
@@ -1728,12 +1757,13 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END ReadBaseLength;
 	
 	(* Join the two leftist trees of roots pointed by root1 and root2, and returns a pointer to the new root in root. base is the database. dad is a pointer to the father of root. cont1 and cont2 are the roots of the two trees. On return, dist contains the field rDist of the new root plus one. *)
-	PROCEDURE (base: Database) Merge (dad, root1, root2: LONGINT; cont1, cont2: FClusterHead; OUT root: LONGINT; OUT dist: BYTE), NEW;
+	PROCEDURE (base: Database) Merge (dad, root1, root2: FilePos; cont1, cont2: FClusterHead; OUT root: FilePos; OUT dist: BYTE), NEW;
 		
 		VAR
 			
 			cont, oldCont: FClusterHead;
-			tmpA: LONGINT;
+			ptr: FilePos;
+			tmpA: FilePos;
 			tmpB: BYTE;
 		
 		BEGIN (*Merge*)
@@ -1745,7 +1775,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 					dist := cont2.rDist; INC(dist);
 					IF cont2.father # dad THEN
 						cont2.father := dad;
-						base. WritePage(root2);
+						base.WritePage(root2);
 					END;
 				END;
 			ELSIF root2 = bNil THEN
@@ -1753,51 +1783,55 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				dist := cont1.rDist; INC(dist);
 				IF cont1.father # dad THEN
 					cont1.father := dad;
-					base. WritePage(root1);
+					base.WritePage(root1);
 				END;
 			ELSIF (cont1.size > cont2.size) OR (cont1.size = cont2.size) & (root1 < root2) THEN
 				root := root1;
 				NEW(oldCont);
 				oldCont^ := cont1^;
 				cont1.father := dad;
-				IF cont1.right # bNil THEN
-					cont := base.ReadSysPage(cont1.right, FClusterHeadSize, fCH)(FClusterHead);
+				ptr := cont1.right;
+				IF ptr # bNil THEN
+					cont := base.ReadSysPage(ptr, FClusterHeadSize, fCH)(FClusterHead);
 				END;
-				base.Merge(root1, cont1.right, root2, cont, cont2, cont1.right, cont1.rDist);
+				base.Merge(root1, ptr, root2, cont, cont2, cont1.right, cont1.rDist);
+				base.Release(ptr);
 				IF cont1.lDist < cont1.rDist THEN
 					tmpA := cont1.left; cont1.left := cont1.right; cont1.right := tmpA;
 					tmpB := cont1.lDist; cont1.lDist := cont1.rDist; cont1.rDist := tmpB;
 				END;
 				dist := cont1.rDist; INC(dist);
 				IF (cont1.father # oldCont.father) OR (cont1.left # oldCont.left) OR (cont1.right # oldCont.right) OR (cont1.lDist # oldCont.lDist) OR (cont1.rDist # oldCont.rDist) THEN
-					base. WritePage(root1);
+					base.WritePage(root1);
 				END;
 			ELSE
 				root := root2;
 				NEW(oldCont);
 				oldCont^ := cont2^;
 				cont2.father := dad;
-				IF cont2.right # bNil THEN
-					cont := base.ReadSysPage(cont2.right, FClusterHeadSize, fCH)(FClusterHead);
+				ptr := cont2.right;
+				IF ptr # bNil THEN
+					cont := base.ReadSysPage(ptr, FClusterHeadSize, fCH)(FClusterHead);
 				END;
-				base.Merge(root2, root1, cont2.right, cont1, cont, cont2.right, cont2.rDist);
+				base.Merge(root2, root1, ptr, cont1, cont, cont2.right, cont2.rDist);
+				base.Release(ptr);
 				IF cont2.lDist < cont2.rDist THEN
 					tmpA := cont2.left; cont2.left := cont2.right; cont2.right := tmpA;
 					tmpB := cont2.lDist; cont2.lDist := cont2.rDist; cont2.rDist := tmpB;
 				END;
 				dist := cont2.rDist; INC(dist);
 				IF (cont2.father # oldCont.father) OR (cont2.left # oldCont.left) OR (cont2.right # oldCont.right) OR (cont2.lDist # oldCont.lDist) OR (cont2.rDist # oldCont.rDist) THEN
-					base. WritePage(root2);
+					base.WritePage(root2);
 				END;
 			END;
 		END Merge;
 	
 	(* Insert the free header cluster cont, pointed by ptr, in the leftist tree of root pointed by root. If the root is modified, root points to the new one. base is the database. If the size of the greatest cluster is modified, max returns the new value. *)
-	PROCEDURE (base: Database) BaseInsertFree (ptr: LONGINT; cont: FClusterHead; VAR root, max: LONGINT), NEW;
+	PROCEDURE (base: Database) BaseInsertFree (ptr: FilePos; cont: FClusterHead; VAR root: FilePos; VAR max: LONGINT), NEW;
 		
 		VAR
 			
-			oldRoot: LONGINT;
+			oldRoot: FilePos;
 			dist: BYTE;
 			cont2: FClusterHead;
 		
@@ -1810,24 +1844,27 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			oldRoot := root;
 			IF root = bNil THEN
 				base.WritePage(ptr);
+				cont2 := NIL;
 			ELSE
 				cont2 := base.ReadSysPage(root, FClusterHeadSize, fCH)(FClusterHead);
 			END;
 			base.Merge(bNil, root, ptr, cont2, cont, root, dist);
+			base.Release(oldRoot);
 			IF root = ptr THEN
 				max := cont.size;
 			ELSIF root # oldRoot THEN
 				max := base.ReadSysPage(root, FClusterHeadSize, fCH)(FClusterHead).size;
+				base.Release(root);
 			END;
 		END BaseInsertFree;
 	
 	(* Remove the free header cluster cont, pointed by ptr, from the leftist tree of root root. If the root is modified, root points to the new one. base is the database. If the size of the greatest cluster is modified, max returns the new value. *)
-	PROCEDURE (base: Database) BaseRemoveFree (ptr: LONGINT; cont: FClusterHead; VAR root, max: LONGINT), NEW;
+	PROCEDURE (base: Database) BaseRemoveFree (ptr: FilePos; cont: FClusterHead; VAR root: FilePos; VAR max: LONGINT), NEW;
 		
 		VAR
 			
 			lCont, rCont: FClusterHead;
-			child, nPtr, dad: LONGINT;
+			child, nPtr, dad: FilePos;
 			dist, oldDist, newDist: BYTE;
 		
 		BEGIN (*BaseRemoveFree*)
@@ -1838,6 +1875,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				rCont := base.ReadSysPage(cont.right, FClusterHeadSize, fCH)(FClusterHead);
 			END;
 			base.Merge(cont.father, cont.left, cont.right, lCont, rCont, child, dist);
+			base.Release(cont.left); base.Release(cont.right);
 			nPtr := cont.father;
 			IF nPtr = bNil THEN
 				root := child;
@@ -1846,18 +1884,19 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				ELSE
 					cont := base.ReadSysPage(root, FClusterHeadSize, fCH)(FClusterHead);
 					max := cont.size;
+					base.Release(root);
 				END;
 			ELSE
+				cont := base.ReadSysPage(nPtr, FClusterHeadSize, fCH)(FClusterHead);
+				oldDist := cont.rDist;
+				IF cont.left = ptr THEN
+					cont.left := child;
+					cont.lDist := dist;
+				ELSE ASSERT(cont.right = ptr, 60);
+					cont.right := child;
+					cont.rDist := dist;
+				END;
 				LOOP
-					cont := base.ReadSysPage(nPtr, FClusterHeadSize, fCH)(FClusterHead);
-					oldDist := cont.rDist;
-					IF cont.left = ptr THEN
-						cont.left := child;
-						cont.lDist := dist;
-					ELSE ASSERT(cont.right = ptr, 60);
-						cont.right := child;
-						cont.rDist := dist;
-					END;
 					IF cont.rDist > cont.lDist THEN
 						child := cont.left; cont.left := cont.right; cont.right := child;
 						dist := cont.lDist; cont.lDist := cont.rDist; cont.rDist := dist;
@@ -1865,26 +1904,28 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 					newDist := cont.rDist;
 					dad := cont.father;
 					base.WritePage(nPtr);
+					base.Release(nPtr);
 					IF newDist = oldDist THEN
 						EXIT;
 					END;
 					dist := newDist; INC(dist);
-					ptr := nPtr;
-					child := nPtr;
 					nPtr := dad;
 					IF nPtr = bNil THEN
 						EXIT;
 					END;
+					cont := base.ReadSysPage(nPtr, FClusterHeadSize, fCH)(FClusterHead);
+					oldDist := cont.rDist;
 				END;
 			END;
 		END BaseRemoveFree;
 	
 	(* Reserve a page of size size on disk in base and return its position *)
-	PROCEDURE (base: Database) AllocateBase (size: INTEGER): LONGINT, NEW;
+	PROCEDURE (base: Database) AllocateBase (size: INTEGER): FilePos, NEW;
 		
 		VAR
 			
-			sz, szRest, ptr: LONGINT;
+			sz, szRest: LONGINT;
+			ptr: FilePos;
 			cont: FClusterHead;
 			contT: FClusterTail;
 			contHR: RClusterHead;
@@ -1902,31 +1943,36 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				base.BaseRemoveFree(ptr, cont, base.root, base.max);
 				base.ErasePage(ptr);
 				IF szRest = 0 THEN
-					base.ErasePage(ptr + sz - 1);
+					base.ErasePage(ptr + sz - 1); (* FClusterTail *)
 				ELSE
 					contT := base.ReadSysPage(ptr + sz + szRest - 1, FClusterTailSize, fCT)(FClusterTail);
 					contT.size := szRest;
 					base.WritePage(ptr + sz + szRest - 1);
+					base.Release(ptr + sz + szRest - 1);
 					cont := base.NewPage(FClusterHeadSize, fCH, ptr + sz)(FClusterHead);
 					cont.size := szRest;
 					base.BaseInsertFree(ptr + sz, cont, base.root, base.max);
+					base.Release(ptr + sz);
 				END;
 			END;
 			contHR := base.NewPage(RClusterHeadSize, rCH, ptr)(RClusterHead);
 			contHR.size := size;
 			base.WritePage(ptr);
+			base.Release(ptr);
 			contTR := base.NewPage(RClusterTailSize, rCT, ptr + sz - 1)(RClusterTail);
 			base.WritePage(ptr + sz - 1);
+			base.Release(ptr + sz - 1);
 			INC(ptr, RClusterHeadSize);
 			RETURN ptr;
 		END AllocateBase;
 	
 	(* Return the reserved cluster at position ptr to the pool of free clusters on disk; aggregate adjacent free clusters into bigger ones; truncate the base file if possible *)
-	PROCEDURE (base: Database) DeleteBase (ptr: LONGINT), NEW;
+	PROCEDURE (base: Database) DeleteBase (ptr: FilePos), NEW;
 		
 		VAR
 			
-			q, sz: LONGINT;
+			q: FilePos;
+			sz: LONGINT;
 			contHF: FClusterHead;
 			contTF: FClusterTail;
 			contHR: RClusterHead;
@@ -1934,8 +1980,60 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			contT: ClusterTail;
 			hasTail: BOOLEAN;
 		
+		(* Return whether the header at position pos is free or not; return in cont this header *)
+		PROCEDURE FreeHead (pos: FilePos; OUT cont: ClusterHead): BOOLEAN;
+			
+			VAR
+				
+				p: Page;
+				b: BOOLEAN;
+			
+			BEGIN (*FreeHead*)
+				IF base.FindPage(pos, p) THEN
+					cont := p.pageP(ClusterHead);
+					b := cont IS FClusterHead;
+					IF b THEN
+						INC(p.locked);
+					END;
+					RETURN b;
+				ELSE
+					base.ref.PosReader(pos);
+					b := base.ref.ReadBool();
+					IF b THEN
+						cont := base.ReadSysPage(pos, FClusterHeadSize, fCH)(ClusterHead);
+					END;
+					RETURN b;
+				END;
+			END FreeHead;
+		
+		(* Return whether the tail at position pos is free or not; return in cont this tail *)
+		PROCEDURE FreeTail (pos: FilePos; OUT cont: ClusterTail): BOOLEAN;
+			
+			VAR
+				
+				p: Page;
+				b: BOOLEAN;
+			
+			BEGIN (*FreeTail*)
+				IF base.FindPage(pos, p) THEN
+					cont := p.pageP(ClusterTail);
+					b := cont IS FClusterTail;
+					IF b THEN
+						INC(p.locked);
+					END;
+					RETURN b;
+				ELSE
+					base.ref.PosReader(pos);
+					b := base.ref.ReadBool();
+					IF b THEN
+						cont := base.ReadSysPage(pos, FClusterTailSize, fCT)(ClusterTail);
+					END;
+					RETURN b;
+				END;
+			END FreeTail;
+		
 		BEGIN (*DeleteBase*)
-			ASSERT(ptr >= baseHead + RClusterHeadSize + base.placeNb * INS, 112); (* ptr points after the fist head of reserved cluster *)
+			ASSERT(ptr >= baseHead + RClusterHeadSize + base.placeNb * LIS, 112); (* ptr points after the first head of reserved cluster *)
 			DEC(ptr, RClusterHeadSize);
 			contHR := base.ReadSysPage(ptr, RClusterHeadSize, rCH)(RClusterHead);
 			sz := ((contHR.size + RClusterHeadSize + RClusterTailSize - 1) DIV (FClusterHeadSize + FClusterTailSize) + 1) * (FClusterHeadSize + FClusterTailSize); (* Quantification of disk space with lump sizes multiple of FClusterHeadSize + FClusterTailSize *)
@@ -1947,7 +2045,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			IF q = base.end THEN
 				base.end := ptr;
 				base.ref.Truncate(base.end); (* If last cluster, truncate file... *)
-			ELSIF base.FreeHead(q, contH) THEN (* ... else, if next cluster is free, aggregate it *)
+			ELSIF FreeHead(q, contH) THEN (* ... else, if next cluster is free, aggregate it *)
 				contHF := contH(FClusterHead);
 				INC(sz, contHF.size);
 				base.BaseRemoveFree(q, contHF, base.root, base.max);
@@ -1955,7 +2053,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				hasTail := TRUE;
 			END;
 			q := ptr - 1;
-			IF base.FreeTail(q, contT) THEN (* If previous cluster is free... *)
+			IF FreeTail(q, contT) THEN (* If previous cluster is free... *)
 				contTF := contT(FClusterTail);
 				base.ErasePage(q);
 				q := ptr - contTF.size;
@@ -1975,7 +2073,9 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 					END;
 					contTF.size := contHF.size;
 					base.WritePage(q + contHF.size - 1);
+					base.Release(q + contHF.size - 1);
 					base.BaseInsertFree(q, contHF, base.root, base.max);
+					base.Release(q);
 				END;
 			ELSIF ptr # base.end THEN
 				contHF := base.NewPage(FClusterHeadSize, fCH, ptr)(FClusterHead);
@@ -1987,7 +2087,9 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				END;
 				contTF.size := sz;
 				base.WritePage(ptr + sz - 1);
+				base.Release(ptr + sz - 1);
 				base.BaseInsertFree(ptr, contHF, base.root, base.max);
+				base.Release(ptr);
 			END;
 			base.writtenLim := MIN(base.writtenLim, base.end);
 		END DeleteBase;
@@ -2013,7 +2115,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END WritePlace;
 	
 	(* Reserve a page of size pageSize on disk and create a new buffer page for it, with the help of fac; return the empty data, and the page position in pos *)
-	PROCEDURE (base: Database) NewDiskPage (pageSize: INTEGER; fac: DataFac; OUT pos: LONGINT): Data, NEW;
+	PROCEDURE (base: Database) NewDiskPage (pageSize: INTEGER; fac: DataFac; OUT pos: FilePos): Data, NEW;
 		
 		BEGIN (*NewDiskPage*)
 			pos := base.AllocateBase(pageSize);
@@ -2021,7 +2123,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END NewDiskPage;
 	
 	(* Erase the page on disk at position pos and its buffer page *)
-	PROCEDURE (base: Database) EraseDiskPage (pos: LONGINT), NEW;
+	PROCEDURE (base: Database) EraseDiskPage (pos: FilePos), NEW;
 		
 		BEGIN (*EraseDiskPage*)
 			base.ErasePage(pos);
@@ -2029,7 +2131,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END EraseDiskPage;
 	
 	(* For an already existing normal page (not cluster head nor tail page) on disk at position pos, promote and possibly create its buffer page and return it *)
-	PROCEDURE (base: Database) SelectPage (pos: LONGINT): Page, NEW;
+	PROCEDURE (base: Database) SelectPage (pos: FilePos): Page, NEW;
 		
 		VAR
 			
@@ -2045,14 +2147,20 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END SelectPage;
 	
 	(* Find in buffer the size of the normal page (not cluster head nor tail page) at position pos and return it *)
-	PROCEDURE (base: Database) ReadPageLength (pos: LONGINT): INTEGER, NEW;
+	PROCEDURE (base: Database) ReadPageLength (pos: FilePos): INTEGER, NEW;
+		
+		VAR
+			
+			size: INTEGER;
 		
 		BEGIN (*ReadPageLength*)
-			RETURN base.SelectPage(pos).sizeP;
+			size := base.SelectPage(pos).sizeP;
+			base.Release(pos);
+			RETURN size;
 		END ReadPageLength;
 	
 	(* Find, or create and fill if not found, the normal buffer page (not cluster head nor tail page) at position pos; creation of data, if any, is made with the help of fac *)
-	PROCEDURE (base: Database) ReadPage (pos: LONGINT; fac: DataFac): Data, NEW;
+	PROCEDURE (base: Database) ReadPage (pos: FilePos; fac: DataFac): Data, NEW;
 		
 		VAR
 			
@@ -2072,8 +2180,8 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			RETURN p.pageP;
 		END ReadPage;
 	
-	(* Read user data d in database base at position ptr. *)
-	PROCEDURE (d: DataMan) ReadData* (ptr: LONGINT): Data, NEW;
+	(* Read user data in the database of m at position ptr. *)
+	PROCEDURE (m: DataMan) ReadData* (ptr: FilePos): Data, NEW;
 		
 		VAR
 			
@@ -2083,76 +2191,80 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			pa: Data;
 		
 		BEGIN (*ReadData*)
-			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(m.base.ref # NIL, 20);
 			ASSERT(ptr # bNil, 21);
-			w.InitWriter(d.base.ref);
-			d.base.ReadPage(ptr, d.fac).Write(w);
+			w.InitWriter(m.base.ref); (* Make a copy *)
+			m.base.ReadPage(ptr, m.fac).Write(w);
+			m.base.Release(ptr);
 			a := w.Write();
-			r.InitReader(d.base.ref, a, 0);
-			pa := d.fac.New(LEN(a));
+			r.InitReader(m.base.ref, a, 0);
+			pa := m.fac.New(LEN(a));
 			pa.Read(r);
 			RETURN pa;
 		END ReadData;
 	
-	(* Consider using AllocateData or, better, WriteAllocateData instead. Allocate a cluster of size size, managed by d, in the database of d, and return its position. *)
-	PROCEDURE (d: DataMan) AllocateSize* (size: INTEGER): LONGINT, NEW;
+	(* Consider using AllocateData or, better, WriteAllocateData instead. Allocate a cluster of size size, managed by m, in the database of m, and return its position. *)
+	PROCEDURE (m: DataMan) AllocateSize* (size: INTEGER): FilePos, NEW;
 		
 		VAR
 			
-			pos: LONGINT;
+			pos: FilePos;
 			pa: Data;
 		
 		BEGIN (*AllocateSize*)
-			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(m.base.ref # NIL, 20);
 			ASSERT(size > 0, 21);
-			pa := d.base.NewDiskPage(size, d.fac, pos);
+			pa := m.base.NewDiskPage(size, m.fac, pos);
+			m.base.Release(pos);
 			RETURN pos;
 		END AllocateSize;
 	
-	(* Consider using WriteAllocateData instead. Allocate a cluster for data, managed by d, in the database of d, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size. *)
-	PROCEDURE (d: DataMan) AllocateData* (data: Data): LONGINT, NEW;
+	(* Consider using WriteAllocateData instead. Allocate a cluster for data, managed by m, in the database of m, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size. *)
+	PROCEDURE (m: DataMan) AllocateData* (data: Data): FilePos, NEW;
 		
 		VAR
 			
 			w: Writer;
-			pos: LONGINT;
+			pos: FilePos;
 			pa: Data;
 		
 		BEGIN (*AllocateData*)
-			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(m.base.ref # NIL, 20);
 			ASSERT(data # NIL, 21);
-			w.InitWriter(d.base.ref);
+			w.InitWriter(m.base.ref);
 			data.Write(w);
-			pa := d.base.NewDiskPage(w.s.NumberOfElems(), d.fac, pos);
+			pa := m.base.NewDiskPage(w.s.NumberOfElems(), m.fac, pos);
+			m.base.Release(pos);
 			RETURN pos;
 		END AllocateData;
 	
-	(* Allocate a cluster for data, managed by d, in the database of d, and write data into it; return the position of the allocated cluster. *)
-	PROCEDURE (d: DataMan) WriteAllocateData* (data: Data): LONGINT, NEW;
+	(* Allocate a cluster for data, managed by m, in the database of m, and write data into it; return the position of the allocated cluster. *)
+	PROCEDURE (m: DataMan) WriteAllocateData* (data: Data): FilePos, NEW;
 		
 		VAR
 			
 			r: Reader;
 			w: Writer;
 			a: Bytes;
-			ptr: LONGINT;
+			ptr: FilePos;
 			pa: Data;
 		
 		BEGIN (*WriteAllocateData*)
-			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(m.base.ref # NIL, 20);
 			ASSERT(data # NIL, 21);
-			w.InitWriter(d.base.ref);
+			w.InitWriter(m.base.ref);
 			data.Write(w);
 			a := w.Write();
-			pa := d.base.NewDiskPage(LEN(a), d.fac, ptr);
-			r.InitReader(d.base.ref, a, 0);
-			d.base.ReadPage(ptr, d.fac).Read(r);
-			d.base.WritePage(ptr);
+			pa := m.base.NewDiskPage(LEN(a), m.fac, ptr);
+			r.InitReader(m.base.ref, a, 0);
+			pa.Read(r);
+			m.base.WritePage(ptr);
+			m.base.Release(ptr);
 			RETURN ptr;
 		END WriteAllocateData;
 	
-	(* Write data, managed by d, at the position ptr in the database of d. *)
-	PROCEDURE (d: DataMan) WriteData* (ptr: LONGINT; data: Data), NEW;
+	(* Write data, managed by m, at the position ptr in the database of m. *)
+	PROCEDURE (m: DataMan) WriteData* (ptr: FilePos; data: Data), NEW;
 		
 		VAR
 			
@@ -2160,23 +2272,24 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			w: Writer;
 		
 		BEGIN (*WriteData*)
-			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(m.base.ref # NIL, 20);
 			ASSERT(data # NIL, 21);
 			ASSERT(ptr # bNil, 22);
-			w.InitWriter(d.base.ref);
+			w.InitWriter(m.base.ref);
 			data.Write(w);
-			r.InitReader(d.base.ref, w.Write(), 0);
-			d.base.ReadPage(ptr, d.fac).Read(r);
-			d.base.WritePage(ptr);
+			r.InitReader(m.base.ref, w.Write(), 0);
+			m.base.ReadPage(ptr, m.fac).Read(r);
+			m.base.WritePage(ptr);
+			m.base.Release(ptr);
 		END WriteData;
 	
-	(* Erase data managed by d at position ptr in the database of d. *)
-	PROCEDURE (d: DataMan) EraseData* (ptr: LONGINT), NEW;
+	(* Erase data managed by m at position ptr in the database of m. *)
+	PROCEDURE (m: DataMan) EraseData* (ptr: FilePos), NEW;
 		
 		BEGIN (*EraseData*)
-			ASSERT(d.base.ref # NIL, 20);
+			ASSERT(m.base.ref # NIL, 20);
 			ASSERT(ptr # bNil, 21);
-			d.base.EraseDiskPage(ptr);
+			m.base.EraseDiskPage(ptr);
 		END EraseData;
 	
 	PROCEDURE (pa: PageI) Write (VAR w: Writer);
@@ -2315,7 +2428,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			i.iKSize := r.InInt();
 			i.iH := r.InInt();
 			i.iSize := r.InInt();
-			ASSERT(r.InInt() = guard2, 116);
+			ASSERT(r.InInt() = guard2, 117);
 		END Read;
 	
 	PROCEDURE (f: InfoFac) New (sz: INTEGER): Info;
@@ -2325,17 +2438,17 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			pa: Info;
 		
 		BEGIN (*New*)
-			ASSERT(sz = infoS, 117);
+			ASSERT(sz = infoS, 118);
 			NEW(pa);
 			RETURN pa;
 		END New;
 	
 	(* Create a new index in the database base and return its reference, but do not open it. keySize is the size of keys. If keys have a fixed size, put this size in keySize. If the size of keys does not vary much, put the greatest size in keySize. If the greatest size of keys is unknown, or if this size vary much, or if you want to use prefixes, put zero in keySize: you'll have to fix the size of each key later. *)
-	PROCEDURE (base: Database) CreateIndex* (keySize: INTEGER): LONGINT, NEW;
+	PROCEDURE (base: Database) CreateIndex* (keySize: INTEGER): FilePos, NEW;
 		
 		VAR
 			
-			pos: LONGINT;
+			pos: FilePos;
 			p: Info;
 			c: StringI;
 		
@@ -2352,12 +2465,14 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			c.prev := p.iString;
 			c.dataPos := bNil;
 			base.WritePage(p.iString);
+			base.Release(p.iString);
 			base.WritePage(pos);
+			base.Release(pos);
 			RETURN pos;
 		END CreateIndex;
 	
 	(* Open and return an index created with the reference ref by Database.CreateIndex in the database base. man is the key manager of the index and f is the factory of its keys. The current position of the index is reset. *)
-	PROCEDURE (base: Database) OpenIndex* (ref: LONGINT; man: KeyManager; f: DataFac): Index, NEW;
+	PROCEDURE (base: Database) OpenIndex* (ref: FilePos; man: KeyManager; f: DataFac): Index, NEW;
 		
 		VAR
 			
@@ -2381,6 +2496,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			ind.keySize := p.iKSize;
 			ind.height := p.iH;
 			ind.size := p.iSize;
+			base.Release(ref);
 			ind.nextI := base.indRing.nextI;
 			ind.prevI := base.indRing;
 			base.indRing.nextI.prevI := ind;
@@ -2399,7 +2515,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END OpenIndex;
 	
 	(* Delete the index at position ref in the database base; this index must have been closed. *)
-	PROCEDURE (base: Database) DeleteIndex* (ref: LONGINT), NEW;
+	PROCEDURE (base: Database) DeleteIndex* (ref: FilePos), NEW;
 		
 		VAR
 			
@@ -2408,7 +2524,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			a: ARRAY infoS OF BYTE;
 			i: INTEGER;
 		
-		PROCEDURE IndDel (pos: LONGINT; h: INTEGER);
+		PROCEDURE IndDel (pos: FilePos; h: INTEGER);
 			
 			VAR
 				
@@ -2433,8 +2549,8 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			WHILE (ind # base.indRing) & (ind.refI # ref) DO
 				ind := ind.nextI;
 			END;
-			ASSERT(ind = base.indRing, 21);
-			p := base.ReadPage(ref, inff)(Info); ASSERT(p # NIL, 100);
+			ASSERT(ind = base.indRing, 21); (* Otherwise, the index has not been closed *)
+			p := base.ReadPage(ref, inff)(Info);
 			IndDel(p.iRoot, p.iH);
 			FOR i := 0 TO infoS - 1 DO
 				a[i] := 0;
@@ -2466,38 +2582,42 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			p: Info;
 		
 		BEGIN (*UpdateRoot*)
-			p := ind.baseI.ReadPage(ind.refI, inff)(Info); ASSERT(p # NIL, 100);
+			p := ind.baseI.ReadPage(ind.refI, inff)(Info);
 			p.iRoot := ind.rootI;
 			p.iH := ind.height;
 			p.iSize := ind.size;
 			ind.baseI.WritePage(ind.refI);
+			ind.baseI.Release(ind.refI);
 		END UpdateRoot;
 	
-	(* Change the allocation of p.keys when its size is increased by extra *)
+	(* Change the allocation of p.keys when its content is increased by extra and becomes greater than its size *)
 	PROCEDURE (ind: Index) AdjustKeysSize (p: PageI; extra: INTEGER), NEW;
 		
 		VAR
 			
 			l, l1, l2, i: INTEGER;
-			nKeys: LONGINT;
-			k: KeyCont;
-			nK: Key;
+			nKeys: FilePos;
+			k, nK: KeyCont;
+			c, nC: Key;
 		
 		BEGIN (*AdjustKeysSize*)
-			l1 := ind.baseI.ReadPageLength(p.keys);
-			l := p.elems[p.elNb].endK;
-			l2 := l + extra;
+			l1 := ind.baseI.ReadPageLength(p.keys); (* Size *)
+			l := p.elems[p.elNb].endK; (* Initial content size *)
+			l2 := l + extra; (* New content size *)
 			IF l2 > l1 THEN
 				REPEAT
 					INC(l1, sectSize);
 				UNTIL l1 >= l2;
 				ASSERT(l1 <= MAX(SHORTINT) + 1, 100);
-				nK := ind.baseI.NewDiskPage(l1, kf, nKeys)(KeyCont).c;
+				nK := ind.baseI.NewDiskPage(l1, kf, nKeys)(KeyCont);
+				nC := nK.c;
 				k := ind.baseI.ReadPage(p.keys, kf)(KeyCont);
+				c := k.c;
 				FOR i := 0 TO l - 1 DO
-					nK[i] := k.c[i];
+					nC[i] := c[i];
 				END;
 				ind.baseI.WritePage(nKeys);
+				ind.baseI.Release(nKeys);
 				ind.baseI.EraseDiskPage(p.keys);
 				p.keys := nKeys;
 			END;
@@ -2524,15 +2644,15 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				cl2.c[i + u] := cl1.c[i + v];
 			END;
 			ind.baseI.WritePage(pa2.keys);
+			ind.baseI.Release(pa2.keys);
 			diff := pa1.elems[src + nb - 1].endK - pa1.elems[src - 1].endK;
 			FOR i := pa1.elems[src + nb - 1].endK TO pa1.elems[pa1.elNb].endK - 1 DO
 				cl1.c[i - diff] := cl1.c[i];
 			END;
 			ind.baseI.WritePage(pa1.keys);
-			FOR i := dst TO pa2.elNb DO
-				INC(pa2.elems[i].endK, lC);
-			END;
+			ind.baseI.Release(pa1.keys);
 			FOR i := pa2.elNb TO dst BY - 1 DO
+				INC(pa2.elems[i].endK, lC);
 				pa2.elems[i + nb] := pa2.elems[i];
 			END;
 			diff := pa2.elems[dst - 1].endK - pa1.elems[src - 1].endK;
@@ -2544,8 +2664,6 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			END;
 			FOR i := src + nb TO pa1.elNb DO
 				DEC(pa1.elems[i].endK, lC);
-			END;
-			FOR i := src + nb TO pa1.elNb DO
 				pa1.elems[i - nb] := pa1.elems[i];
 			END;
 			INC(pa2.elNb, nb);
@@ -2553,7 +2671,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END TransInter;
 	
 	(* Add, in the page pa of  the index ind, an element of rank dst corresponding to the key c of length lC and pointing to the page of position el (PageI inside index or StringI at its bottom) *)
-	PROCEDURE (ind: Index) TransIn (pa: PageI; el: LONGINT; c: Key; lC, dst: INTEGER), NEW;
+	PROCEDURE (ind: Index) TransIn (pa: PageI; el: FilePos; c: Key; lC, dst: INTEGER), NEW;
 		
 		VAR
 			
@@ -2570,10 +2688,9 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				k.c[pa.elems[dst - 1].endK + i] := c[i];
 			END;
 			ind.baseI.WritePage(pa.keys);
-			FOR i := dst TO pa.elNb DO
-				INC(pa.elems[i].endK, lC);
-			END;
+			ind.baseI.Release(pa.keys);
 			FOR i := pa.elNb TO dst BY - 1 DO
+				INC(pa.elems[i].endK, lC);
 				pa.elems[i + 1] := pa.elems[i];
 			END;
 			pa.elems[dst].ptr := el;
@@ -2582,7 +2699,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		END TransIn;
 	
 	(* Substract, in the page pa of  the index ind, an element of rank src corresponding to the key c of length lC and pointing to the page of position el (PageI inside index or StringI at its bottom) *)
-	PROCEDURE (ind: Index) TransOut (pa: PageI; src: INTEGER; OUT el: LONGINT; OUT c: Key; OUT lC: INTEGER), NEW;
+	PROCEDURE (ind: Index) TransOut (pa: PageI; src: INTEGER; OUT el: FilePos; OUT c: Key; OUT lC: INTEGER), NEW;
 		
 		VAR
 			
@@ -2605,11 +2722,10 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				k.c[i - lC] := k.c[i];
 			END;
 			ind.baseI.WritePage(pa.keys);
+			ind.baseI.Release(pa.keys);
 			FOR i := src + 1 TO pa.elNb DO
 				DEC(pa.elems[i].endK, lC);
-			END;
-			FOR i := src TO pa.elNb - 1 DO
-				pa.elems[i] := pa.elems[i + 1]
+				pa.elems[i - 1] := pa.elems[i]
 			END;
 			DEC(pa.elNb);
 		END TransOut;
@@ -2619,26 +2735,26 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		
 		VAR
 			
-			inc, found, save1, save2: BOOLEAN;
+			inc, found, save1, save2, seen1, seen2: BOOLEAN;
 			szA, lC: INTEGER;
-			el, p: LONGINT;
+			el, p: FilePos;
 			page: PageI;
 			kC: KeyCont;
 			c, keyA: Key;
 			w: Writer;
 		
 		(* Search in the page of address p the key key; father is the address of the father of p, fatherNum is the rank of p in father, h is the height of p; at exit, if inc (tree has grown), el is the new link to insert (PageI inside index or StringI at its bottom), c is the new key (or prefix) to insert and lC is its length *)
-		PROCEDURE Search (p, father: LONGINT; fatherNum, h: INTEGER; OUT el: LONGINT; OUT lC: INTEGER; OUT c: Key);
+		PROCEDURE Search (p, father: FilePos; fatherNum, h: INTEGER; OUT el: FilePos; OUT lC: INTEGER; OUT c: Key);
 			
 			VAR
 				
 				s, nS: StringI;
 				comp: BYTE;
-				pa, pa1, pa2, paP: PageI;
+				pa, pa1, pa2, paP, pa3: PageI;
 				cRet: Key;
 				kC: KeyCont;
 				lft, rgt, i, lCRet, n, m: INTEGER;
-				lftP, rgtP, pos, elRet, nEl: LONGINT;
+				lftP, rgtP, pos, elRet, nEl: FilePos;
 				data: Data;
 				r: Reader;
 			
@@ -2666,16 +2782,19 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 							nS.next := p;
 							nS.prev := s.prev;
 							ind.baseI.WritePage(el);
+							ind.baseI.Release(el);
 							pos := s.prev;
 							s.prev := el;
 							ind.baseI.WritePage(p);
 							nS := ind.baseI.ReadPage(pos, sif)(StringI);
 							nS.next := el;
 							ind.baseI.WritePage(pos);
+							ind.baseI.Release(pos);
 							IF father # bNil THEN
 								pa := ind.baseI.ReadPage(father, pif)(PageI);
 								pa.elems[fatherNum].ptr := el;
 								ind.baseI.WritePage(father);
+								ind.baseI.Release(father);
 							END;
 							el := p;
 							ind.manager.Prefix(ind.baseI.ref, key, data, c, lC);
@@ -2683,17 +2802,20 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 							nS.next := s.next;
 							nS.prev := p;
 							ind.baseI.WritePage(el);
+							ind.baseI.Release(el);
 							pos := s.next;
 							s.next := el;
 							ind.baseI.WritePage(p);
 							nS := ind.baseI.ReadPage(pos, sif)(StringI);
 							nS.prev := el;
 							ind.baseI.WritePage(pos);
+							ind.baseI.Release(pos);
 							ind.manager.Prefix(ind.baseI.ref, data, key, c, lC);
 						END;
 					ELSE (* Old key *)
 						ind.posI := p;
 					END;
+					ind.baseI.Release(p);
 				ELSE (* Inside btree *)
 					pa := ind.baseI.ReadPage(p, pif)(PageI);
 					kC := ind.baseI.ReadPage(pa.keys, kf)(KeyCont);
@@ -2710,17 +2832,18 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 							lft := i + 1;
 						END;
 					END;
+					ind.baseI.Release(pa.keys);
 					DEC(rgt);
 					(* (rgt = 0) OR (pa.elems[rgt].'key' <= key) *)
 					Search(pa.elems[rgt].ptr, p, rgt, h - 1, elRet, lCRet, cRet);
 					IF inc THEN (* New link to be inserted *)
-						pa := ind.baseI.ReadPage(p, pif)(PageI);
 						ind.TransIn(pa, elRet, cRet, lCRet, rgt + 1); (* Insert it *)
 						IF pa.elNb <= 2 * minEl THEN (* That's all! *)
 							inc := FALSE;
 						ELSE (* Too much links... *)
 							n := 1; (* Number of pages to consider *)
 							m := 2 * minEl + 1; (* Total number of elements in these pages *)
+							seen1 := FALSE; seen2 := FALSE;
 							save1 := FALSE; save2 := FALSE;
 							IF father # bNil THEN (* ... try first to tranfer links to adjacent pages *)
 								paP := ind.baseI.ReadPage(father, pif)(PageI);
@@ -2729,12 +2852,14 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 									lftP := paP.elems[fatherNum - 1].ptr;
 									pa1 := ind.baseI.ReadPage(lftP, pif)(PageI);
 									INC(m, pa1.elNb);
+									seen1 := TRUE;
 								END;
 								IF fatherNum < paP.elNb THEN (* Next page *)
 									INC(n);
 									rgtP := paP.elems[fatherNum + 1].ptr;
 									pa2 := ind.baseI.ReadPage(rgtP, pif)(PageI);
 									INC(m, pa2.elNb);
+									seen2 := TRUE;
 								END;
 							END;
 							IF m <= 2 * n * minEl THEN (* Transfer possible: do it... *)
@@ -2789,13 +2914,15 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 								ind.baseI.WritePage(father);
 							ELSE (* Transfer impossible: split page, and up one level *)
 								ind.TransOut(pa, minEl + 1, nEl, c, lC);
-								pa1 := ind.baseI.NewDiskPage(pageIS, pif, el)(PageI);
-								kC := ind.baseI.NewDiskPage(ind.keysSize, kf, pa1.keys)(KeyCont);
-								pa1.elNb := 0;
-								pa1.elems[0].ptr := nEl;
-								pa1.elems[0].endK := 0;
-								ind.TransInter(pa, pa1, minEl + 1, 1, minEl);
+								pa3 := ind.baseI.NewDiskPage(pageIS, pif, el)(PageI);
+								kC := ind.baseI.NewDiskPage(ind.keysSize, kf, pa3.keys)(KeyCont);
+								ind.baseI.Release(pa3.keys);
+								pa3.elNb := 0;
+								pa3.elems[0].ptr := nEl;
+								pa3.elems[0].endK := 0;
+								ind.TransInter(pa, pa3, minEl + 1, 1, minEl);
 								ind.baseI.WritePage(el);
+								ind.baseI.Release(el);
 							END;
 							IF save1 THEN
 								ind.baseI.WritePage(lftP);
@@ -2803,9 +2930,17 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 							IF save2 THEN
 								ind.baseI.WritePage(rgtP);
 							END;
+							IF seen1 THEN
+								ind.baseI.Release(lftP);
+							END;
+							IF seen2 THEN
+								ind.baseI.Release(rgtP);
+							END;
+							ind.baseI.Release(father);
 						END;
 						ind.baseI.WritePage(p);
 					END;
+					ind.baseI.Release(p);
 				END;
 			END Search;
 		
@@ -2824,13 +2959,15 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				p := ind.rootI;
 				page := ind.baseI.NewDiskPage(pageIS, pif, ind.rootI)(PageI);
 				kC := ind.baseI.NewDiskPage(ind.keysSize, kf, page.keys)(KeyCont);
+				ind.baseI.Release(page.keys);
 				page.elNb := 0;
 				page.elems[0].ptr := p;
 				page.elems[0].endK := 0;
 				ind.TransIn(page, el, c, lC, 1);
 				ind.baseI.WritePage(ind.rootI);
+				ind.baseI.Release(ind.rootI);
 			END;
-			IF ~found OR inc THEN
+			IF ~found THEN
 				ind.UpdateRoot;
 			END;
 			RETURN found;
@@ -2842,7 +2979,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		VAR
 			
 			h, lft, rgt, i: INTEGER;
-			p: LONGINT;
+			p: FilePos;
 			pa: PageI;
 			kC: KeyCont;
 			s: StringI;
@@ -2872,6 +3009,8 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				END;
 				DEC(rgt);
 				(* (rgt = 0) OR (pa.elems[rgt].'key' <= key) *)
+				ind.baseI.Release(pa.keys);
+				ind.baseI.Release(p);
 				p := pa.elems[rgt].ptr;
 			END;
 			s := ind.baseI.ReadPage(p, sif)(StringI);
@@ -2888,22 +3027,23 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			ELSE
 				ind.posI := p;
 			END;
+			ind.baseI.Release(p);
 			RETURN comp = eq;
 		END Search;
 	
-	(* Erase from index ind the key key. If key does not belong to the index, ind.Erase does nothing and returns FALSE, otherwise ir returns TRUE. If the current position of the index was on the erased key, it is reset. *)
+	(* Erase from index ind the key key. If key does not belong to the index, ind.Erase does nothing and returns FALSE, otherwise it returns TRUE. If the current position of the index was on the erased key, it is reset. *)
 	PROCEDURE (ind: Index) Erase* (key: Data): BOOLEAN, NEW;
 		
 		VAR
 			
-			dec, found, minus1: BOOLEAN;
-			followP: LONGINT;
+			dec, minus1, found: BOOLEAN;
+			followP: FilePos;
 			followNum: INTEGER;
 			
 			pa: PageI;
 		
 		(* Erase key in the subtree pointed by p; father is the father of p, fatherNum is the rank of p in father and h is the height of the subtree *)
-		PROCEDURE Era (p, father: LONGINT; fatherNum, h: INTEGER);
+		PROCEDURE Era (p, father: FilePos; fatherNum, h: INTEGER);
 			
 			VAR
 				
@@ -2912,24 +3052,25 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				kC: KeyCont;
 				c, cE: Key;
 				lC, lCE, i, lft, rgt: INTEGER;
-				pP, pN, el: LONGINT;
+				pP, pN, el: FilePos;
 				data1, data2: Data;
 				r: Reader;
 			
 			(* The number of elements in the page pointed by elems[num].ptr (in the page pointed by p) has become less than minEl; Fix fixes this problem *)
-			PROCEDURE Fix (p: LONGINT; num: INTEGER);
+			PROCEDURE Fix (p: FilePos; num: INTEGER);
 				
 				VAR
 					
 					lC: INTEGER;
-					q, q1, el, nEl: LONGINT;
-					paP, pa, pa1: PageI;
+					q, q1, q2, el, nEl: FilePos;
+					paP, pa, pa1, pa2: PageI;
 					c: Key;
 					join, right: BOOLEAN;
 				
 				BEGIN (*Fix*)
 					paP := ind.baseI.ReadPage(p, pif)(PageI); (* Father page *)
 					join := FALSE; (* Look if it's possible to join the modified page with an adjacent page at the same level *)
+					q1 := bNil; q2 := bNil;
 					IF num > 0 THEN (* Look at the previous page *)
 						q1 := paP.elems[num - 1].ptr;
 						pa1 := ind.baseI.ReadPage(q1, pif)(PageI);
@@ -2937,26 +3078,28 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 						right := FALSE;
 					END;
 					IF ~join & (num < paP.elNb) THEN (* or at the next one *)
-						q1 := paP.elems[num + 1].ptr;
-						pa1 := ind.baseI.ReadPage(q1, pif)(PageI);
-						join := pa1.elNb = minEl;
+						q2 := paP.elems[num + 1].ptr;
+						pa2 := ind.baseI.ReadPage(q2, pif)(PageI);
+						join := pa2.elNb = minEl;
 						right := TRUE;
 					END;
 					q := paP.elems[num].ptr;
 					pa := ind.baseI.ReadPage(q, pif)(PageI);
-					IF join THEN (* Join pa and pa1 *)
+					IF join THEN (* Join pa and pa1 or pa2 *)
 						IF right THEN
 							ind.TransOut(paP, num + 1, el, c, lC);
-							ind.TransIn(pa1, pa1.elems[0].ptr, c, lC, 1);
-							ind.TransInter(pa, pa1, 1, 1, pa.elNb);
-							pa1.elems[0].ptr := pa.elems[0].ptr;
+							ind.TransIn(pa2, pa2.elems[0].ptr, c, lC, 1);
+							ind.TransInter(pa, pa2, 1, 1, pa.elNb);
+							pa2.elems[0].ptr := pa.elems[0].ptr;
 							paP.elems[num].ptr := el;
+							ind.baseI.WritePage(q2);
 						ELSE
 							ind.TransOut(paP, num, el, c, lC);
 							ind.TransIn(pa1, pa.elems[0].ptr, c, lC, pa1.elNb + 1);
 							ind.TransInter(pa, pa1, 1, pa1.elNb + 1, pa.elNb);
+							ind.baseI.WritePage(q1);
 						END;
-						ASSERT(pa.elNb = 0); (* Everything is in pa1 *)
+						ASSERT(pa.elNb = 0, 60); (* Everything is in pa1 *)
 						ind.baseI.EraseDiskPage(pa.keys);
 						ind.baseI.EraseDiskPage(q);
 						dec := paP.elNb < minEl; (* The father page may underflow too *)
@@ -2964,31 +3107,36 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 						dec := FALSE;
 						IF right THEN
 							ind.TransOut(paP, num + 1, el, c, lC);
-							ind.TransIn(pa, pa1.elems[0].ptr, c, lC, pa.elNb + 1);
-							ind.TransOut(pa1, 1, nEl, c, lC);
+							ind.TransIn(pa, pa2.elems[0].ptr, c, lC, pa.elNb + 1);
+							ind.TransOut(pa2, 1, nEl, c, lC);
 							ind.TransIn(paP, el, c, lC, num + 1);
-							pa1.elems[0].ptr := nEl;
+							pa2.elems[0].ptr := nEl;
+							ind.baseI.WritePage(q2);
 						ELSE
 							ind.TransOut(paP, num, el, c, lC);
 							ind.TransIn(pa, pa.elems[0].ptr, c, lC, 1);
 							ind.TransOut(pa1, pa1.elNb, el, c, lC);
 							ind.TransIn(paP, q, c, lC, num);
 							pa.elems[0].ptr := el;
+							ind.baseI.WritePage(q1);
 						END;
 						ind.baseI.WritePage(q);
+						ind.baseI.Release(q);
 					END;
-					ind.baseI.WritePage(q1);
+					ind.baseI.Release(q1);
+					ind.baseI.Release(q2);
 					ind.baseI.WritePage(p);
+					ind.baseI.Release(p);
 				END Fix;
 			
 			(* Erase the element of the last key at level 1 in the subtree pointed by q, and put its key in the page pointed by p at position rgt; h is the current level *)
-			PROCEDURE Del (q: LONGINT; h: INTEGER);
+			PROCEDURE Del (q: FilePos; h: INTEGER);
 				
 				VAR
 					
 					pa: PageI;
 					lC, lCE: INTEGER;
-					el: LONGINT;
+					el: FilePos;
 					c, cE: Key;
 				
 				BEGIN (*Del*)
@@ -3001,13 +3149,14 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 						ind.TransOut(pa, rgt, el, cE, lCE);
 						ind.TransIn(pa, el, c, lC, rgt);
 						ind.baseI.WritePage(p);
+						ind.baseI.Release(p);
 					ELSE
 						Del(pa.elems[pa.elNb].ptr, h - 1);
 						IF dec THEN
-							pa := ind.baseI.ReadPage(q, pif)(PageI);
 							Fix(q, pa.elNb);
 						END;
 					END;
+					ind.baseI.Release(q);
 				END Del;
 			
 			(* Compare c with the numth key (or prefix) of pa and return TRUE if they are equal *)
@@ -3016,6 +3165,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				VAR
 					
 					i, l, m: INTEGER;
+					kC: KeyCont;
 					cc: Key;
 				
 				BEGIN (*EqualKeys*)
@@ -3029,13 +3179,16 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 						RETURN FALSE;
 					END;
 					IF l > 0 THEN
-						cc := ind.baseI.ReadPage(pa.keys, kf)(KeyCont).c;
+						kC := ind.baseI.ReadPage(pa.keys, kf)(KeyCont);
+						cc := kC.c;
 						m := pa.elems[num - 1].endK;
 						FOR i := 0 TO l - 1 DO
 							IF c[i] # cc[m + i] THEN
+								ind.baseI.Release(pa.keys);
 								RETURN FALSE;
 							END;
 						END;
+						ind.baseI.Release(pa.keys);
 					END;
 					RETURN TRUE;
 				END EqualKeys;
@@ -3044,20 +3197,21 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				IF h = 0 THEN (* At the bottom of btree *)
 					dec := FALSE;
 					IF p = ind.stringI THEN (* Null key *)
-						found := FALSE;
+						minus1 := FALSE;
 					ELSE (* Read the value in data1 ... *)
 						s := ind.baseI.ReadPage(p, sif)(StringI);
 						data1 := ind.manager.f.New(ind.baseI.ReadPageLength(p) - stringIS);
 						r.InitReader(ind.baseI.ref, s.key, 0);
 						data1.Read(r);
-						found := ind.manager.CompP(key, data1) = eq; (* ... and compare with the key *)
-						IF found THEN
+						minus1 := ind.manager.CompP(key, data1) = eq; (* ... and compare with the key *)
+						IF minus1 THEN
 							pP := s.prev;
 							pN := s.next;
 						END;
+						ind.baseI.Release(p);
 					END;
-					minus1 := found;
-					IF found THEN (* Key was found, delete it *)
+					found := minus1;
+					IF minus1 THEN (* Key was found, delete it *)
 						(* Remove page from the ring ind.stringI *)
 						sN := ind.baseI.ReadPage(pN, sif)(StringI);
 						sN.prev := pP;
@@ -3069,6 +3223,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 							pa := ind.baseI.ReadPage(father, pif)(PageI);
 							pa.elems[fatherNum].ptr := pP; (* Change this link to the previous StringI, since the corrresponding key (or prefix) will be deleted *)
 							ind.baseI.WritePage(father);
+							ind.baseI.Release(father);
 						END;
 						IF followP # bNil THEN (* If there are following keys (or prefixes), correct the following prefix, which may have changed, since its previous key has changed *)
 							data1 := ind.manager.f.New(ind.baseI.ReadPageLength(pP) - stringIS);
@@ -3088,7 +3243,10 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 								ind.TransIn(pa, el, c, lC, followNum);
 								ind.baseI.WritePage(followP);
 							END;
+							ind.baseI.Release(followP);
 						END;
+						ind.baseI.Release(pN);
+						ind.baseI.Release(pP);
 						IF ind.posI = p THEN (* Reset the position of the index if it was on the erased key *)
 							ind.posI := ind.stringI;
 						END;
@@ -3111,6 +3269,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 							lft := i + 1;
 						END;
 					END;
+					ind.baseI.Release(pa.keys);
 					DEC(rgt);
 					(* (rgt = 0) OR (pa.elems[rgt].'key' <= key) *)
 					IF rgt < pa.elNb THEN
@@ -3118,10 +3277,9 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 						followNum := rgt + 1;
 					END;
 					Era(pa.elems[rgt].ptr, p, rgt, h - 1);
-					IF found THEN
+					IF minus1 THEN
 						(* If rgt = 0, the corresponding key (or prefix) is upper in the tree and will be deleted later (unless it is ind.stringI) *)
 						IF rgt > 0 THEN
-							pa := ind.baseI.ReadPage(p, pif)(PageI);
 							IF h = 1 THEN (* At the lower level, the key can be erased directly *)
 								ind.TransOut(pa, rgt, el, c, lC);
 								dec := pa.elNb < minEl;
@@ -3132,11 +3290,12 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 									Fix(p, rgt - 1);
 								END;
 							END;
-							found := FALSE; (* key has already been found and erased *)
+							minus1 := FALSE; (* key has already been found and erased *)
 						END;
 					ELSIF dec THEN
 						Fix(p, rgt);
 					END;
+					ind.baseI.Release(p);
 				END;
 			END Era;
 		
@@ -3145,9 +3304,6 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			ASSERT(key # NIL, 21);
 			followP := bNil;
 			Era(ind.rootI, bNil, 0, ind.height);
-			IF minus1 THEN
-				DEC(ind.size);
-			END;
 			IF dec THEN (* Subtree has been erased... *)
 				pa := ind.baseI.ReadPage(ind.rootI, pif)(PageI);
 				IF pa.elNb = 0 THEN (*... if it was the last, decrease the height of subtree *)
@@ -3156,13 +3312,24 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 					ind.rootI := pa.elems[0].ptr;
 					ind.baseI.EraseDiskPage(pa.keys);
 					ind.baseI.EraseDiskPage(followP);
+				ELSE
+					ind.baseI.Release(ind.rootI);
 				END;
 			END;
-			IF minus1 OR dec THEN
+			IF found THEN
+				DEC(ind.size);
 				ind.UpdateRoot;
 			END;
-			RETURN minus1;
+			RETURN found;
 		END Erase;
+	
+	(* Test the emptiness of ind *)
+	PROCEDURE (ind: Index) IsEmpty* (): BOOLEAN, NEW;
+		
+		BEGIN (*IsEmpty*)
+			ASSERT(ind.baseI # NIL, 20);
+			RETURN ind.size = 0;
+		END IsEmpty;
 	
 	(* Return the number of different keys in ind *)
 	PROCEDURE (ind: Index) NumberOfKeys* (): INTEGER, NEW;
@@ -3198,6 +3365,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		BEGIN (*Next*)
 			ASSERT(ind.baseI # NIL, 20);
 			s := ind.baseI.ReadPage(ind.posI, sif)(StringI);
+			ind.baseI.Release(ind.posI);
 			ind.posI := s.next;
 		END Next;
 	
@@ -3211,6 +3379,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		BEGIN (*Previous*)
 			ASSERT(ind.baseI # NIL, 20);
 			s := ind.baseI.ReadPage(ind.posI, sif)(StringI);
+			ind.baseI.Release(ind.posI);
 			ind.posI := s.prev;
 		END Previous;
 	
@@ -3228,7 +3397,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			RETURN pos;
 		END GetCurrPos;
 	
-	(* Set the current position of ind to pos. WARNING: the content of ind must not have changed since the setting of pos by GetCurrPos, i.e. no call of ind.Rechins, with a return of FALSE, nor of ind.Erase with a return of TRUE, must have occurred; otherwise impredictable errors may happen. *)
+	(* Set the current position of ind to pos. WARNING: the content of ind must not have changed since the setting of pos by GetCurrPos, i.e. no call of ind.SearchIns, with a return of FALSE, nor of ind.Erase with a return of TRUE, must have occurred; otherwise impredictable errors may happen. *)
 	PROCEDURE (ind: Index) SetCurrPos* (pos: IndexPos), NEW;
 		
 		BEGIN (*SetCurrPos*)
@@ -3253,7 +3422,8 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			END;
 			s := ind.baseI.ReadPage(ind.posI, sif)(StringI);
 			data := ind.manager.f.New(ind.baseI.ReadPageLength(ind.posI) - stringIS);
-			r.InitReader(ind.baseI.ref, s.key, 0);
+			r.InitReader(ind.baseI.ref, s.key, 0); (* Make a copy *)
+			ind.baseI.Release(ind.posI);
 			data.Read(r);
 			RETURN data;
 		END CurrentKey;
@@ -3268,6 +3438,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		BEGIN (*ReadValue*)
 			ASSERT(ind.baseI # NIL, 20);
 			s := ind.baseI.ReadPage(ind.posI, sif)(StringI);
+			ind.baseI.Release(ind.posI);
 			RETURN s.dataPos;
 		END ReadValue;
 	
@@ -3283,6 +3454,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			s := ind.baseI.ReadPage(ind.posI, sif)(StringI);
 			s.dataPos := val;
 			ind.baseI.WritePage(ind.posI);
+			ind.baseI.Release(ind.posI);
 		END WriteValue;
 	
 	(* Debug *)

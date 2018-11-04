@@ -570,10 +570,11 @@ MODULE Duniter0WWViews;
 			b: BOOLEAN;
 		
 		BEGIN (*BuildOccurDN*)
-			A.New(oD); A.New(oN);
 			IF j = NIL THEN
 				now := "";
+				oD := NIL;
 			ELSE
+				A.New(oD); A.New(oN);
 				WITH j: J.Object DO
 					f1 := j.fields;
 					ASSERT(f1[0].name$ = "now", 100);
@@ -695,35 +696,33 @@ MODULE Duniter0WWViews;
 			END ByDates;
 		
 		BEGIN (*StoreText*)
-			IF v.modified THEN
-				loc := Files.dir.This(""); ASSERT(loc.res = 0, 100);
-				conv := Converters.list;
-				WHILE (conv # NIL) & (conv.exp # textConv) DO
-					conv := conv.next;
-				END;
-				ASSERT(conv # NIL, 101);
-				BA.TimestampToString(B.Now(), nowS);
-				IF v.meta # NIL THEN
-					t := TextModels.dir.New();
-					f.ConnectTo(t);
-					v.meta.Write(f);
-					name := textMeta;
-					Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, conv, res); ASSERT(res = 0, 102);
-				END;
+			loc := Files.dir.This(""); ASSERT(loc.res = 0, 100);
+			conv := Converters.list;
+			WHILE (conv # NIL) & (conv.exp # textConv) DO
+				conv := conv.next;
+			END;
+			ASSERT(conv # NIL, 101);
+			BA.TimestampToString(B.Now(), nowS);
+			IF v.meta # NIL THEN
 				t := TextModels.dir.New();
 				f.ConnectTo(t);
-				J.StartObject;
-				J.PushString(nowS);
-				J.BuildField("now");
-				J.StartArray;
-				ByDates(v.occurD);
-				J.BuildArray;
-				J.BuildField("dates");
-				J.BuildObject;
-				J.GetJson().Write(f);
-				name := textByDate;
-				Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, conv, res); ASSERT(res = 0, 103);
+				v.meta.Write(f);
+				name := textMeta;
+				Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, conv, res); ASSERT(res = 0, 102);
 			END;
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			J.StartObject;
+			J.PushString(nowS);
+			J.BuildField("now");
+			J.StartArray;
+			ByDates(v.occurD);
+			J.BuildArray;
+			J.BuildField("dates");
+			J.BuildObject;
+			J.GetJson().Write(f);
+			name := textByDate;
+			Views.Register(TextViews.dir.New(t), Views.dontAsk, loc, name, conv, res); ASSERT(res = 0, 103);
 		END StoreText;
 	
 	(* Test whether the WotWizard lists have changed *)
@@ -736,7 +735,7 @@ MODULE Duniter0WWViews;
 			ti, duration: LONGINT;
 			occurD, occurN: A.Tree;
 			meta: J.Json;
-			b, oM: BOOLEAN;
+			b, bb: BOOLEAN;
 			nowS: BA.DateTime;
 			loc: Files.Locator;
 		
@@ -748,10 +747,9 @@ MODULE Duniter0WWViews;
 			duration := Services.Ticks() - ti;
 			meta := BuildMeta(duration, f, permutations, cNb, dNb);
 			BA.TimestampToString(B.Now(), nowS);
-			oM := v.modified;
-			b := ~OccursEqual(occurD, v.occurD);
-			v.modified := v.modified OR b;
-			IF b & ~oM THEN
+			bb := v.occurD # NIL;
+			b := ~bb OR ~OccursEqual(occurD, v.occurD);
+			IF b & ~v.modified THEN
 				loc := Files.dir.This(""); ASSERT(loc.res = 0, 100);
 				Files.dir.Delete(loc, oldEntriesName);
 				Files.dir.Rename(loc, textByDate, oldEntriesName, Files.dontAsk);
@@ -759,9 +757,10 @@ MODULE Duniter0WWViews;
 				Files.dir.Rename(loc, textMeta, oldMetaName, Files.dontAsk);
 			END;
 			v.nowS := nowS; v.occurD := occurD; v.occurN := occurN; v.meta := meta;
-			IF v.modified THEN
+			IF v.modified OR b THEN
 				v.StoreText;
 			END;
+			v.modified := v.modified OR b & bb;
 		END UpdateText;
 	
 	PROCEDURE (v: View) InstallText, NEW;

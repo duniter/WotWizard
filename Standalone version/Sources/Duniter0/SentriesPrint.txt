@@ -57,9 +57,9 @@ MODULE Duniter0SentriesPrint;
 			ok := B.NextSentry(TRUE, pubkey);
 			WHILE ok DO
 				NEW(id);
-				b := B.IdPub(pubkey, id.uid); ASSERT(b);
+				b := B.IdPub(pubkey, id.uid); ASSERT(b, 100);
 				e := id;
-				b := ids.SearchIns(e, n); ASSERT(~ b);
+				b := ids.SearchIns(e, n); ASSERT(~ b, 101);
 				ok := B.NextSentry(FALSE, pubkey);
 			END;
 			e := ids.Next(NIL);

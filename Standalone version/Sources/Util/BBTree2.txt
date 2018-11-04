@@ -49,8 +49,10 @@ MODULE UtilBBTree2;
 
 		File = POINTER TO RECORD (B.File)
 			h: WinApi.HANDLE;
-			rPos, wPos: LONGINT;
+			rPos, wPos: FilePos;
 		END;
+		
+		FilePos* = B.FilePos;
 
 		KeyManager* = B.KeyManager;
 
@@ -207,8 +209,8 @@ MODULE UtilBBTree2;
 			b := WinApi.FlushFileBuffers(ref.h);
 			ASSERT(b # 0, 20);
 		END Flush;
-
-	PROCEDURE (ref: File) PosReader (pos: LONGINT);
+	
+	PROCEDURE (ref: File) PosReader (pos: FilePos);
 
 		BEGIN (*PosReader*)
 			ref.rPos := pos;
@@ -229,7 +231,7 @@ MODULE UtilBBTree2;
 			INC(ref.rPos, n);
 		END Read;
 
-	PROCEDURE (ref: File) PosWriter (pos: LONGINT);
+	PROCEDURE (ref: File) PosWriter (pos: FilePos);
 
 		BEGIN (*PosWriter*)
 			ref.wPos := pos;
@@ -250,7 +252,7 @@ MODULE UtilBBTree2;
 			INC(ref.wPos, n);
 		END Write;
 
-	PROCEDURE (ref: File) End (OUT fin: LONGINT);
+	PROCEDURE (ref: File) End (OUT fin: FilePos);
 		
 		VAR
 			
@@ -261,7 +263,7 @@ MODULE UtilBBTree2;
 			ASSERT(res # 0, 20);
 		END End;
 
-	PROCEDURE (ref: File) Truncate (fin: LONGINT);
+	PROCEDURE (ref: File) Truncate (fin: FilePos);
 
 		VAR
 

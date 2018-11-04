@@ -92,6 +92,7 @@ DEFINITION UtilBTree2;
 			(ind: Index) SearchIns (key: Data): BOOLEAN, NEW;
 			(ind: Index) Search (key: Data): BOOLEAN, NEW;
 			(ind: Index) Erase (key: Data): BOOLEAN, NEW;
+			(ind: Index) IsEmpty (): BOOLEAN, NEW;
 			(ind: Index) NumberOfKeys (): INTEGER, NEW;
 			(ind: Index) ResetPos, NEW;
 			(ind: Index) GetCurrPos (): IndexPos, NEW;
@@ -494,6 +495,13 @@ Erase from index ind the key key. If key does not belong to the index, ind.Erase
 Pre
 ind is open	20
 key # NIL	21
+
+PROCEDURE (ind: Index) IsEmpty (): BOOLEAN
+NEW
+Test the emptiness of the index ind
+
+Pre
+ind is open	20
 
 PROCEDURE (ind: Index) NumberOfKeys (): INTEGER
 NEW

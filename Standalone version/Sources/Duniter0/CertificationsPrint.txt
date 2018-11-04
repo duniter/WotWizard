@@ -138,7 +138,7 @@ MODULE Duniter0CertificationsPrint;
 			f.WriteLn; f.WriteLn;
 			ok := B.IdNextUid(TRUE, uid);
 			WHILE ok DO
-				b := B.IdUid(uid, from); ASSERT(b);
+				b := B.IdUid(uid, from); ASSERT(b, 100);
 				q := 0;
 				f.WriteString(uid); f.WriteString(" →"); f.WriteLn;
 				IF B.CertFrom(from, pos) THEN
@@ -146,8 +146,8 @@ MODULE Duniter0CertificationsPrint;
 					okP := pos.CertNextPos(from, to);
 					WHILE okP DO
 						NEW(cs.c[q]);
-						b := B.Cert(from, to, block, cs.c[q].exp); ASSERT(b);
-						b := B.IdPub(to, cs.c[q].id); ASSERT(b);
+						b := B.Cert(from, to, block, cs.c[q].exp); ASSERT(b, 101);
+						b := B.IdPub(to, cs.c[q].id); ASSERT(b, 102);
 						b := B.TimeOf(block, mt, t);
 						BA.TimestampToString(mt, cs.c[q].created);
 						BA.TimestampToString(cs.c[q].exp, cs.c[q].expS);
@@ -205,7 +205,7 @@ MODULE Duniter0CertificationsPrint;
 			f.WriteLn; f.WriteLn;
 			ok := B.IdNextUid(TRUE, uid);
 			WHILE ok DO
-				b := B.IdUid(uid, to); ASSERT(b);
+				b := B.IdUid(uid, to); ASSERT(b, 100);
 				q := 0;
 				f.WriteString(uid); f.WriteString(" ←"); f.WriteLn;
 				IF B.CertTo(to, pos) THEN
@@ -213,8 +213,8 @@ MODULE Duniter0CertificationsPrint;
 					okP := pos.CertNextPos(from, to);
 					WHILE okP DO
 						NEW(cs.c[q]);
-						b := B.Cert(from, to, block, cs.c[q].exp); ASSERT(b);
-						b := B.IdPub(from, cs.c[q].id); ASSERT(b);
+						b := B.Cert(from, to, block, cs.c[q].exp); ASSERT(b, 101);
+						b := B.IdPub(from, cs.c[q].id); ASSERT(b, 102);
 						b := B.TimeOf(block, mt, t);
 						BA.TimestampToString(mt, cs.c[q].created);
 						BA.TimestampToString(cs.c[q].exp, cs.c[q].expS);

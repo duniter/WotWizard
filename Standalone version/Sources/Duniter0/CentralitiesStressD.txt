@@ -133,7 +133,7 @@ MODULE Duniter0CentralitiesStressD;
 		
 		BEGIN (*Enumerate*)
 			IF B.IdNextUid(first, id) THEN
-				b := B.IdUidComplete(id, p, member, h, bnb, exp); ASSERT(b);
+				b := B.IdUidComplete(id, p, member, h, bnb, exp); ASSERT(b, 100);
 				node := NewNode(p);
 				RETURN TRUE;
 			END;
@@ -203,7 +203,7 @@ MODULE Duniter0CentralitiesStressD;
 			NEW(centersId, len);
 			FOR i := 0 TO len - 1 DO
 				NEW(c);
-				b := B.IdPub(allOnes.ones[i].p, c.id); ASSERT(b);
+				b := B.IdPub(allOnes.ones[i].p, c.id); ASSERT(b, 100);
 				c.c := allOnes.ones[i].c;
 				centers[i] := c;
 				centersId[i] := c;
@@ -241,7 +241,7 @@ MODULE Duniter0CentralitiesStressD;
 				END;
 				ok := cT.Walk(FALSE, node, cV);
 			END;
-			ASSERT(i = len);
+			ASSERT(i = len, 60);
 			FOR i := 0 TO len - 1 DO
 				allOnes.ones[i] .c := allOnes.ones[i].c / max;
 			END;

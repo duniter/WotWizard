@@ -73,13 +73,13 @@ MODULE Duniter0Members2;
 			WHILE ok DO
 				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
 				WHILE ok2 DO
-					b := B.TimeOf(jb, mT, time); ASSERT(b);
+					b := B.TimeOf(jb, mT, time); ASSERT(b, 100);
 					NEW(ev); e := ev;
 					ev.date := time; ev.number := 0;
 					b := t.SearchIns(e, n);
 					INC(e(Event).number);
 					IF lb # B.hasNotLeaved THEN
-						b := B.TimeOf(lb, mT, time); ASSERT(b);
+						b := B.TimeOf(lb, mT, time); ASSERT(b, 101);
 						NEW(ev); e := ev;
 						ev.date := time; ev.number := 0;
 						b := t.SearchIns(e, n);
@@ -128,7 +128,7 @@ MODULE Duniter0Members2;
 					jb0 := jb;
 					ok2 := B.JLPubLNext(list, jb, lb);
 				END;
-				b := B.TimeOf(jb0, mT, time); ASSERT(b);
+				b := B.TimeOf(jb0, mT, time); ASSERT(b, 102);
 				NEW(ev); e := ev;
 				ev.date := time; ev.number := 0;
 				b := t.SearchIns(e, n);

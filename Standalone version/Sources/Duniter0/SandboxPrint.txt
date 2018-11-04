@@ -39,7 +39,7 @@ MODULE Duniter0SandboxPrint;
 			
 			ok := S.IdNextHash(TRUE, hash);
 			WHILE ok DO
-				b := S.IdHash(hash, pubkey, uid, exp); ASSERT(b);
+				b := S.IdHash(hash, pubkey, uid, exp); ASSERT(b, 100);
 				f.WriteString(hash); f.WriteLn;
 				f.WriteTab; f.WriteString(pubkey); f.WriteLn;
 				f.WriteTab; f.WriteString(uid); f.WriteTab;
@@ -80,7 +80,7 @@ MODULE Duniter0SandboxPrint;
 						f.WriteLn; f.WriteTab;
 						f.WriteString(" ("); f.WriteString(uid); f.WriteString(") ");
 					END;
-					b := S.Cert(from, toHash, to, exp); ASSERT(b);
+					b := S.Cert(from, toHash, to, exp); ASSERT(b, 101);
 					BA.TimestampToString(exp, s);
 					f.WriteLn;
 					f.WriteString(s);
@@ -105,7 +105,7 @@ MODULE Duniter0SandboxPrint;
 						f.WriteLn; f.WriteTab;
 						f.WriteString(" ("); f.WriteString(uid); f.WriteString(") ");
 					END;
-					b := S.Cert(from, toHash, to, exp); ASSERT(b);
+					b := S.Cert(from, toHash, to, exp); ASSERT(b, 102);
 					BA.TimestampToString(exp, s);
 					f.WriteLn;
 					f.WriteString(s);

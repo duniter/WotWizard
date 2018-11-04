@@ -82,7 +82,7 @@ MODULE UtilSort;
 			
 			BEGIN (*Sort*)
 				LOOP
-					IF r - l + 1 <= maxIns THEN
+					IF r - l < maxIns THEN
 						Insertion(l, r);
 						EXIT;
 					ELSE

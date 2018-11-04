@@ -39,12 +39,12 @@ MODULE Duniter0IdentitiesPrint;
 			f.ConnectTo(tt);
 			ok := B.IdNextPubkey(TRUE, pubkey);
 			WHILE ok DO
-				b := B.IdPubComplete(pubkey, uid, member, hash, bnb, exp); ASSERT(b);
+				b := B.IdPubComplete(pubkey, uid, member, hash, bnb, exp); ASSERT(b, 100);
 				IF exp = BA.revoked THEN
-					ASSERT(~member);
+					ASSERT(~member, 101);
 					f.WriteString(pubkey); f.WriteTab;
 					f.WriteString(uid); f.WriteLn; f.WriteTab;
-					b := B.TimeOf(bnb, mt, t); ASSERT(b);
+					b := B.TimeOf(bnb, mt, t); ASSERT(b, 102);
 					BA.TimestampToString(mt, s);
 					f.WriteString(s);
 					f.WriteLn;
@@ -55,13 +55,13 @@ MODULE Duniter0IdentitiesPrint;
 			n := 0;
 			ok := B.IdNextUid(TRUE, uid);
 			WHILE ok DO
-				b := B.IdUidComplete(uid, pubkey, member, hash, bnb, exp); ASSERT(b);
+				b := B.IdUidComplete(uid, pubkey, member, hash, bnb, exp); ASSERT(b, 103);
 				IF exp = BA.revoked THEN
-					ASSERT(~member);
+					ASSERT(~member, 104);
 					f.WriteString(uid); f.WriteTab;
 					INC(n);
 					f.WriteString(pubkey); f.WriteLn; f.WriteTab;
-					b := B.TimeOf(bnb, mt, t); ASSERT(b);
+					b := B.TimeOf(bnb, mt, t); ASSERT(b, 105);
 					BA.TimestampToString(mt, s);
 					f.WriteString(s);
 					f.WriteLn;
@@ -98,11 +98,11 @@ MODULE Duniter0IdentitiesPrint;
 			f.ConnectTo(tt);
 			ok := B.IdNextPubkey(TRUE, pubkey);
 			WHILE ok DO
-				b := B.IdPubComplete(pubkey, uid, member, hash, bnb, exp); ASSERT(b);
+				b := B.IdPubComplete(pubkey, uid, member, hash, bnb, exp); ASSERT(b, 100);
 				IF ~member & (exp # BA.revoked) THEN
 					f.WriteString(pubkey); f.WriteTab;
 					f.WriteString(uid); f.WriteLn; f.WriteTab;
-					b := B.TimeOf(bnb, mt, t); ASSERT(b);
+					b := B.TimeOf(bnb, mt, t); ASSERT(b, 101);
 					BA.TimestampToString(mt, s);
 					f.WriteString(s);
 					f.WriteString(" → ");
@@ -116,12 +116,12 @@ MODULE Duniter0IdentitiesPrint;
 			n := 0;
 			ok := B.IdNextUid(TRUE, uid);
 			WHILE ok DO
-				b := B.IdUidComplete(uid, pubkey, member, hash, bnb, exp); ASSERT(b);
+				b := B.IdUidComplete(uid, pubkey, member, hash, bnb, exp); ASSERT(b, 102);
 				IF ~member & (exp # BA.revoked) THEN
 					f.WriteString(uid); f.WriteTab;
 					INC(n);
 					f.WriteString(pubkey); f.WriteLn; f.WriteTab;
-					b := B.TimeOf(bnb, mt, t); ASSERT(b);
+					b := B.TimeOf(bnb, mt, t); ASSERT(b, 103);
 					BA.TimestampToString(mt, s);
 					f.WriteString(s);
 					f.WriteString(" → ");
@@ -162,9 +162,9 @@ MODULE Duniter0IdentitiesPrint;
 			ok := B.IdNextPubkeyM(TRUE, pubkey);
 			WHILE ok DO
 				f.WriteString(pubkey); f.WriteTab;
-				b := B.IdPubComplete(pubkey, uid, member, hash, bnb, exp); ASSERT(b);
+				b := B.IdPubComplete(pubkey, uid, member, hash, bnb, exp); ASSERT(b, 100);
 				f.WriteString(uid); f.WriteLn; f.WriteTab;
-				b := B.TimeOf(bnb, mt, t); ASSERT(b);
+				b := B.TimeOf(bnb, mt, t); ASSERT(b, 101);
 				BA.TimestampToString(mt, s);
 				f.WriteString(s);
 				f.WriteString(" → ");
@@ -178,10 +178,10 @@ MODULE Duniter0IdentitiesPrint;
 			ok := B.IdNextUidM(TRUE, uid);
 			WHILE ok DO
 				f.WriteString(uid); f.WriteTab;
-				b := B.IdUidComplete(uid, pubkey, member, hash, bnb, exp); ASSERT(b);
+				b := B.IdUidComplete(uid, pubkey, member, hash, bnb, exp); ASSERT(b, 102);
 				INC(n);
 				f.WriteString(pubkey); f.WriteLn; f.WriteTab;
-				b := B.TimeOf(bnb, mt, t); ASSERT(b);
+				b := B.TimeOf(bnb, mt, t); ASSERT(b, 103);
 				BA.TimestampToString(mt, s);
 				f.WriteString(s);
 				f.WriteString(" → ");
@@ -191,7 +191,7 @@ MODULE Duniter0IdentitiesPrint;
 				ok := B.IdNextUidM(FALSE, uid);
 			END;
 			f.WriteLn;
-			ASSERT(n = B.IdLenM());
+			ASSERT(n = B.IdLenM(), 60);
 			f.WriteMsg("#Duniter0:MembersNb");
 			f.WriteString(" = ");
 			f.WriteInt(n);

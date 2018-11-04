@@ -44,7 +44,7 @@ MODULE Duniter0Members;
 			WHILE ok DO
 				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
 				WHILE ok2 DO
-					b := B.TimeOf(jb, mT, time); ASSERT(b);
+					b := B.TimeOf(jb, mT, time); ASSERT(b, 100);
 					t0 := MIN(t0, time);
 					ok2 := B.JLPubLNext(list, jb, lb);
 				END;
@@ -58,10 +58,10 @@ MODULE Duniter0Members;
 			WHILE ok DO
 				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
 				WHILE ok2 DO
-					b := B.TimeOf(jb, mT, time); ASSERT(b);
+					b := B.TimeOf(jb, mT, time); ASSERT(b, 101);
 					INC(counts[SHORT((time - t0) DIV day)]);
 					IF lb # B.hasNotLeaved THEN
-						b := B.TimeOf(lb, mT, time); ASSERT(b);
+						b := B.TimeOf(lb, mT, time); ASSERT(b, 102);
 						DEC(counts[SHORT((time - t0) DIV day)]);
 					END;
 					ok2 := B.JLPubLNext(list, jb, lb);
@@ -95,7 +95,7 @@ MODULE Duniter0Members;
 			WHILE ok DO
 				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
 				WHILE ok2 DO
-					b := B.TimeOf(jb, mT, time); ASSERT(b);
+					b := B.TimeOf(jb, mT, time); ASSERT(b, 100);
 					t0 := MIN(t0, time);
 					ok2 := B.JLPubLNext(list, jb, lb);
 				END;
@@ -109,10 +109,10 @@ MODULE Duniter0Members;
 			WHILE ok DO
 				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
 				WHILE ok2 DO
-					b := B.TimeOf(jb, mT, time); ASSERT(b);
+					b := B.TimeOf(jb, mT, time); ASSERT(b, 101);
 					INC(counts[SHORT((time - t0) DIV p)]);
 					IF lb # B.hasNotLeaved THEN
-						b := B.TimeOf(lb, mT, time); ASSERT(b);
+						b := B.TimeOf(lb, mT, time); ASSERT(b, 102);
 						DEC(counts[SHORT((time - t0) DIV p)]);
 					END;
 					ok2 := B.JLPubLNext(list, jb, lb);

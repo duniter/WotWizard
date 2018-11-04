@@ -87,7 +87,7 @@ MODULE Duniter0Qualities;
 			ok := B.IdNextPubkeyM(TRUE, p);
 			WHILE ok DO
 				NEW(c);
-				b := B.IdPub(p, c.id); ASSERT(b);
+				b := B.IdPub(p, c.id); ASSERT(b, 100);
 				c.prop := PercentOfSentries(p);
 				props[i] := c;
 				INC(i);
