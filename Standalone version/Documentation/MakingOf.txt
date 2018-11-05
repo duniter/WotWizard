@@ -5,9 +5,14 @@ Download the Blackbox Component Framework Version 1.7 at:
 	
 	http://blackboxframework.org/stable/blackbox-1.7.zip
 
-and extract it into a new empty directory (let's call it "NewBB"). Copy the "Blackbox" directory into "NewBB" (merge all subdirectories and replace all files when asked).
+and extract it into a new empty directory (let's call it "NewBB").
+Download the source code of the last "Stand Alone" version of WotWizard at:
 
-Then, run "NewBB/BlackBox.exe", open this file (command "File -> Open") itself in the BlackBox framework (NewBB/Duniter0/Docu/MakingOf.odc) and execute the commands below, by clicking on the black-disk icons (when small windows open, click on OK). Then read the last lines at the bottom.
+	https://github.com/duniter/WotWizard/releases
+
+and extract the content of the "Standalone version/Blackbox" directory into "NewBB" (merge all subdirectories and replace all files when asked).
+
+Then, run "NewBB/BlackBox.exe" (double click), open this file (command "File -> Open") itself in the BlackBox framework (NewBB/Duniter0/Docu/MakingOf.odc) and execute the commands below, by clicking on the black-disk icons (when small windows open, click on OK). Then read the last lines at the bottom of this text.
 
  DevCompiler.CompileThis 
 CpcCompressorsConv CpcCompressors CpcBitmaps CpcNonCompressor CpcUtf8Conv CtlsButtons2 CtlsArrows2 BabelCompil UtilJson UtilAlea UtilSort UtilSets UtilNetStressD UnicodeLetter_Mapping UnicodeCase_Mapping UtilAvlTree UtilBTree2 UtilBBTree2 Duniter0Basic Duniter0Blockchain Duniter0CentralitiesStressD Duniter0CentralitiesStressDJson HermesUtil HermesOperations UtilFunc UtilExtStrings HermesNames UtilExtFonts UtilMaths HermesHost HermesViews HermesScat CpcFloat HermesAxes Duniter0CentralitiesStressDPrint Duniter0CertificationsPrint Duniter0Events Duniter0IdentitiesPrint Duniter0Sandbox Duniter0IdentitySearch Duniter0Members Duniter0Members2 Duniter0MembersPrint Duniter0Members2Print Duniter0ParametersPrint Duniter0Qualities Duniter0QualitiesJson Duniter0QualitiesPrint Duniter0SandboxPrint Duniter0SentriesPrint Duniter0WotWizard Duniter0WWViews Duniter0WotWizardPrint PacCrc32 PacStores3 SQLiteLib SQLiteHost SQLiteStrings SQLiteDriver UtilExternal UtilDiffEq UtilFuncU UtilFuncL UtilMathsCmds BabelInit BabelInit0 BabelCars BabelDef BabelLexique BabelSyntaxe BabelAnaSem BabelInterface BabelAvl BabelBabel Duniter0SAConfig UtilMoveConfig 
@@ -142,7 +147,7 @@ Util/Rsrc/fr/MathsCmds.odc
 Util/Rsrc/fr/Strings.odc
 Xhtml/Code/Exporter.ocf
 
-Copy "NewBB/WotWizard.exe" in an empty directory, download and extract "sqlite3.dll" in the same directory as "WotWizard.exe":
+Move "NewBB/WotWizard.exe" to an empty directory, download and extract "sqlite3.dll" in the same directory as "WotWizard.exe":
 
 	https://www.sqlite.org/2015/sqlite-dll-win32-x86-3081002.zip
 
