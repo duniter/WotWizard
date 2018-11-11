@@ -23,7 +23,7 @@ MODULE Duniter0Blockchain;
 		(*
 		L := StdLog,
 		*)
-	
+		
 		A := UtilAvlTree, B := UtilBBTree2, Dialog, BA := Duniter0Basic, Files, HostFiles, Math, Services, S := SqlDB, Strings, TextMappers, TextModels, TextViews, UtilSort, U := UtilSets, Views;
 	
 	CONST
@@ -1045,7 +1045,7 @@ MODULE Duniter0Blockchain;
 			RETURN TRUE;
 		END JLNextPubkey;
 	
-	(* Pubkey -> Identity *)
+	(* Pubkey -> uid *)
 	PROCEDURE IdPub* (IN pubkey: Pubkey; OUT uid: String): BOOLEAN;
 		
 		VAR
@@ -1064,7 +1064,7 @@ MODULE Duniter0Blockchain;
 			RETURN FALSE;
 		END IdPub;
 	
-	(* Pubkey -> Identity *)
+	(* Pubkey -> uid of member *)
 	PROCEDURE IdPubM* (IN pubkey: Pubkey; OUT uid: String): BOOLEAN;
 		
 		VAR
@@ -1109,7 +1109,7 @@ MODULE Duniter0Blockchain;
 			RETURN FALSE;
 		END IdPubComplete;
 	
-	(* uid -> Identity *)
+	(* uid -> Pubkey *)
 	PROCEDURE IdUid* (IN uid: ARRAY OF CHAR; OUT pubkey: Pubkey): BOOLEAN;
 		
 		VAR
@@ -1128,7 +1128,7 @@ MODULE Duniter0Blockchain;
 			RETURN FALSE;
 		END IdUid;
 	
-	(* uid -> Identity *)
+	(* uid -> Pubkey of member *)
 	PROCEDURE IdUidM* (IN uid: ARRAY OF CHAR; OUT pubkey: Pubkey): BOOLEAN;
 		
 		VAR
@@ -1180,7 +1180,7 @@ MODULE Duniter0Blockchain;
 			RETURN idUidT.NumberOfKeys();
 		END IdLen;
 	
-	(* Number of identities *)
+	(* Number of members *)
 	PROCEDURE IdLenM* (): INTEGER;
 		
 		BEGIN (*IdLenM*)
@@ -1221,7 +1221,7 @@ MODULE Duniter0Blockchain;
 			RETURN TRUE;
 		END IdNextPubkey;
 	
-	(* Browse all Identity's pubkeys step by step *)
+	(* Browse all members' pubkeys step by step *)
 	PROCEDURE IdNextPubkeyM* (first: BOOLEAN; OUT pubkey: Pubkey): BOOLEAN;
 		
 		VAR
@@ -1236,12 +1236,12 @@ MODULE Duniter0Blockchain;
 			END;
 			REPEAT
 				idPubT.Next;
-				idPubkeyCur := idPubT.GetCurrPos();
 				IF ~idPubT.PosSet() THEN
 					RETURN FALSE;
 				END;
 				id := idMan.ReadData(idPubT.ReadValue())(Identity);
 			UNTIL id.member;
+			idPubkeyCur := idPubT.GetCurrPos();
 			pubkey := id.pubkey;
 			RETURN TRUE;
 		END IdNextPubkeyM;
@@ -1280,7 +1280,7 @@ MODULE Duniter0Blockchain;
 			RETURN TRUE;
 		END IdNextUid;
 	
-	(* Browse all Identity's uid(s) lexicographically step by step *)
+	(* Browse all members' uid(s) lexicographically step by step *)
 	PROCEDURE IdNextUidM* (first: BOOLEAN; OUT uid: String): BOOLEAN;
 		
 		VAR
@@ -1295,12 +1295,12 @@ MODULE Duniter0Blockchain;
 			END;
 			REPEAT
 				idUidT.Next;
-				idUidCur := idUidT.GetCurrPos();
 				IF ~idUidT.PosSet() THEN
 					RETURN FALSE;
 				END;
 				id := idMan.ReadData(idUidT.ReadValue())(Identity);
 			UNTIL id.member;
+			idUidCur := idUidT.GetCurrPos();
 			uid := id.uid;
 			RETURN TRUE;
 		END IdNextUidM;
@@ -1440,6 +1440,7 @@ MODULE Duniter0Blockchain;
 			certFromT.Next;
 			certFromCur := certFromT.GetCurrPos();
 			IF ~certFromT.PosSet() THEN
+				pos.posRef := -1;
 				RETURN FALSE;
 			END;
 			pos.posRef := certFromT.ReadValue();
@@ -1457,7 +1458,7 @@ MODULE Duniter0Blockchain;
 			
 			ind: B.Index;
 		
-		BEGIN (*CertNextFrom*)
+		BEGIN (*CertNextTo*)
 			IF first THEN
 				certToT.ResetPos;
 			ELSE
@@ -1466,6 +1467,7 @@ MODULE Duniter0Blockchain;
 			certToT.Next;
 			certToCur := certToT.GetCurrPos();
 			IF ~certToT.PosSet() THEN
+				pos.posRef := -1;
 				RETURN FALSE;
 			END;
 			pos.posRef := certToT.ReadValue();
@@ -1669,11 +1671,11 @@ MODULE Duniter0Blockchain;
 					frontierI.Attach(frontier);
 					ok := frontierI.FirstE(e);
 					WHILE ok DO
-						newFrontier := newFrontier.Union(members.m[e].links);
+						newFrontier.Add(members.m[e].links);
 						ok := frontierI.NextE(e);
 					END;
 					frontier := newFrontier;
-					set := set.Union(frontier);
+					set.Add(frontier);
 					IF i = pars.stepMax - 2 THEN
 						set_2 := set.Inter(sentriesS);
 					END;

@@ -2,21 +2,14 @@ UtilSets
 
 DEFINITION UtilSets;
 
-	CONST
-		sMin = 0;
-		sMax = MAX(INTEGER) - 1;
-
 	TYPE
 		Set = POINTER TO LIMITED RECORD 
 			nbElems-: INTEGER;
-			(s: Set) Empty, NEW;
-			(s: Set) Full, NEW;
-			(s: Set) Interval (min, max: INTEGER), NEW;
-			(s: Set) Clear (min, max: INTEGER), NEW;
-			(s: Set) Fill (min, max: INTEGER), NEW;
+			(s: Set) Clear (min, max: INTEGER): Set, NEW;
+			(s: Set) Flood (min, max: INTEGER), NEW;
+			(s: Set) Fill (min, max: INTEGER): Set, NEW;
 			(s: Set) Incl (e: INTEGER), NEW;
-			(s: Set) Excl (e: INTEGER), NEW;
-			(s: Set) Small (se: SET), NEW;
+			(s1: Set) Add (s2: Set), NEW;
 			(s1: Set) Union (s2: Set): Set, NEW;
 			(s1: Set) Inter (s2: Set): Set, NEW;
 			(s1: Set) Diff (s2: Set): Set, NEW;
@@ -25,29 +18,22 @@ DEFINITION UtilSets;
 			(s: Set) IsEmpty (): BOOLEAN, NEW;
 			(s1: Set) Equal (s2: Set): BOOLEAN, NEW;
 			(s1: Set) Subset (s2: Set): BOOLEAN, NEW;
-			(s: Set) NextElem (inc: BOOLEAN; VAR e: INTEGER): BOOLEAN, NEW;
 			(s: Set) Copy (): Set, NEW
 		END;
 
 		SetIterator = RECORD 
 			(VAR i: SetIterator) Attach (s: Set), NEW;
-			(VAR i: SetIterator) First (OUT min, max: INTEGER): BOOLEAN, NEW;
-			(VAR i: SetIterator) Next (OUT min, max: INTEGER): BOOLEAN, NEW;
 			(VAR i: SetIterator) FirstE (OUT e: INTEGER): BOOLEAN, NEW;
 			(VAR i: SetIterator) NextE (OUT e: INTEGER): BOOLEAN, NEW
 		END;
 
 	PROCEDURE NewSet (): Set;
+	PROCEDURE Interval (min, max: INTEGER): Set;
+	PROCEDURE Small (se: SET): Set;
 
 END UtilSets.
 
-The module UtilSets implements the type Set, a set of non-negative integers, represented by intervals.
-
-CONST sMin
-The smallest integer in sets.
-
-CONST sMax
-The largest integer in sets.
+The module UtilSets implements the type Set, a set of non-negative integers, represented by hashing.
 
 TYPE Set
 Set of non-negative integers.
@@ -55,44 +41,32 @@ Set of non-negative integers.
 nbElems-: INTEGER
 Number of elements in the set.
 
-PROCEDURE (s: Set) Empty
+PROCEDURE (s: Set) Clear (min, max: INTEGER): Set
 NEW
-Empty the set s.
+Returns the set s with the interval min..max removed.
 
-PROCEDURE (s: Set) Full
+PROCEDURE (s: Set) Flood (min, max: INTEGER)
 NEW
-Returnsin s the largest set available: sMin..sMax.
+Fill the interval min..max in the set s. Much more efficient than Fill.
 
-PROCEDURE (s: Set) Interval (min, max: INTEGER)
+PROCEDURE (s: Set) Fill (min, max: INTEGER): Set
 NEW
-Set s to the interval min..max.
-
-Pre
-min..max is included in sMin..sMax	20
-
-PROCEDURE (s: Set) Clear (min, max: INTEGER)
-NEW
-Remove the interval min..max from the set s.
-
-PROCEDURE (s: Set) Fill (min, max: INTEGER)
-NEW
-Add the interval min..max to the set s.
+Returns the set s with the interval min..max filled.
 
 PROCEDURE (s: Set) Incl (e: INTEGER)
 NEW
 Include the integer e in the set s.
 
-PROCEDURE (s: Set) Excl (e: INTEGER)
+PROCEDURE (s1: Set) Add (s2: Set)
 NEW
-Exclude the integer e from the set s.
+Returns in s1 the union of s1 and s2. Much more efficient than Union.
 
-PROCEDURE (s: Set) Small (se: SET)
-NEW
-Set s to the Component Pascal SET se.
+Pre
+s2 # NIL	20
 
 PROCEDURE (s1: Set) Union (s2: Set): Set
 NEW
-Return the union of s1 and s2.
+Returns the union of s1 and s2.
 
 Pre
 s2 # NIL	20
@@ -130,13 +104,15 @@ PROCEDURE (s1: Set) Equal (s2: Set): BOOLEAN
 NEW
 Check whether s1 = s2.
 
+Pre
+s2 # NIL	20
+
 PROCEDURE (s1: Set) Subset (s2: Set): BOOLEAN
 NEW
 Check whether s1 is a subset (in the broad sense of the word) of s2.
 
-PROCEDURE (s: Set) NextElem (inc: BOOLEAN; VAR e: INTEGER): BOOLEAN
-NEW
-Replace e by the next integer e' of s. If inc = TRUE, e' > e; otherwise, e' < e. e may be outside of the interval sMin..sMax, but e' is inside it. Return TRUE if there is such a successor of e, otherwise e is unchanged. Usage: e := sMin - 1; WHILE s.NextElem(TRUE, e) DO ... END;
+Pre
+s2 # NIL	20
 
 PROCEDURE (s: Set) Copy (): Set
 NEW
@@ -148,21 +124,8 @@ Iterator of a Set..
 PROCEDURE (VAR i: SetIterator) Attach (s: Set), NEW;
 Attach the set s to i..
 
-PROCEDURE (VAR i: SetIterator) First (OUT min, max: INTEGER): BOOLEAN
-NEW
-On return, min and max contain the first interval of the set attached to i. Return TRUE if such an interval exists. Usage: ok := i.First(a, b); WHILE ok DO ... ok := s.Next(a, b) END;
-
 Pre
-i has been attached to a Set	20
-i.First was called once before	21
-
-PROCEDURE (VAR i: SetIterator) Next (OUT min, max: INTEGER): BOOLEAN
-NEW
-On return, min and max contain the next interval of the set attached to i. Returns TRUE if such an interval exists. i.First must have been called once before i.Next. Usage: ok := i.First(a, b); WHILE ok DO ... ok := i.Next(a, b) END;
-
-Pre
-i has been attached to a Set	20
-i.First was called once before	21
+s # NIL	20
 
 PROCEDURE (VAR i: SetIterator) FirstE (OUT e: INTEGER): BOOLEAN
 NEW
@@ -181,3 +144,9 @@ i.First was called once before	21
 
 PROCEDURE NewSet (): Set
 Creates and returns a new empty set.
+
+PROCEDURE Interval (min, max: INTEGER): Set
+Creates and returns a new set initialized to the interval min..max.
+
+PROCEDURE Small (se: SET): Set
+Returns a set equivalent to the Component Pascal SET se.
