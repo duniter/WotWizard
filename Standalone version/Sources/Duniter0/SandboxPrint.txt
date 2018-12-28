@@ -26,7 +26,7 @@ MODULE Duniter0SandboxPrint;
 			uid: S.String;
 			pubkey, from, to: S.Pubkey;
 			exp: LONGINT;
-			ok, okP, b: BOOLEAN;
+			ok, okP, b, inBC: BOOLEAN;
 			pos: S.CertPos;
 			s: BA.DateTime;
 			ss: Views.Title;
@@ -39,8 +39,15 @@ MODULE Duniter0SandboxPrint;
 			
 			ok := S.IdNextHash(TRUE, hash);
 			WHILE ok DO
-				b := S.IdHash(hash, pubkey, uid, exp); ASSERT(b, 100);
+				b := S.IdHash(hash, inBC, pubkey, uid, exp); ASSERT(b, 100);
 				f.WriteString(hash); f.WriteLn;
+				f.WriteTab;
+				IF inBC THEN
+					f.WriteMsg("#Duniter0:WasMember");
+				ELSE
+					f.WriteMsg("#Duniter0:Newcomer");
+				END;
+				f.WriteLn;
 				f.WriteTab; f.WriteString(pubkey); f.WriteLn;
 				f.WriteTab; f.WriteString(uid); f.WriteTab;
 				BA.TimestampToString(exp, s);
@@ -76,7 +83,7 @@ MODULE Duniter0SandboxPrint;
 					END;
 					f.WriteLn; f.WriteString("→"); f.WriteLn;
 					f.WriteString(toHash);
-					IF S.IdHash(toHash, pubkey, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
+					IF S.IdHash(toHash, inBC, pubkey, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
 						f.WriteLn; f.WriteTab;
 						f.WriteString(" ("); f.WriteString(uid); f.WriteString(") ");
 					END;
@@ -95,7 +102,7 @@ MODULE Duniter0SandboxPrint;
 				okP := pos.CertNextPos(from, toHash);
 				WHILE okP DO
 					f.WriteString(toHash);
-					IF S.IdHash(toHash, to, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
+					IF S.IdHash(toHash, inBC, to, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
 						f.WriteLn; f.WriteTab;
 						f.WriteString(" ("); f.WriteString(uid); f.WriteString(")");
 					END;

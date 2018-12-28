@@ -113,6 +113,13 @@ MODULE Duniter0ParametersPrint;
 			
 			f.WriteLn; f.WriteLn;
 			
+			f.WriteMsg("#Duniter0:sigReplay"); f.WriteLn;
+			f.WriteString("sigReplay = "); f.WriteInt(B.pars.sigReplay);
+			Norm(B.pars.sigReplay, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
 			f.WriteMsg("#Duniter0:sigQty"); f.WriteLn;
 			f.WriteString("sigQty = "); f.WriteInt(B.pars.sigQty);
 			

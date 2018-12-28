@@ -21,6 +21,8 @@ DEFINITION UtilBTree2;
 	TYPE
 		Bytes = POINTER TO ARRAY OF BYTE;
 
+		Comp = BYTE;
+
 		Factory = POINTER TO ABSTRACT RECORD 
 			(fac: Factory) Create- (IN nF: ARRAY OF CHAR): BOOLEAN, NEW, ABSTRACT;
 			(fac: Factory) Open- (IN nF: ARRAY OF CHAR): File, NEW, ABSTRACT;
@@ -30,13 +32,15 @@ DEFINITION UtilBTree2;
 			(fac: Factory) TestBase (IN nF: ARRAY OF CHAR): BOOLEAN, NEW
 		END;
 
+		FilePos = LONGINT;
+
 		File = POINTER TO ABSTRACT RECORD 
-			(ref: File) PosReader- (pos: LONGINT), NEW, ABSTRACT;
+			(ref: File) PosReader- (pos: FilePos), NEW, ABSTRACT;
 			(ref: File) Read- (OUT a: ARRAY OF BYTE), NEW, ABSTRACT;
-			(ref: File) PosWriter- (pos: LONGINT), NEW, ABSTRACT;
+			(ref: File) PosWriter- (pos: FilePos), NEW, ABSTRACT;
 			(ref: File) Write- (IN a: ARRAY OF BYTE), NEW, ABSTRACT;
-			(ref: File) End- (OUT end: LONGINT), NEW, ABSTRACT;
-			(ref: File) Truncate- (end: LONGINT), NEW, ABSTRACT;
+			(ref: File) End- (OUT end: FilePos), NEW, ABSTRACT;
+			(ref: File) Truncate- (end: FilePos), NEW, ABSTRACT;
 			(ref: File) Flush-, NEW, EMPTY;
 			(ref: File) Close-, NEW, ABSTRACT;
 			(ref: File) BytesToReal- (IN a: ARRAY OF BYTE; VAR pos: INTEGER): REAL, NEW, ABSTRACT;
@@ -46,14 +50,14 @@ DEFINITION UtilBTree2;
 		END;
 
 		Database = POINTER TO LIMITED RECORD 
-			end-: LONGINT;
+			end-: FilePos;
 			placeNb-: INTEGER;
 			(base: Database) ReadPlace (place: INTEGER): LONGINT, NEW;
 			(base: Database) WritePlace (place: INTEGER; val: LONGINT), NEW;
 			(base: Database) CreateDataMan (fac: DataFac): DataMan, NEW;
-			(base: Database) CreateIndex (keySize: INTEGER): LONGINT, NEW;
-			(base: Database) OpenIndex (ref: LONGINT; man: KeyManager; f: DataFac): Index, NEW;
-			(base: Database) DeleteIndex (ref: LONGINT), NEW;
+			(base: Database) CreateIndex (keySize: INTEGER): FilePos, NEW;
+			(base: Database) OpenIndex (ref: FilePos; man: KeyManager; f: DataFac): Index, NEW;
+			(base: Database) DeleteIndex (ref: FilePos), NEW;
 			(base: Database) UpdateBase, NEW;
 			(base: Database) CloseBase, NEW
 		END;
@@ -78,12 +82,12 @@ DEFINITION UtilBTree2;
 		END;
 
 		DataMan = POINTER TO LIMITED RECORD 
-			(d: DataMan) ReadData (ptr: LONGINT): Data, NEW;
-			(d: DataMan) AllocateSize (size: INTEGER): LONGINT, NEW;
-			(d: DataMan) AllocateData (data: Data): LONGINT, NEW;
-			(d: DataMan) WriteAllocateData (data: Data): LONGINT, NEW;
-			(d: DataMan) WriteData (ptr: LONGINT; data: Data), NEW
-			(d: DataMan) EraseData (ptr: LONGINT), NEW;
+			(m: DataMan) ReadData (ptr: FilePos): Data, NEW;
+			(m: DataMan) AllocateSize (size: INTEGER): FilePos, NEW;
+			(m: DataMan) AllocateData (data: Data): FilePos, NEW;
+			(m: DataMan) WriteAllocateData (data: Data): FilePos, NEW;
+			(m: DataMan) WriteData (ptr: FilePos; data: Data), NEW;
+			(m: DataMan) EraseData (ptr: FilePos), NEW
 		END;
 
 		IndexPos = POINTER TO LIMITED RECORD  END;
@@ -107,12 +111,12 @@ DEFINITION UtilBTree2;
 		END;
 
 		KeyManager = POINTER TO ABSTRACT RECORD 
-			(man: KeyManager) CompP- (s1, s2: Data): BYTE, NEW, ABSTRACT;
+			(man: KeyManager) CompP- (s1, s2: Data): Comp, NEW, ABSTRACT;
 			(man: KeyManager) PrefP- (key1: Data; VAR key2: Data), NEW, EMPTY
 		END;
 
 		StringKeyManager = POINTER TO EXTENSIBLE RECORD (KeyManager)
-			(man: StringKeyManager) CompP- (key1, key2: Data): BYTE, EXTENSIBLE;
+			(man: StringKeyManager) CompP- (key1, key2: Data): Comp, EXTENSIBLE;
 			(man: StringKeyManager) PrefP- (key1: Data; VAR key2: Data)
 		END;
 
@@ -191,16 +195,20 @@ CONST bNil
 Nil pointer in a database.
 
 CONST lt 
-Result of a comparaison. Less than.
+Result of a comparison. Less than.
 
 CONST eq
-Result of a comparaison. Equal.
+Result of a comparison. Equal.
 
 CONST gt
-Result of a comparaison. Greater than.
+Result of a comparison. Greater than.
 
 TYPE Bytes
 POINTER TO ARRAY OF BYTES.
+
+TYPE Comp
+BYTE
+Result of comparison.
 
 TYPE Factory
 ABSTRACT
@@ -237,11 +245,15 @@ PROCEDURE (fac: Factory) TestBase (IN nF: ARRAY OF CHAR): BOOLEAN
 NEW
 Verify, with the help of fac, if the file nF exists and if it contains a database; return TRUE in this case; the base must be closed.
 
+TYPE FilePos
+LONGINT.
+Position in file.
+
 TYPE File
 ABSTRACT
 File.
 
-PROCEDURE (ref: File) PosReader- (pos: LONGINT)
+PROCEDURE (ref: File) PosReader- (pos: FilePos)
 NEW, ABSTRACT
 Set the reading position of the file ref to pos; the firt position is 0.
 
@@ -249,7 +261,7 @@ PROCEDURE (ref: File) Read- (OUT a: ARRAY OF BYTE)
 NEW, ABSTRACT
 Read the array a from the file ref at reading position.
 
-PROCEDURE (ref: File) PosWriter- (pos: LONGINT)
+PROCEDURE (ref: File) PosWriter- (pos: FilePos)
 NEW, ABSTRACT
 Set the writing position of the file ref to pos; the firt position is 0.
 
@@ -257,11 +269,11 @@ PROCEDURE (ref: File) Write- (IN a: ARRAY OF BYTE)
 NEW, ABSTRACT
 Write the array a to the file ref at writing position.
 
-PROCEDURE (ref: File) End- (OUT end: LONGINT)
+PROCEDURE (ref: File) End- (OUT end: FilePos)
 NEW, ABSTRACT
 Return in end the length of the file ref.
 
-PROCEDURE (ref: File) Truncate- (end: LONGINT)
+PROCEDURE (ref: File) Truncate- (end: FilePos)
 NEW, ABSTRACT
 Truncate the file ref at the length end.
 
@@ -293,7 +305,7 @@ TYPE Database
 LIMITED
 Database.
 
-end-: LONGINT
+end-: FilePos
 Length of file.
 
 placeNb-: INTEGER
@@ -322,7 +334,7 @@ Create and return a new manager of the data created by fac in the database base.
 Pre
 fac # NIL	20
 
-PROCEDURE (base: Database) CreateIndex (keySize: INTEGER): LONGINT
+PROCEDURE (base: Database) CreateIndex (keySize: INTEGER): FilePos
 NEW
 Create a new index in the database base and return its reference, but do not open it. keySize is the size of keys on disk. If keys have a fixed size, put this size in keySize. If the size of keys does not vary much, put the greatest size in keySize. If the greatest size of keys is unknown, or if this size vary much, or if you want to use prefixes, put zero in keySize: you'll have to fix the size of each key later. In any case, the actual size of a key of type Key is given by the length of the output of Key.Write.
 
@@ -330,7 +342,7 @@ Pre
 base is open	20
 keySize >= 0	21
 
-PROCEDURE (base: Database) OpenIndex (ref: LONGINT; man: KeyManager; f: DataFac): Index
+PROCEDURE (base: Database) OpenIndex (ref: FilePos; man: KeyManager; f: DataFac): Index
 NEW
 Open and return an index created with the reference ref by Database.CreateIndex in the database base. man is the key manager of the index and f is the factory of its keys. The current position of the index is reset.
 
@@ -341,7 +353,7 @@ f # NIL	22
 ref # bNil	23
 index is not already open 24
 
-PROCEDURE (base: Database) DeleteIndex (ref: LONGINT)
+PROCEDURE (base: Database) DeleteIndex (ref: FilePos)
 NEW
 Delete the index of position ref in the database base; this index must have been closed.
 
@@ -415,7 +427,7 @@ TYPE DataMan
 LIMITED
 Manager of data.
 
-PROCEDURE (d: DataMan) ReadData (ptr: LONGINT): Data
+PROCEDURE (d: DataMan) ReadData (ptr: FilePos): Data
 NEW
 Read user data d in database base at position ptr.
 
@@ -423,7 +435,7 @@ Pre
 The database of d is open	20
 ptr # bNil	21
 
-PROCEDURE (d: DataMan) AllocateSize (size: INTEGER): LONGINT
+PROCEDURE (d: DataMan) AllocateSize (size: INTEGER): FilePos
 NEW
 Consider using AllocateData or, better, WriteAllocateData instead. Allocate a cluster of size size, managed by d, in the database of d, and return its position.
 
@@ -431,7 +443,7 @@ Pre
 The database of d is open	20
 size > 0	21
 
-PROCEDURE (d: DataMan) AllocateData (data: Data): LONGINT
+PROCEDURE (d: DataMan) AllocateData (data: Data): FilePos
 NEW
 Consider using WriteAllocateData instead.Allocate a cluster for data, managed by d, in the database of d, and return its position. Warning: AllocateData calls data.Write to find the size of data, be sure the value of data can be written and has its correct size.
 
@@ -439,7 +451,7 @@ Pre
 The database of d is open	20
 data # NIL	21
 
-PROCEDURE (d: DataMan) WriteAllocateData (data: Data): LONGINT
+PROCEDURE (d: DataMan) WriteAllocateData (data: Data): FilePos
 NEW
 Allocate a cluster for data, managed by d, in the database of d, and write data into it; return the position of the allocated cluster.
 
@@ -447,7 +459,7 @@ Pre
 The database of d is open	20
 data # NIL	21
 
-PROCEDURE (d: DataMan) WriteData (ptr: LONGINT; data: Data)
+PROCEDURE (d: DataMan) WriteData (ptr: FilePos; data: Data)
 NEW
 Write data, managed by d, at the position ptr in the database of d.
 
@@ -456,7 +468,7 @@ The database of d is open	20
 data # NIL	21
 ptr # bNil	22
 
-PROCEDURE (d: DataMan) EraseData (ptr: LONGINT)
+PROCEDURE (d: DataMan) EraseData (ptr: FilePos)
 NEW
 Erase data managed by d at position ptr in the database of d.
 

@@ -22,7 +22,7 @@ MODULE Duniter0Basic;
 		
 		year0 = 1970; month0 = 1; day0 = 1; (* Start date of computing history *)
 		
-		oldIcon = '×'; (* Icon for old items (old or missing members) *)
+		oldIcon = '×'; (* Icon for old items (old or leaving members) *)
 		
 		never* = MAX(LONGINT); (* In WotWizard window *)
 		revoked* = MIN(LONGINT); (* Limit date for revoked members *)
@@ -88,7 +88,7 @@ MODULE Duniter0Basic;
 				Dates.DateToString(date, Dates.short, da);
 				Dates.TimeToString(time, ti);
 				dt := da + " " + ti;
-				IF t < 0 THEN (* missing *)
+				IF t < 0 THEN (* leaving member *)
 					dt := oldIcon + dt;
 				END;
 			END;

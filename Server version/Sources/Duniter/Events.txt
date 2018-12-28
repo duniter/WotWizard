@@ -48,7 +48,7 @@ MODULE DuniterEvents;
 			m := ms.m[m1]; ms.m[m1] := ms.m[m2]; ms.m[m2] := m;
 		END Swap;
 	
-	PROCEDURE NextNoMembers (): Memberships;
+	PROCEDURE MembershipsEnds (): Memberships;
 		
 		VAR
 			
@@ -60,7 +60,7 @@ MODULE DuniterEvents;
 			bnb, i: INTEGER;
 			exp: LONGINT;
 		
-		BEGIN (*NextNoMembers*)
+		BEGIN (*MembershipsEnds*)
 			NEW(ms.m, B.IdLenM());
 			i := 0;
 			ok := B.IdNextUidM(TRUE, id);
@@ -73,9 +73,9 @@ MODULE DuniterEvents;
 			END;
 			ms.QuickSort(0, LEN(ms.m) - 1);
 			RETURN ms.m;
-		END NextNoMembers;
+		END MembershipsEnds;
 	
-	PROCEDURE Json (): J.Json;
+	PROCEDURE JsonMembershipsEnds (): J.Json;
 		
 		VAR
 			
@@ -84,7 +84,7 @@ MODULE DuniterEvents;
 			time: LONGINT;
 			ss: BA.DateTime;
 		
-		BEGIN (*Json*)
+		BEGIN (*JsonMembershipsEnds*)
 			J.StartObject;
 			J.PushString("Membership_Limits");
 			J.BuildField("description");
@@ -97,7 +97,7 @@ MODULE DuniterEvents;
 			J.PushString(ss + " (UTC+0)");
 			J.BuildField("date_string");
 			J.StartArray;
-			ms := NextNoMembers();
+			ms := MembershipsEnds();
 			m := LEN(ms);
 			FOR i := 0 TO m - 1 DO
 				J.StartObject;
@@ -113,20 +113,20 @@ MODULE DuniterEvents;
 			J.BuildField("limits");
 			J.BuildObject;
 			RETURN J.GetJson();
-		END Json;
+		END JsonMembershipsEnds;
 	
-	PROCEDURE JsonText* (): TextViews.View;
+	PROCEDURE JsonMembershipsEndsText* (): TextViews.View;
 		
 		VAR
 			
 			t: TextModels.Model;
 			f: TextMappers.Formatter;
 		
-		BEGIN (*JsonText*)
+		BEGIN (*JsonMembershipsEndsText*)
 			t := TextModels.dir.New();
 			f.ConnectTo(t);
-			Json().Write(f);
+			JsonMembershipsEnds().Write(f);
 			RETURN TextViews.dir.New(t);
-		END JsonText;
+		END JsonMembershipsEndsText;
 	
 	END DuniterEvents.

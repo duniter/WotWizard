@@ -150,7 +150,7 @@ t.Valid()
 
 PROCEDURE (t: Tree) Find (rank: INTEGER; OUT val: Elem)
 NEW
-Finds and returns in val the element of position rank in the tree t (beginning at 1); if the element does not exist, val returns NIL; rank must verify 1<= rank<= t.NumberOfElems().
+Finds and returns in val the element of position rank in the tree t (beginning at 1); if the element does not exist (rank < 1 or t.NumberOfElems() < rank), val returns NIL.
 
 Pre
 t.Valid()	20

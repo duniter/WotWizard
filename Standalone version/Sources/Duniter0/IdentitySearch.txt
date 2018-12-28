@@ -16,9 +16,9 @@ MODULE Duniter0IdentitySearch;
 
 	IMPORT
 		
-		(*
+		(**
 		L := StdLog,
-		*)
+		**)
 		
 		A := UtilAvlTree, B := Duniter0Blockchain, Dialog, S := Duniter0Sandbox, BA := Duniter0Basic, C := Duniter0CentralitiesStressD, Fonts, Ports, Strings, TextMappers, TextModels, TextViews, UtilSort, Views;
 	
@@ -306,7 +306,7 @@ MODULE Duniter0IdentitySearch;
 				WHILE ok DO
 					Strings.Find(p, hint, 0, pos);
 					ok := pos = 0;
-					IF ok & S.IdHash(hash, p, uid, exp) THEN
+					IF ok & S.IdHash(hash, b, p, uid, exp) THEN
 						NEW(idE);
 						idE.uid := uid; idE.hash := hash; idE.future := TRUE; idE.active := FALSE;
 						e := idE;
@@ -355,7 +355,7 @@ MODULE Duniter0IdentitySearch;
 		
 		VAR
 			
-			okB, okS, b, m: BOOLEAN;
+			okB, okS, b, bb, m: BOOLEAN;
 			posB: B.CertPos;
 			posS: S.CertPos;
 			from, to: B.Pubkey;
@@ -403,7 +403,7 @@ MODULE Duniter0IdentitySearch;
 				WHILE okS DO
 					NEW(idE);
 					idE.hash := toH;
-					b := S.Cert(from, toH, to, exp) & (B.IdPubComplete(to, idE.uid, m, idE.hash, bnb, exp) OR S.IdHash(toH, p, idE.uid, exp)); ASSERT(b, 102);
+					b := S.Cert(from, toH, to, exp) & (B.IdPubComplete(to, idE.uid, m, idE.hash, bnb, exp) OR S.IdHash(toH, bb, p, idE.uid, exp)); ASSERT(b, 102);
 					idE.future := TRUE;
 					e := idE;
 					b := t.SearchIns(e, n); ASSERT(~b, 103);
@@ -522,7 +522,7 @@ MODULE Duniter0IdentitySearch;
 			p: B.Pubkey;
 			h: S.Hash;
 			d: BA.DateTime;
-			b, m: BOOLEAN;
+			b, bb, m: BOOLEAN;
 		
 		BEGIN (*Get*)
 			inBC := B.IdUidComplete(uid, p, m, h, bnb, exp);
@@ -532,7 +532,7 @@ MODULE Duniter0IdentitySearch;
 				b := B.TimeOf(bnb, mt, t); ASSERT(b, 100);
 				BA.TimestampToString(mt, d);
 			ELSE
-				b := S.IdHash(hash, p, uid2, exp); ASSERT(b, 101);
+				b := S.IdHash(hash, bb, p, uid2, exp); ASSERT(b, 101);
 				bloc := "";
 				d := "";
 			END;
@@ -903,11 +903,15 @@ MODULE Duniter0IdentitySearch;
 			cert: B.StringArr;
 			t: TextModels.Model;
 			f: TextMappers.Formatter;
-			i, j: INTEGER;
+			i, j, bnb: INTEGER;
 			item: Dialog.String;
 			title: Views.Title;
 			a: TextModels.Attributes;
 			es: ExpSort;
+			p: B.Pubkey;
+			b, bb, m: BOOLEAN;
+			h: B.Hash;
+			uid: BA.String;
 		
 		BEGIN (*PrintCertifiers*)
 			IF identity.fields[0] # "" THEN
@@ -930,11 +934,29 @@ MODULE Duniter0IdentitySearch;
 						f.WriteString(item); f.WriteLn;
 						es.ids[i] := item;
 						FilterItem(item);
-						GetCDate(item, identity.fields[0], receivedHash[i], es.exps[i], es.dates[i]);
+						b := B.IdUidComplete(item, p, m, h, bnb, es.exps[i]) OR S.IdHash(receivedHash[i], bb, p, uid, es.exps[i]); ASSERT(b, 100);
+						BA.TimestampToString(es.exps[i], es.dates[i]);
 					END;
 					f.WriteLn;
 					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
-					f.WriteMsg("#Duniter0:SortedByExpDates");
+					f.WriteMsg("#Duniter0:SortedByMExpDates");
+					f.rider.SetAttr(a);
+					f.WriteLn; f.WriteLn;
+					es.QuickSort(0, receivedCerts.len - 1);
+					FOR i := 0 TO receivedCerts.len - 1 DO
+						f.WriteString(es.dates[i]); f.WriteTab;
+						f.WriteString(es.ids[i]);
+						f.WriteLn;
+					END;
+					f.WriteLn;
+					FOR i := 0 TO receivedCerts.len - 1 DO
+						receivedCerts.GetItem(i, item);
+						es.ids[i] := item;
+						FilterItem(item);
+						GetCDate(item, identity.fields[0], receivedHash[i], es.exps[i], es.dates[i]);
+					END;
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter0:SortedByCExpDates");
 					f.rider.SetAttr(a);
 					f.WriteLn; f.WriteLn;
 					es.QuickSort(0, receivedCerts.len - 1);
@@ -984,11 +1006,15 @@ MODULE Duniter0IdentitySearch;
 			cert: B.StringArr;
 			t: TextModels.Model;
 			f: TextMappers.Formatter;
-			i: INTEGER;
+			i, bnb: INTEGER;
 			item: Dialog.String;
 			title: Views.Title;
 			a: TextModels.Attributes;
 			es: ExpSort;
+			p: B.Pubkey;
+			b, bb, m: BOOLEAN;
+			h: B.Hash;
+			uid: BA.String;
 		
 		BEGIN (*PrintCertified*)
 			IF identity.fields[0] # "" THEN
@@ -1011,11 +1037,30 @@ MODULE Duniter0IdentitySearch;
 						f.WriteString(item); f.WriteLn;
 						es.ids[i] := item;
 						FilterItem(item);
+						b := B.IdUidComplete(item, p, m, h, bnb, es.exps[i]) OR S.IdHash(sentHash[i], bb, p, uid, es.exps[i]); ASSERT(b, 100);
+						BA.TimestampToString(es.exps[i], es.dates[i]);
+					END;
+					f.WriteLn;
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter0:SortedByMExpDates");
+					f.rider.SetAttr(a);
+					f.WriteLn; f.WriteLn;
+					es.QuickSort(0, sentCerts.len - 1);
+					FOR i := 0 TO sentCerts.len - 1 DO
+						f.WriteString(es.dates[i]); f.WriteTab;
+						f.WriteString(es.ids[i]);
+						f.WriteLn;
+					END;
+					f.WriteLn;
+					FOR i := 0 TO sentCerts.len - 1 DO
+						sentCerts.GetItem(i, item);
+						es.ids[i] := item;
+						FilterItem(item);
 						GetCDate(identity.fields[0], item, sentHash[i], es.exps[i], es.dates[i]);
 					END;
 					f.WriteLn;
 					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
-					f.WriteMsg("#Duniter0:SortedByExpDates");
+					f.WriteMsg("#Duniter0:SortedByCExpDates");
 					f.rider.SetAttr(a);
 					f.WriteLn; f.WriteLn;
 					es.QuickSort(0, sentCerts.len - 1);

@@ -39,15 +39,23 @@ MODULE UtilBBTree2;
 		SES* = B.SES;
 
 	TYPE
+		
+		Bytes* = B.Bytes;
+		
+		Comp* = B.Comp;
+		
+		Factory* = B.Factory;
 
-		Factory = POINTER TO RECORD (B.Factory)
+		StdFactory = POINTER TO RECORD (Factory)
 		END;
+		
+		File* = B.File;
 
 		RealArray = ARRAY RES OF BYTE;
 
 		SRealArray = ARRAY SRS OF BYTE;
 
-		File = POINTER TO RECORD (B.File)
+		StdFile = POINTER TO RECORD (File)
 			h: WinApi.HANDLE;
 			rPos, wPos: FilePos;
 		END;
@@ -80,7 +88,7 @@ MODULE UtilBBTree2;
 
 	VAR
 
-		fac-: B.Factory;
+		fac-: Factory;
 
 	PROCEDURE SplitName (full: ARRAY OF CHAR; OUT path, name: ARRAY OF CHAR): BOOLEAN;
 
@@ -123,7 +131,7 @@ MODULE UtilBBTree2;
 			RETURN ok;
 		END SplitName;
 
-	PROCEDURE (fac: Factory) Create (IN nF: ARRAY OF CHAR): BOOLEAN;
+	PROCEDURE (fac: StdFactory) Create (IN nF: ARRAY OF CHAR): BOOLEAN;
 
 		VAR
 
@@ -155,7 +163,7 @@ MODULE UtilBBTree2;
 			RETURN b # 0;
 		END Create;
 
-	PROCEDURE (fac: Factory) Open (IN nF: ARRAY OF CHAR): File;
+	PROCEDURE (fac: StdFactory) Open (IN nF: ARRAY OF CHAR): StdFile;
 
 		VAR
 
@@ -163,7 +171,7 @@ MODULE UtilBBTree2;
 			s: ARRAY LEN(path) OF CHAR;
 			pS: WinApi.PtrWSTR;
 			ok: BOOLEAN;
-			f: File;
+			f: StdFile;
 			b: WinApi.BOOL;
 
 		BEGIN (*Open*)
@@ -188,7 +196,7 @@ MODULE UtilBBTree2;
 			RETURN f;
 		END Open;
 
-	PROCEDURE (ref: File) Close;
+	PROCEDURE (ref: StdFile) Close;
 
 		VAR
 
@@ -199,7 +207,7 @@ MODULE UtilBBTree2;
 			ASSERT(b # 0, 20);
 		END Close;
 
-	PROCEDURE (ref: File) Flush;
+	PROCEDURE (ref: StdFile) Flush;
 
 		VAR
 
@@ -210,13 +218,13 @@ MODULE UtilBBTree2;
 			ASSERT(b # 0, 20);
 		END Flush;
 	
-	PROCEDURE (ref: File) PosReader (pos: FilePos);
+	PROCEDURE (ref: StdFile) PosReader (pos: FilePos);
 
 		BEGIN (*PosReader*)
 			ref.rPos := pos;
 		END PosReader;
 
-	PROCEDURE (ref: File) Read (OUT a: ARRAY OF BYTE);
+	PROCEDURE (ref: StdFile) Read (OUT a: ARRAY OF BYTE);
 
 		VAR
 
@@ -231,13 +239,13 @@ MODULE UtilBBTree2;
 			INC(ref.rPos, n);
 		END Read;
 
-	PROCEDURE (ref: File) PosWriter (pos: FilePos);
+	PROCEDURE (ref: StdFile) PosWriter (pos: FilePos);
 
 		BEGIN (*PosWriter*)
 			ref.wPos := pos;
 		END PosWriter;
 
-	PROCEDURE (ref: File) Write (IN a: ARRAY OF BYTE);
+	PROCEDURE (ref: StdFile) Write (IN a: ARRAY OF BYTE);
 
 		VAR
 
@@ -252,7 +260,7 @@ MODULE UtilBBTree2;
 			INC(ref.wPos, n);
 		END Write;
 
-	PROCEDURE (ref: File) End (OUT fin: FilePos);
+	PROCEDURE (ref: StdFile) End (OUT fin: FilePos);
 		
 		VAR
 			
@@ -263,7 +271,7 @@ MODULE UtilBBTree2;
 			ASSERT(res # 0, 20);
 		END End;
 
-	PROCEDURE (ref: File) Truncate (fin: FilePos);
+	PROCEDURE (ref: StdFile) Truncate (fin: FilePos);
 
 		VAR
 
@@ -277,7 +285,7 @@ MODULE UtilBBTree2;
 			ASSERT(b # 0, 21);
 		END Truncate;
 
-	PROCEDURE (ref: File) BytesToReal (IN a: ARRAY OF BYTE; VAR pos: INTEGER): REAL;
+	PROCEDURE (ref: StdFile) BytesToReal (IN a: ARRAY OF BYTE; VAR pos: INTEGER): REAL;
 
 		VAR
 
@@ -293,7 +301,7 @@ MODULE UtilBBTree2;
 			RETURN SYSTEM.VAL(REAL, r);
 		END BytesToReal;
 
-	PROCEDURE (ref: File) BytesToSReal (IN a: ARRAY OF BYTE; VAR pos: INTEGER): SHORTREAL;
+	PROCEDURE (ref: StdFile) BytesToSReal (IN a: ARRAY OF BYTE; VAR pos: INTEGER): SHORTREAL;
 
 		VAR
 
@@ -309,7 +317,7 @@ MODULE UtilBBTree2;
 			RETURN SYSTEM.VAL(SHORTREAL, r);
 		END BytesToSReal;
 
-	PROCEDURE (ref: File) RealToBytes (r: REAL): POINTER TO ARRAY OF BYTE;
+	PROCEDURE (ref: StdFile) RealToBytes (r: REAL): Bytes;
 
 		VAR
 
@@ -326,7 +334,7 @@ MODULE UtilBBTree2;
 			RETURN a;
 		END RealToBytes;
 
-	PROCEDURE (ref: File) SRealToBytes (r: SHORTREAL): POINTER TO ARRAY OF BYTE;
+	PROCEDURE (ref: StdFile) SRealToBytes (r: SHORTREAL): Bytes;
 
 		VAR
 
@@ -347,7 +355,7 @@ MODULE UtilBBTree2;
 
 		VAR
 
-			f: Factory;
+			f: StdFactory;
 
 		BEGIN (*Init*)
 			NEW(f);

@@ -159,12 +159,11 @@ MODULE Duniter0CertificationsPrint;
 				IF q > 0 THEN
 					cs.QuickSort(0, q - 1);
 					FOR q := 0 TO LEN(cs.c) - 1 DO
-							f.WriteTab; 
-							f.WriteString(cs.c[q].id);
-							f.WriteTab; 
-							f.WriteString(cs.c[q].created); f.WriteString(" → ");
-							f.WriteString(cs.c[q].expS); f.WriteLn;
-							okP := pos.CertNextPos(from, to);
+						f.WriteTab; 
+						f.WriteString(cs.c[q].id);
+						f.WriteTab; 
+						f.WriteString(cs.c[q].created); f.WriteString(" → ");
+						f.WriteString(cs.c[q].expS); f.WriteLn;
 					END;
 				END;
 				ok := B.IdNextUid(FALSE, uid);
@@ -231,7 +230,6 @@ MODULE Duniter0CertificationsPrint;
 							f.WriteTab; 
 							f.WriteString(cs.c[q].created); f.WriteString(" → ");
 							f.WriteString(cs.c[q].expS); f.WriteLn;
-							okP := pos.CertNextPos(from, to);
 					END;
 				END;
 				ok := B.IdNextUid(FALSE, uid);

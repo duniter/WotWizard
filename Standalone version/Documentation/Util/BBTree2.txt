@@ -21,6 +21,16 @@ DEFINITION UtilBBTree2;
 		gt = 1;
 
 	TYPE
+		Bytes = UtilBTree2.Bytes;
+
+		Comp = UtilBTree2.Comp;
+
+		Factory = UtilBTree2.Factory;
+
+		FilePos = UtilBTree2.FilePos;
+
+		File = UtilBTree2.File;
+
 		Database = UtilBTree2.Database;
 
 		DataFac = UtilBTree2.DataFac;

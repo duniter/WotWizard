@@ -7,7 +7,7 @@ Download the Blackbox Component Framework Version 1.7 at:
 
 and extract it into the "Blackbox" directory (you may have copied this directory elsewhere before).
 
-Then, run "Blackbox/BlackBox.exe", open this file itself in the BlackBox framework (Blackbox/Duniter/Docu/MakingOfWWServerML.odc) and execute the commands below, by clicking on the successive following .
+Then, run "Blackbox/BlackBox.exe", open this file itself in the BlackBox framework (Blackbox/Duniter/Docu/MakingOfWWServerML.odc) and execute the commands below, by clicking on the successive following black-disk icons (when small windows open, click on OK). Then read the last lines at the bottom of this text.
 
  DevCompiler.CompileThis 
 CpcUtf8Conv BabelCompil BabelInit BabelInit0 BabelCars BabelDef BabelLexique BabelSyntaxe BabelAnaSem BabelInterface BabelAvl BabelBabel UtilJson UtilAlea UtilSort BasicsBits BasicsAssert BasicsStrings BasicsFiles SQLiteHost SQLiteStrings SQLiteDriver UnicodeCase_Mapping UnicodeLetter_Mapping DuniterLog UtilAvlTree DuniterBasic UtilSets UtilBTree UtilBBTree DuniterBlockchain DuniterEvents DuniterServerML DuniterSAMLConfig UtilMoveConfig 

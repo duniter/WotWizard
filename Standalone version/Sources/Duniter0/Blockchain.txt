@@ -20,9 +20,9 @@ MODULE Duniter0Blockchain;
 	
 	IMPORT
 		
-		(*
+		(**
 		L := StdLog,
-		*)
+		**)
 		
 		A := UtilAvlTree, B := UtilBBTree2, Dialog, BA := Duniter0Basic, Files, HostFiles, Math, Services, S := SqlDB, Strings, TextMappers, TextModels, TextViews, UtilSort, U := UtilSets, Views;
 	
@@ -53,15 +53,16 @@ MODULE Duniter0Blockchain;
 		joinAndLeavePlace = 1; (* Index joinAndLeaveT *)
 		idPubPlace = 2; (* Index idPubT *)
 		idUidPlace = 3; (* Index idUidT *)
-		idTimePlace = 4; (* Index idTimeT *)
-		certFromPlace = 5; (* Index certFromT *)
-		certToPlace = 6; (* Index certToT *)
-		certTimePlace = 7; (* Index certTimeT *)
-		undoListPlace = 8; (* Head of the chained list of the operations to be undone before every update *)
-		lastNPlace = 9; (* Last read block *)
-		idLenPlace = 10; (* Number of actual members *)
+		idHashPlace = 4; (* Index idHashT *)
+		idTimePlace = 5; (* Index idTimeT *)
+		certFromPlace = 6; (* Index certFromT *)
+		certToPlace = 7; (* Index certToT *)
+		certTimePlace = 8; (* Index certTimeT *)
+		undoListPlace = 9; (* Head of the chained list of the operations to be undone before every update *)
+		lastNPlace = 10; (* Last read block *)
+		idLenPlace = 11; (* Number of actual members *)
 		
-		placeNb = 11; (* Number of places *)
+		placeNb = 12; (* Number of places *)
 	
 	TYPE
 		
@@ -107,6 +108,9 @@ MODULE Duniter0Blockchain;
 			
 			(* Maximum age of an active certification = 63115200 s = 2 years *)
 			sigValidity-,
+			
+			(* Minimum delay before replaying a certification = 5259600 s = 2 months *)
+			sigReplay-,
 			
 			(* Minimum quantity of signatures to be part of the WoT = 5 *)
 			sigQty-,
@@ -157,7 +161,7 @@ MODULE Duniter0Blockchain;
 	
 	CONST
 		
-		(* Types of elements in UndoList *) (******************)
+		(* Types of elements in UndoList *)
 		timeList = 0;
 		idAddList = 1;
 		joinList = 2;
@@ -176,10 +180,9 @@ MODULE Duniter0Blockchain;
 		
 		(* Chained list of the operations to be undone before every update *)
 		UndoList = POINTER TO RECORD (B.Data)
-			dataType: BYTE;
-			next: LONGINT;
+			next: B.FilePos;
 			type: BYTE;
-			(* timeList -> Time; joinList, activeList, leaveList -> Identity; certAddList, certRemoveList -> Certification *) (***************)
+			(* timeList -> Time; joinList, activeList, leaveList -> Identity; certAddList, certRemoveList -> Certification, etc... *)
 			ref,
 			aux: LONGINT;
 		END;
@@ -190,7 +193,6 @@ MODULE Duniter0Blockchain;
 		
 		(* Blocks and their times *)
 		Time = POINTER TO RECORD (B.Data)
-			dataType: BYTE;
 			bnb: INTEGER;
 			mTime,
 			time: LONGINT;
@@ -201,8 +203,7 @@ MODULE Duniter0Blockchain;
 		END;
 		
 		JoinAndLeaveL = POINTER TO RECORD (B.Data)
-			dataType: BYTE;
-			next: LONGINT;
+			next: B.FilePos;
 			joiningBlock, (* Block numbers *)
 			leavingBlock: INTEGER;
 		END;
@@ -212,9 +213,8 @@ MODULE Duniter0Blockchain;
 		END;
 		
 		JoinAndLeave = POINTER TO RECORD (B.Data)
-			dataType: BYTE;
 			pubkey: Pubkey;
-			list: LONGINT; (* JoinAndLeaveL *)
+			list: B.FilePos; (* JoinAndLeaveL *)
 		END;
 		
 		(* Factory of JoinAndLeave *)
@@ -222,15 +222,14 @@ MODULE Duniter0Blockchain;
 		END;
 		
 		Identity = POINTER TO RECORD (B.Data)
-			dataType: BYTE;
 			pubkey: Pubkey;
 			uid: String;
 			member: BOOLEAN;
 			hash: Hash;
 			block_number: INTEGER; (* Where the Identity is written *)
-			expires_on,
+			expires_on: LONGINT;
 			certifiers, (* Index of all certifiers uid, old or present, of this Identity ; B.String -> nothing *)
-			certified: LONGINT; (* Index of all uid, old or present, certified by this Identity ; B.String -> nothing *)
+			certified: B.FilePos; (* Index of all uid, old or present, certified by this Identity ; B.String -> nothing *)
 		END;
 		
 		(* Factory of Identity *)
@@ -238,7 +237,6 @@ MODULE Duniter0Blockchain;
 		END;
 		
 		Certification = POINTER TO RECORD (B.Data)
-			dataType: BYTE;
 			from,
 			to: Pubkey;
 			block_number: INTEGER; (* Where the Certification is written *)
@@ -251,7 +249,6 @@ MODULE Duniter0Blockchain;
 		
 		(* INTEGER index key *)
 		IntKey = POINTER TO RECORD (B.Data)
-			dataType: BYTE;
 			ref: INTEGER;
 		END;
 		
@@ -265,7 +262,6 @@ MODULE Duniter0Blockchain;
 		
 		(* LONGINT index key *)
 		LIntKey = POINTER TO RECORD (B.Data)
-			dataType: BYTE;
 			ref: LONGINT;
 		END;
 		
@@ -275,16 +271,28 @@ MODULE Duniter0Blockchain;
 		
 		(* Pubkey index key *)
 		PubKey = POINTER TO RECORD (B.Data) (* # Pubkey! *)
-			dataType: BYTE;
 			ref: Pubkey;
+		END;
+		
+		(* Hashkey index key *)
+		HashKey = POINTER TO RECORD (B.Data)
+			ref: Hash;
 		END;
 		
 		(* Factory of PubKey *)
 		PubKeyFac = POINTER TO RECORD (B.DataFac)
 		END;
 		
+		(* Factory of HashKey *)
+		HashKeyFac = POINTER TO RECORD (B.DataFac)
+		END;
+		
 		(* Manager of PubKey *)
 		PubKeyMan = POINTER TO RECORD (B.KeyManager)
+		END;
+		
+		(* Manager of HashKey *)
+		HashKeyMan = POINTER TO RECORD (B.KeyManager)
 		END;
 		
 		(* Uid index key manager *)
@@ -301,7 +309,7 @@ MODULE Duniter0Blockchain;
 		
 		(* Current position in a Certification sub-index *)
 		CertPos* = RECORD
-			posRef: LONGINT; (* Root of the sub-index *)
+			posRef: B.FilePos; (* Root of the sub-index *)
 			posCur: B.IndexPos; (* Position in the sub-index *)
 		END;
 		
@@ -329,21 +337,15 @@ MODULE Duniter0Blockchain;
 	
 	CONST
 		
-		(* Types of Data *)
-		undoListType = 1;
-		timeType = 2;
-		joinAndLeaveLType = 3;
-		joinAndLeaveType = 4;
-		identityType = 5;
-		certificationType = 6;
-		intKeyType = 7;
-		lIntKeyType = 8;
-		pubKeyType = 9;
-		
 		minDelay = 2 * 60 * Services.resolution; (* Minimum delay between two updates *)
 		
 		(* Sizes of B.Data *)
 		pubKeyS = (pubkeyLen + 1) * B.CHS;
+		
+		(* Sizes of keys *)
+		timeKeyS = B.INS;
+		idTimeKeyS = B.LIS;
+		certTimeKeyS = B.LIS;
 	
 	VAR
 		
@@ -362,6 +364,7 @@ MODULE Duniter0Blockchain;
 		joinAndLeaveT, (* PubKey -> JoinAndLeave *)
 		idPubT, (* PubKey -> Identity *)
 		idUidT, (* B.String -> Identity *)
+		idHashT, (* HashKey -> Identity *)
 		idTimeT, (* LIntKey -> nothing; addresses of Identity sorted by expiration dates *)
 		certFromT, certToT, (* PubKey -> sub-index(PubKey -> Certification) *)
 		certTimeT: B.Index; (* LIntKey -> nothing; addresses of Certification sorted by expiration dates *)
@@ -372,7 +375,7 @@ MODULE Duniter0Blockchain;
 		sentriesI: U.SetIterator; (* Iterator of sentriesS *)
 		poST: A.Tree;
 		
-		undoList: LONGINT; (* Head of UndoList *)
+		undoList: B.FilePos; (* Head of UndoList *)
 		
 		(* Current positions in indexes *)
 		jlPubkeyCur,
@@ -398,6 +401,7 @@ MODULE Duniter0Blockchain;
 		lIntKeyFac: LIntKeyFac;
 		uidKeyFac: B.StringFac;
 		pubKeyFac: PubKeyFac;
+		hashKeyFac: HashKeyFac;
 		
 		(* Data managers *)
 		timeMan,
@@ -410,6 +414,7 @@ MODULE Duniter0Blockchain;
 		(* Key managers *)
 		pubKeyMan: PubKeyMan;
 		uidKeyMan: UidKeyMan;
+		hashKeyMan: HashKeyMan;
 		intKeyMan: IntKeyMan;
 		idKTimeMan: IdKTimeMan;
 		certKTimeMan: CertKTimeMan;
@@ -445,7 +450,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (t: Time) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
-			t.dataType := r.InByte(); ASSERT(t.dataType = timeType, 100);
 			t.bnb := r.InInt();
 			t.mTime := r.InLInt();
 			t.time := r.InLInt();
@@ -454,7 +458,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (t: Time) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
-			t.dataType := timeType; w.OutByte(t.dataType);
 			w.OutInt(t.bnb);
 			w.OutLInt(t.mTime);
 			w.OutLInt(t.time);
@@ -474,7 +477,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (jlL: JoinAndLeaveL) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
-			jlL.dataType := r.InByte(); ASSERT(jlL.dataType = joinAndLeaveLType, 100);
 			jlL.next := r.InLInt();
 			jlL.joiningBlock := r.InInt();
 			jlL.leavingBlock := r.InInt();
@@ -483,7 +485,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (jlL: JoinAndLeaveL) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
-			jlL.dataType := joinAndLeaveLType; w.OutByte(jlL.dataType);
 			w.OutLInt(jlL.next);
 			w.OutInt(jlL.joiningBlock);
 			w.OutInt(jlL.leavingBlock);
@@ -503,7 +504,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (jl: JoinAndLeave) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
-			jl.dataType := r.InByte(); ASSERT(jl.dataType = joinAndLeaveType, 100);
 			r.InChars(jl.pubkey);
 			jl.list := r.InLInt();
 		END Read;
@@ -511,7 +511,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (jl: JoinAndLeave) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
-			jl.dataType := joinAndLeaveType; w.OutByte(jl.dataType);
 			w.OutChars(jl.pubkey);
 			w.OutLInt(jl.list);
 		END Write;
@@ -530,7 +529,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (id: Identity) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
-			id.dataType := r.InByte(); ASSERT(id.dataType = identityType, 100);
 			r.InChars(id.pubkey);
 			NEW(id.uid, r.InCharsLen() + 1); r.InChars(id.uid);
 			id.member := r.InBool();
@@ -544,7 +542,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (id: Identity) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
-			id.dataType := identityType; w.OutByte(id.dataType);
 			w.OutChars(id.pubkey);
 			w.OutChars(id.uid);
 			w.OutBool(id.member);
@@ -569,7 +566,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (c: Certification) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
-			c.dataType := r.InByte(); ASSERT(c.dataType = certificationType, 100);
 			r.InChars(c.from);
 			r.InChars(c.to);
 			c.block_number := r.InInt();
@@ -579,7 +575,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (c: Certification) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
-			c.dataType := certificationType; w.OutByte(c.dataType);
 			w.OutChars(c.from);
 			w.OutChars(c.to);
 			w.OutInt(c.block_number);
@@ -600,7 +595,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (l: UndoList) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
-			l.dataType := r.InByte(); ASSERT(l.dataType = undoListType, 100);
 			l.next := r.InLInt();
 			l.type := r.InByte();
 			l.ref := r.InLInt();
@@ -610,7 +604,6 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (l: UndoList) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
-			l.dataType := undoListType; w.OutByte(l.dataType);
 			w.OutLInt(l.next);
 			w.OutByte(l.type);
 			w.OutLInt(l.ref);
@@ -631,14 +624,12 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (i: IntKey) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
-			i.dataType := r.InByte(); ASSERT(i.dataType = intKeyType, 100);
 			i.ref := r.InInt();
 		END Read;
 	
 	PROCEDURE (i: IntKey) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
-			i.dataType := intKeyType; w.OutByte(i.dataType);
 			w.OutInt(i.ref);
 		END Write;
 	
@@ -649,7 +640,7 @@ MODULE Duniter0Blockchain;
 			i: IntKey;
 		
 		BEGIN (*New*)
-			ASSERT((size = 0) OR (size = B.BYS + B.INS), 20);
+			ASSERT((size = 0) OR (size = B.INS), 20);
 			IF size = 0 THEN
 				RETURN NIL;
 			END;
@@ -660,14 +651,12 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (l: LIntKey) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
-			l.dataType := r.InByte(); ASSERT(l.dataType = lIntKeyType, 100);
 			l.ref := r.InLInt();
 		END Read;
 	
 	PROCEDURE (l: LIntKey) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
-			l.dataType := lIntKeyType; w.OutByte(l.dataType);
 			w.OutLInt(l.ref);
 		END Write;
 	
@@ -678,7 +667,7 @@ MODULE Duniter0Blockchain;
 			l: LIntKey;
 		
 		BEGIN (*New*)
-			ASSERT((size = 0) OR (size = B.BYS + B.LIS), 20);
+			ASSERT((size = 0) OR (size = B.LIS), 20);
 			IF size = 0 THEN
 				RETURN NIL;
 			END;
@@ -689,14 +678,12 @@ MODULE Duniter0Blockchain;
 	PROCEDURE (pub: PubKey) Read (VAR r: B.Reader);
 		
 		BEGIN (*Read*)
-			pub.dataType := r.InByte(); ASSERT(pub.dataType = pubKeyType, 100);
 			r.InChars(pub.ref);
 		END Read;
 	
 	PROCEDURE (pub: PubKey) Write (VAR w: B.Writer);
 		
 		BEGIN (*Write*)
-			pub.dataType := pubKeyType; w.OutByte(pub.dataType);
 			w.OutChars(pub.ref);
 		END Write;
 	
@@ -712,6 +699,32 @@ MODULE Duniter0Blockchain;
 				pub.ref := "";
 			END;
 			RETURN pub;
+		END New;
+	
+	PROCEDURE (hash: HashKey) Read (VAR r: B.Reader);
+		
+		BEGIN (*Read*)
+			r.InChars(hash.ref);
+		END Read;
+	
+	PROCEDURE (hash: HashKey) Write (VAR w: B.Writer);
+		
+		BEGIN (*Write*)
+			w.OutChars(hash.ref);
+		END Write;
+	
+	PROCEDURE (hf: HashKeyFac) New (size: INTEGER): HashKey;
+		
+		VAR
+			
+			hash: HashKey;
+		
+		BEGIN (*New*)
+			NEW(hash);
+			IF size = 0 THEN
+				hash.ref := "";
+			END;
+			RETURN hash;
 		END New;
 	
 	(* Key managers procedures *)
@@ -758,10 +771,33 @@ MODULE Duniter0Blockchain;
 			END;
 		END PKMCompP;
 	
+	PROCEDURE HKMCompP (h1, h2: B.Data): BYTE;
+		
+		BEGIN (*HKMCompP*)
+			ASSERT((h1 # NIL) & (h2 # NIL), 20);
+			WITH h1: HashKey DO
+				WITH h2: HashKey DO
+					IF h1.ref < h2.ref THEN
+						RETURN B.lt;
+					END;
+					IF h1.ref > h2.ref THEN
+						RETURN B.gt;
+					END;
+					RETURN B.eq;
+				END;
+			END;
+		END HKMCompP;
+	
 	PROCEDURE (pm: PubKeyMan) CompP (p1, p2: B.Data): BYTE;
 		
 		BEGIN (*CompP*)
 			RETURN PKMCompP(p1, p2);
+		END CompP;
+	
+	PROCEDURE (hm: HashKeyMan) CompP (h1, h2: B.Data): BYTE;
+		
+		BEGIN (*CompP*)
+			RETURN HKMCompP(h1, h2);
 		END CompP;
 	
 	PROCEDURE (pm: PubKeyMan) PrefP (p1: B.Data; VAR p2: B.Data);
@@ -788,6 +824,32 @@ MODULE Duniter0Blockchain;
 				END;
 			END;
 			p2 := p;
+		END PrefP;
+	
+	PROCEDURE (hm: HashKeyMan) PrefP (h1: B.Data; VAR h2: B.Data);
+		
+		VAR
+			
+			l, l2: INTEGER;
+			h: HashKey;
+		
+		BEGIN (*PrefP*)
+			ASSERT((h1 # NIL) & (h2 # NIL), 20);
+			ASSERT(HKMCompP(h1, h2) = B.lt, 21);
+			WITH h1: HashKey DO
+				WITH h2: HashKey DO
+					l2 := LEN(h2.ref$);
+					NEW(h);
+					l := 0;
+					h.ref[l] := 0X;
+					WHILE (l <= l2) & ~((HKMCompP(h1, h) = B.lt) & (HKMCompP(h, h2) <= B.eq)) DO
+						h.ref[l] := h2.ref[l];
+						INC(l);
+						h.ref[l] := 0X;
+					END;
+				END;
+			END;
+			h2 := h;
 		END PrefP;
 	
 	(* Comparison method of two Strings. Use the lexical order. *)
@@ -925,14 +987,15 @@ MODULE Duniter0Blockchain;
 				IF database = NIL THEN
 					b := B.fac.CreateBase(dBase, placeNb); ASSERT(b, 100);
 					database := B.fac.OpenBase(dBase, pageNb); ASSERT(database # NIL, 101);
-					database.WritePlace(timePlace, database.CreateIndex(B.BYS + B.INS));
+					database.WritePlace(timePlace, database.CreateIndex(timeKeyS));
 					database.WritePlace(joinAndLeavePlace, database.CreateIndex(0));
 					database.WritePlace(idPubPlace, database.CreateIndex(0));
 					database.WritePlace(idUidPlace, database.CreateIndex(0));
-					database.WritePlace(idTimePlace, database.CreateIndex(B.BYS + B.LIS));
+					database.WritePlace(idHashPlace, database.CreateIndex(0));
+					database.WritePlace(idTimePlace, database.CreateIndex(idTimeKeyS));
 					database.WritePlace(certFromPlace, database.CreateIndex(0));
 					database.WritePlace(certToPlace, database.CreateIndex(0));
-					database.WritePlace(certTimePlace, database.CreateIndex(B.BYS + B.LIS));
+					database.WritePlace(certTimePlace, database.CreateIndex(certTimeKeyS));
 					database.WritePlace(undoListPlace, B.bNil);
 					database.WritePlace(lastNPlace, 0);
 					database.WritePlace(idLenPlace, 0);
@@ -947,6 +1010,7 @@ MODULE Duniter0Blockchain;
 				joinAndLeaveT := database.OpenIndex(database.ReadPlace(joinAndLeavePlace), pubKeyMan, pubKeyFac);
 				idPubT := database.OpenIndex(database.ReadPlace(idPubPlace), pubKeyMan, pubKeyFac);
 				idUidT := database.OpenIndex(database.ReadPlace(idUidPlace), uidKeyMan, uidKeyFac);
+				idHashT := database.OpenIndex(database.ReadPlace(idHashPlace), hashKeyMan, hashKeyFac);
 				idTimeT := database.OpenIndex(database.ReadPlace(idTimePlace), idKTimeMan, lIntKeyFac);
 				certFromT := database.OpenIndex(database.ReadPlace(certFromPlace), pubKeyMan, pubKeyFac);
 				certToT := database.OpenIndex(database.ReadPlace(certToPlace), pubKeyMan, pubKeyFac);
@@ -984,7 +1048,7 @@ MODULE Duniter0Blockchain;
 		END TimeOf;
 	
 	(* Pubkey -> joining and leaving blocks (leavingBlock = hasNotLeaved if no leaving block) *)
-	PROCEDURE JLPub* (IN pubkey: Pubkey; OUT list: LONGINT): BOOLEAN;
+	PROCEDURE JLPub* (IN pubkey: Pubkey; OUT list: B.FilePos): BOOLEAN;
 		
 		VAR
 			
@@ -1003,7 +1067,7 @@ MODULE Duniter0Blockchain;
 		END JLPub;
 	
 	(* Pubkey -> joining and leaving blocks (leavingBlock = hasNotLeaved if no leaving block) *)
-	PROCEDURE JLPubLNext* (VAR list: LONGINT; OUT joiningBlock, leavingBlock: INTEGER): BOOLEAN;
+	PROCEDURE JLPubLNext* (VAR list: B.FilePos; OUT joiningBlock, leavingBlock: INTEGER): BOOLEAN;
 		
 		VAR
 			
@@ -1172,6 +1236,25 @@ MODULE Duniter0Blockchain;
 			END;
 			RETURN FALSE;
 		END IdUidComplete;
+	
+	(* Hash -> pubkey *)
+	PROCEDURE IdHash* (IN hash: Hash; OUT pub: Pubkey): BOOLEAN;
+		
+		VAR
+			
+			id: Identity;
+			idH: HashKey;
+		
+		BEGIN (*IdHash*)
+			NEW(idH);
+			idH.ref := hash;
+			IF idHashT.Search(idH) THEN
+				id := idMan.ReadData(idHashT.ReadValue())(Identity);
+				pub := id.pubkey;
+				RETURN TRUE;
+			END;
+			RETURN FALSE;
+		END IdHash;
 	
 	(* Number of identities *)
 	PROCEDURE IdLen* (): INTEGER;
@@ -1440,7 +1523,7 @@ MODULE Duniter0Blockchain;
 			certFromT.Next;
 			certFromCur := certFromT.GetCurrPos();
 			IF ~certFromT.PosSet() THEN
-				pos.posRef := -1;
+				pos.posRef := - 1;
 				RETURN FALSE;
 			END;
 			pos.posRef := certFromT.ReadValue();
@@ -1467,7 +1550,7 @@ MODULE Duniter0Blockchain;
 			certToT.Next;
 			certToCur := certToT.GetCurrPos();
 			IF ~certToT.PosSet() THEN
-				pos.posRef := -1;
+				pos.posRef := - 1;
 				RETURN FALSE;
 			END;
 			pos.posRef := certToT.ReadValue();
@@ -1781,6 +1864,7 @@ MODULE Duniter0Blockchain;
 			ScanS(ss, ':', s, i); Strings.StringToInt(s, pars.dtReeval, res); ASSERT(res = 0, 104);
 			pars.txWindow := txWindow;
 			pars.msPeriod := pars.msWindow;
+			pars.sigReplay := pars.msPeriod;
 		END Params;
 	
 	(* Add a block in timeT *)
@@ -1791,7 +1875,7 @@ MODULE Duniter0Blockchain;
 			t: Time;
 			i: IntKey;
 			res: INTEGER;
-			tRef: LONGINT;
+			tRef: B.FilePos;
 			b: BOOLEAN;
 			tL: UndoList; (* timeList *)
 		
@@ -1813,13 +1897,13 @@ MODULE Duniter0Blockchain;
 			rNow := MAX(rNow, t.time);
 		END Times;
 	
-	PROCEDURE RemoveCertifiersCertified (withList: BOOLEAN; idRef: LONGINT; id: Identity);
+	PROCEDURE RemoveCertifiersCertified (withList: BOOLEAN; idRef: B.FilePos; id: Identity);
 		
 		VAR
 			
 			c1, c2: B.Index;
 			idU1, idU2: B.String;
-			id2Ref: LONGINT;
+			id2Ref: B.FilePos;
 			id2: Identity;
 			b: BOOLEAN;
 			rL: UndoList; (*remCertifiers & remCertified *)
@@ -1881,7 +1965,7 @@ MODULE Duniter0Blockchain;
 		END RemoveCertifiersCertified;
 	
 	(*
-	- Le membre demande à partir ; il passe par les champs leavers et excluded ; ses éléments d'identité (uid et clé publique) peuvent être réutilisés par lui-même mais pas par d'autres.
+	- Le membre demande à partir ; il passe par les champs leavers et excluded ; ses éléments d'identité (uid et clé publique) peuvent être réutilisés par lui-même mais pas par d'autres; il ne peut plus recevoir de certification.
 	- Le membre révoque son identité explicitement ; champs revoked et excluded ; ses éléments d'identité sont bloqués à jamais.
 	- Le membre ne renouvelle pas son appartenance dans les temps (ou perd ses sigQty certifications ???) ; champ excluded uniquement ; au bout d'un an, ses éléments d'identité sont bloqués à jamais (mais il n'apparaît dans aucun champ supplémentaire).
 	*)
@@ -1901,13 +1985,14 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 		VAR
 			
 			i, n, res, bnb: INTEGER;
-			idRef, jlRef: LONGINT;
+			idRef, jlRef: B.FilePos;
 			tt: LONGINT;
 			s: ARRAY 101 OF CHAR;
 			b: BOOLEAN;
 			id, oldId: Identity;
 			idP: PubKey;
 			idU: B.String;
+			idH: HashKey;
 			idL: UndoList; (* joinList, activeList *)
 			jl: JoinAndLeave;
 			jlL: JoinAndLeaveL;
@@ -1949,6 +2034,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				bnb := id.block_number;
 				NEW(idU); NEW(idU.c, LEN(id.uid$) + 1); idU.c^ := id.uid$;
 				NEW(idP); idP.ref := id.pubkey;
+				NEW(idH); idH.ref := id.hash;
 				IF idPubT.SearchIns(idP) THEN
 					idRef := idPubT.ReadValue();
 					oldId := idMan.ReadData(idRef)(Identity);
@@ -1956,9 +2042,10 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 					id.block_number := oldId.block_number;
 					id.certifiers := oldId.certifiers; id.certified := oldId.certified;
 					idMan.WriteData(idRef, id);
-					(* Les deux lignes suivantes sont superflues *)
 					b := idUidT.SearchIns(idU); ASSERT(b, 107);
 					ASSERT(idUidT.ReadValue() = idRef, 108);
+					b := idHashT.SearchIns(idH); ASSERT(b, 109);
+					ASSERT(idHashT.ReadValue() = idRef, 110);
 					IF withList THEN
 						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := oldId.expires_on;
 						undoList := undoListMan.WriteAllocateData(idL);
@@ -1967,8 +2054,10 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 					id.certifiers := B.bNil; id.certified := B.bNil;
 					idRef := idMan.WriteAllocateData(id);
 					idPubT.WriteValue(idRef);
-					b := idUidT.SearchIns(idU); ASSERT(~b, 109);
+					b := idUidT.SearchIns(idU); ASSERT(~b, 111);
 					idUidT.WriteValue(idRef);
+					b := idHashT.SearchIns(idH); ASSERT(~b, 112);
+					idHashT.WriteValue(idRef);
 					IF withList THEN
 						NEW(idL); idL.next := undoList; idL.type := idAddList; idL.ref := idRef; idL.aux := 0;
 						undoList := undoListMan.WriteAllocateData(idL);
@@ -2002,20 +2091,20 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				NEW(idP);
 				ScanS(ssA, ':', idP.ref, i);
 				SkipS(ssA, ':', i);
-				ScanS(ssA, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 110);
+				ScanS(ssA, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 113);
 				SkipS(ssA, '"', i);
 				IF ssA[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 111);
+				b := idPubT.Search(idP); ASSERT(b, 114);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
-				ASSERT(id.member, 112);
+				ASSERT(id.member, 115);
 				IF withList THEN
 					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
-				b := TimeOf(n, id.expires_on, tt); ASSERT(b, 113);
+				b := TimeOf(n, id.expires_on, tt); ASSERT(b, 116);
 				INC(id.expires_on, pars.msValidity);
 				idMan.WriteData(idRef, id);
 			END;
@@ -2029,14 +2118,14 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				IF ssL[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 114);
+				b := idPubT.Search(idP); ASSERT(b, 117);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
 				IF withList THEN
 					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
-				id.expires_on := - ABS(id.expires_on);
+				id.expires_on := - ABS(id.expires_on); (* id.expires_on < 0 if leaving *)
 				idMan.WriteData(idRef, id);
 			END;
 			
@@ -2049,7 +2138,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				IF ssR[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 115);
+				b := idPubT.Search(idP); ASSERT(b, 118);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
 				IF withList THEN
@@ -2070,24 +2159,24 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				IF ssE[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 116);
+				b := idPubT.Search(idP); ASSERT(b, 119);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
-				ASSERT(id.member, 117);
+				ASSERT(id.member, 120);
 				id.member := FALSE;
 				idMan.WriteData(idRef, id);
-				b := joinAndLeaveT.Search(idP); ASSERT(b, 118);
+				b := joinAndLeaveT.Search(idP); ASSERT(b, 121);
 				jlRef := joinAndLeaveT.ReadValue();
 				jl := joinAndLeaveMan.ReadData(jlRef)(JoinAndLeave);
 				jlL := joinAndLeaveLMan.ReadData(jl.list)(JoinAndLeaveL);
-				ASSERT(jlL.leavingBlock = hasNotLeaved, 119);
-				Strings.StringToInt(nb, jlL.leavingBlock, res); ASSERT(res = 0, 120);
+				ASSERT(jlL.leavingBlock = hasNotLeaved, 122);
+				Strings.StringToInt(nb, jlL.leavingBlock, res); ASSERT(res = 0, 123);
 				joinAndLeaveMan.WriteData(jl.list, jlL);
 				IF withList THEN
 					NEW(idL); idL.next := undoList; idL.type := leaveList; idL.ref := idRef; idL.aux := 0;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
-				IF id.expires_on >= 0 THEN (* ~missing *)
+				IF id.expires_on >= 0 THEN (* ~leaving *)
 					IF withList THEN
 						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
 						undoList := undoListMan.WriteAllocateData(idL);
@@ -2095,7 +2184,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 					INC(id.expires_on, pars.msValidity);
 					idMan.WriteData(idRef, id);
 					NEW(iK); iK.ref := idRef;
-					b := idTimeT.SearchIns(iK); ASSERT(~b, 121);
+					b := idTimeT.SearchIns(iK); ASSERT(~b, 124);
 					IF withList THEN
 						NEW(idL); idL.next := undoList; idL.type := idAddTimeList; idL.ref := idRef; idL.aux := 0;
 						undoList := undoListMan.WriteAllocateData(idL);
@@ -2110,12 +2199,13 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 		VAR
 			
 			i, n, res: INTEGER;
-			exp, pC, v: LONGINT;
+			exp: LONGINT;
+			pC, v, oldPC: B.FilePos;
 			b: BOOLEAN;
 			c: Certification;
 			idP: PubKey;
 			idU: B.String;
-			idRef: LONGINT;
+			idRef: B.FilePos;
 			id: Identity;
 			cL: UndoList; (*certAddList *)
 			ind: B.Index;
@@ -2139,20 +2229,8 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				b := TimeOf(n, c.expires_on, exp); ASSERT(b, 102);
 				INC(c.expires_on, pars.sigValidity);
 				pC := certMan.WriteAllocateData(c);
-				NEW(idU);
 				NEW(idP);
 				idP.ref := c.from;
-				b := idPubT.Search(idP); ASSERT(b, 103);
-				idRef := idPubT.ReadValue();
-				id := idMan.ReadData(idRef)(Identity);
-				b := IdPub(c.to, idU.c); ASSERT(b, 104);
-				IF id.certified = B.bNil THEN
-					id.certified := database.CreateIndex(0);
-					idMan.WriteData(idRef, id);
-				END;
-				ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
-				b := ind.SearchIns(idU);
-				ind.Close;
 				IF certFromT.SearchIns(idP) THEN
 					v := certFromT.ReadValue();
 				ELSE
@@ -2161,20 +2239,14 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				END;
 				idP.ref := c.to;
 				ind := database.OpenIndex(v, pubKeyMan, pubKeyFac);
-				b := ind.SearchIns(idP); ASSERT(~b, 105);
+				IF ind.SearchIns(idP) THEN
+					oldPC := ind.ReadValue();
+				ELSE
+					oldPC := B.bNil;
+				END;
 				ind.WriteValue(pC);
 				ind.Close;
-				b := idPubT.Search(idP); ASSERT(b, 106);
-				idRef := idPubT.ReadValue();
-				id := idMan.ReadData(idRef)(Identity);
-				b := IdPub(c.from, idU.c); ASSERT(b, 107);
-				IF id.certifiers = B.bNil THEN
-					id.certifiers := database.CreateIndex(0);
-					idMan.WriteData(idRef, id);
-				END;
-				ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
-				b := ind.SearchIns(idU);
-				ind.Close;
+				idP.ref := c.to;
 				IF certToT.SearchIns(idP) THEN
 					v := certToT.ReadValue();
 				ELSE
@@ -2183,14 +2255,46 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				END;
 				idP.ref := c.from;
 				ind := database.OpenIndex(v, pubKeyMan, pubKeyFac);
-				b := ind.SearchIns(idP); ASSERT(~b, 108);
+				b := ind.SearchIns(idP);
 				ind.WriteValue(pC);
 				ind.Close;
+				IF oldPC = B.bNil THEN
+					NEW(idU);
+					idP.ref := c.from;
+					b := idPubT.Search(idP); ASSERT(b, 103);
+					idRef := idPubT.ReadValue();
+					id := idMan.ReadData(idRef)(Identity);
+					b := IdPub(c.to, idU.c); ASSERT(b, 104);
+					IF id.certified = B.bNil THEN
+						id.certified := database.CreateIndex(0);
+						idMan.WriteData(idRef, id);
+					END;
+					ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
+					b := ind.SearchIns(idU);
+					ind.Close;
+					idP.ref := c.to;
+					b := idPubT.Search(idP); ASSERT(b, 105);
+					idRef := idPubT.ReadValue();
+					id := idMan.ReadData(idRef)(Identity);
+					b := IdPub(c.from, idU.c); ASSERT(b, 106);
+					IF id.certifiers = B.bNil THEN
+						id.certifiers := database.CreateIndex(0);
+						idMan.WriteData(idRef, id);
+					END;
+					ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
+					b := ind.SearchIns(idU);
+					ind.Close;
+				ELSE
+					NEW(iK); iK.ref := oldPC;
+					b := certTimeT.Erase(iK); ASSERT(~b, 108);
+				END;
 				NEW(iK); iK.ref := pC;
 				b := certTimeT.SearchIns(iK); ASSERT(~b, 109);
 				IF withList THEN
-					NEW(cL); cL.next := undoList; cL.type := certAddList; cL.ref := pC; cL.aux := 0;
+					NEW(cL); cL.next := undoList; cL.type := certAddList; cL.ref := pC; cL.aux := oldPC;
 					undoList := undoListMan.WriteAllocateData(cL);
+				ELSIF oldPC # B.bNil THEN
+					certMan.EraseData(oldPC);
 				END;
 			END;
 		END Certifications;
@@ -2202,7 +2306,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			
 			pKFrom, pKTo: PubKey;
 			b, empty: BOOLEAN;
-			n: LONGINT;
+			n: B.FilePos;
 			ind: B.Index;
 		
 		BEGIN (*RemoveCert*)
@@ -2240,7 +2344,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			c: Certification;
 			iK: LIntKey;
 			b, withList: BOOLEAN;
-			pC: LONGINT;
+			pC: B.FilePos;
 			cL: UndoList; (* certRemoveList *)
 		
 		BEGIN (*RemoveExpiredCerts*)
@@ -2250,7 +2354,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			b := certTimeT.Search(iK);
 			certMan.EraseData(pC);
 			WHILE certTimeT.PosSet() DO
-				pC := certTimeT.CurrentKey()(IntKey).ref;
+				pC := certTimeT.CurrentKey()(LIntKey).ref;
 				certTimeT.Next;
 				c := certMan.ReadData(pC)(Certification);
 				RemoveCert(c);
@@ -2272,7 +2376,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			
 			idP: PubKey;
 			b: BOOLEAN;
-			idRef: LONGINT;
+			idRef: B.FilePos;
 			id: Identity;
 			idL: UndoList; (* leaversList *)
 		
@@ -2296,7 +2400,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			id: Identity;
 			iK: LIntKey;
 			b, withList: BOOLEAN;
-			pId: LONGINT;
+			pId: B.FilePos;
 			idL: UndoList;
 		
 		BEGIN (*RevokeExpiredIds*)
@@ -2306,7 +2410,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			b := idTimeT.Search(iK);
 			idMan.EraseData(pId);
 			WHILE idTimeT.PosSet() DO
-				pId := idTimeT.CurrentKey()(IntKey).ref;
+				pId := idTimeT.CurrentKey()(LIntKey).ref;
 				idTimeT.Next;
 				id := idMan.ReadData(pId)(Identity);
 				iK.ref := pId;
@@ -2330,14 +2434,15 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			li: LIntKey;
 			p: PubKey;
 			u: B.String;
+			h: HashKey;
 			t: Time;
 			jlL: JoinAndLeaveL;
 			jl: JoinAndLeave;
-			idRef: LONGINT;
+			idRef: B.FilePos;
 			id: Identity;
 			c: Certification;
 			l: UndoList;
-			n, jlRef, jlLRef: LONGINT;
+			n, jlRef, jlLRef: B.FilePos;
 			ind: B.Index;
 		
 		BEGIN (*RemoveSecureGap*)
@@ -2351,29 +2456,31 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 						b := timeT.Erase(i); ASSERT(b, 100);
 						timeMan.EraseData(l.ref);
 					|idAddList:
-						(* Erase the Identity data pointed by l.ref and the corresponding keys in idPubT and idUidT *)
+						(* Erase the Identity data pointed by l.ref and the corresponding keys in idPubT, idHashT and idUidT *)
 						id := idMan.ReadData(l.ref)(Identity);
 						NEW(p); p.ref := id.pubkey;
 						b := idPubT.Erase(p); ASSERT(b, 101);
 						NEW(u); u.c := id.uid;
 						b := idUidT.Erase(u); ASSERT(b, 102);
+						NEW(h); h.ref := id.hash;
+						b := idHashT.Erase(h); ASSERT(b, 103);
 						idMan.EraseData(l.ref);
 					|joinList:
-						(* Erase the last JoinAndLeaveL data corresponding to l.ref; if this is also the first data, erase the corresponding JoinAndLeave data and its key in joinAndLeaveT *)
+						(* Let the identity be no more member; erase the last JoinAndLeaveL data corresponding to l.ref; if this is also the first data, erase the corresponding JoinAndLeave data and its key in joinAndLeaveT *)
 						id := idMan.ReadData(l.ref)(Identity);
 						id.member := FALSE;
 						idMan.WriteData(l.ref, id);
 						DEC(idLenM);
 						NEW(p); p.ref := id.pubkey;
-						b := joinAndLeaveT.Search(p); ASSERT(b, 103);
+						b := joinAndLeaveT.Search(p); ASSERT(b, 104);
 						jlRef := joinAndLeaveT.ReadValue();
 						jl := joinAndLeaveMan.ReadData(jlRef)(JoinAndLeave);
 						jlLRef := jl.list;
 						jlL := joinAndLeaveLMan.ReadData(jlLRef)(JoinAndLeaveL);
-						ASSERT(jlL.leavingBlock = hasNotLeaved, 104);
+						ASSERT(jlL.leavingBlock = hasNotLeaved, 105);
 						IF jlL.next = B.bNil THEN
 							joinAndLeaveMan.EraseData(jlRef);
-							b := joinAndLeaveT.Erase(p); ASSERT(b, 105);
+							b := joinAndLeaveT.Erase(p); ASSERT(b, 106);
 						ELSE
 							jl.list := jlL.next;
 							joinAndLeaveMan.WriteData(jlRef, jl);
@@ -2391,52 +2498,71 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 						idMan.WriteData(l.ref, id);
 						INC(idLenM);
 						NEW(p); p.ref := id.pubkey;
-						b := joinAndLeaveT.Search(p); ASSERT(b, 106);
+						b := joinAndLeaveT.Search(p); ASSERT(b, 107);
 						jlRef := joinAndLeaveT.ReadValue();
 						jl := joinAndLeaveMan.ReadData(jlRef)(JoinAndLeave);
 						jlL := joinAndLeaveLMan.ReadData(jl.list)(JoinAndLeaveL);
-						ASSERT(jlL.leavingBlock # hasNotLeaved, 107);
+						ASSERT(jlL.leavingBlock # hasNotLeaved, 108);
 						jlL.leavingBlock := hasNotLeaved;
 						joinAndLeaveLMan.WriteData(jl.list, jlL);
 					|idAddTimeList:
 						NEW(li); li.ref := l.ref;
-						b := idTimeT.Erase(li); ASSERT(b, 108);
+						b := idTimeT.Erase(li); ASSERT(b, 109);
 					|idRemoveTimeList:
 						NEW(li); li.ref := l.ref;
-						b := idTimeT.SearchIns(li); ASSERT(~b, 109);
+						b := idTimeT.SearchIns(li); ASSERT(~b, 110);
 					|certAddList:
-						(* Erase the keys corresponding to the certification pointed by l.ref in certFromT and certToT *)
+						(* Erase the keys corresponding to the certification pointed by l.ref in certFromT and certToT, or, if l.aux # B.bNil, update them; modify Identity. certifiers and Identity.certified as needed *)
 						c := certMan.ReadData(l.ref)(Certification);
-						RemoveCert(c);
 						NEW(li); li.ref := l.ref;
-						b := certTimeT.Erase(li); ASSERT(b, 110);
-						NEW(u);
+						b := certTimeT.Erase(li); ASSERT(b, 111);
 						NEW(p);
-						p.ref := c.from;
-						b := idPubT.Search(p); ASSERT(b, 111);
-						idRef := idPubT.ReadValue();
-						id := idMan.ReadData(idRef)(Identity);
-						b := IdPub(c.to, u.c); ASSERT(b, 112);
-						ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
-						b := ind.Erase(u); ASSERT(b, 113);
-						b := ind.IsEmpty();
-						ind.Close;
-						IF b THEN
-							database.DeleteIndex(id.certified); id.certified := B.bNil;
-							idMan.WriteData(idRef, id);
-						END;
-						p.ref := c.to;
-						b := idPubT.Search(p); ASSERT(b, 114);
-						idRef := idPubT.ReadValue();
-						id := idMan.ReadData(idRef)(Identity);
-						b := IdPub(c.from, u.c); ASSERT(b, 115);
-						ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
-						b := ind.Erase(u); ASSERT(b, 116);
-						b := ind.IsEmpty();
-						ind.Close;
-						IF b THEN
-							database.DeleteIndex(id.certifiers); id.certifiers := B.bNil;
-							idMan.WriteData(idRef, id);
+						IF l.aux = B.bNil THEN
+							RemoveCert(c);
+							NEW(u);
+							p.ref := c.from;
+							b := idPubT.Search(p); ASSERT(b, 112);
+							idRef := idPubT.ReadValue();
+							id := idMan.ReadData(idRef)(Identity);
+							b := IdPub(c.to, u.c); ASSERT(b, 113);
+							ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
+							b := ind.Erase(u); ASSERT(b, 114);
+							b := ind.IsEmpty();
+							ind.Close;
+							IF b THEN
+								database.DeleteIndex(id.certified); id.certified := B.bNil;
+								idMan.WriteData(idRef, id);
+							END;
+							p.ref := c.to;
+							b := idPubT.Search(p); ASSERT(b, 115);
+							idRef := idPubT.ReadValue();
+							id := idMan.ReadData(idRef)(Identity);
+							b := IdPub(c.from, u.c); ASSERT(b, 116);
+							ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
+							b := ind.Erase(u); ASSERT(b, 117);
+							b := ind.IsEmpty();
+							ind.Close;
+							IF b THEN
+								database.DeleteIndex(id.certifiers); id.certifiers := B.bNil;
+								idMan.WriteData(idRef, id);
+							END;
+						ELSE
+							p.ref := c.from;
+							b := certFromT.Search(p); ASSERT(b, 118);
+							n := certFromT.ReadValue();
+							ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
+							p.ref := c.to;
+							b := ind.Search(p); ASSERT(b, 119);
+							ind.WriteValue(l.aux);
+							p.ref := c.to;
+							b := certToT.Search(p); ASSERT(b, 120);
+							n := certToT.ReadValue();
+							ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
+							p.ref := c.from;
+							b := ind.Search(p); ASSERT(b, 121);
+							ind.WriteValue(l.aux);
+							li.ref := l.aux;
+							b := certTimeT.SearchIns(li); ASSERT(b, 122);
 						END;
 						certMan.EraseData(l.ref);
 					|certRemoveList:
@@ -2452,7 +2578,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 						END;
 						p.ref := c.to;
 						ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
-						b := ind.SearchIns(p); ASSERT(~b, 117);
+						b := ind.SearchIns(p); ASSERT(~b, 123);
 						ind.WriteValue(l.ref);
 						ind.Close;
 						IF certToT.SearchIns(p) THEN
@@ -2463,11 +2589,11 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 						END;
 						p.ref := c.from;
 						ind := database.OpenIndex(n, pubKeyMan, pubKeyFac);
-						b := ind.SearchIns(p); ASSERT(~b, 118);
+						b := ind.SearchIns(p); ASSERT(~b, 124);
 						ind.WriteValue(l.ref);
 						ind.Close;
 						NEW(li); li.ref := l.ref;
-						b := certTimeT.SearchIns(li); ASSERT(~b, 119);
+						b := certTimeT.SearchIns(li); ASSERT(~b, 125);
 					|remCertifiers:
 						id := idMan.ReadData(l.aux)(Identity);
 						NEW(u); u.c := id.uid;
@@ -2477,7 +2603,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 							idMan.WriteData(l.ref, id);
 						END;
 						ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac);
-						b := ind.SearchIns(u); ASSERT(~b, 120);
+						b := ind.SearchIns(u); ASSERT(~b, 126);
 						ind.Close;
 					|remCertified:
 						id := idMan.ReadData(l.aux)(Identity);
@@ -2488,7 +2614,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 							idMan.WriteData(l.ref, id);
 						END;
 						ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac);
-						b := ind.SearchIns(u); ASSERT(~b, 121);
+						b := ind.SearchIns(u); ASSERT(~b, 127);
 						ind.Close;
 				END;
 				undoListMan.EraseData(undoList);
@@ -2496,7 +2622,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			END;
 		END RemoveSecureGap;
 	
-	(* Initialize members and sentriesS/sentriesI *)
+	(* Initialize members and sentriesS / sentriesI *)
 	PROCEDURE CalculateSentries;
 		
 		VAR
@@ -2557,6 +2683,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			now, secureNow: LONGINT;
 		
 		BEGIN (*ScanBlocks*)
+			(* Vérifier le calcul de lastN ; comparer avec Go *)
 			t := d.NewTable(); ASSERT(t # NIL, 100);
 			lastN := SHORT(database.ReadPlace(lastNPlace));
 			IF ~changed THEN
@@ -2851,6 +2978,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			NEW(identityFac); NEW(certificationFac);
 			NEW(intKeyFac); NEW(lIntKeyFac); NEW(uidKeyFac); NEW(pubKeyFac);
 			NEW(pubKeyMan); NEW(uidKeyMan);
+			NEW(hashKeyFac); NEW(hashKeyMan);
 			NEW(intKeyMan); NEW(idKTimeMan); NEW(certKTimeMan);
 			OpenB;
 			NEW(update);

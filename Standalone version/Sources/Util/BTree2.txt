@@ -22,9 +22,9 @@ MODULE UtilBTree2;
 		
 		(* Debug *)
 		
-		(*
+		(**
 		L := StdLog,
-		*)
+		**)
 		
 		A := UtilAvlTree;
 	
@@ -2301,7 +2301,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		BEGIN (*Write*)
 			w.OutLInt(pa.keys);
 			w.OutByte(pa.elNb);
-			FOR i := 0 TO 2 * (minEl + 1) - 1 DO
+			FOR i := 0 TO pa.elNb DO
 				w.OutLInt(pa.elems[i].ptr);
 				w.OutSInt(pa.elems[i].endK);
 			END;
@@ -2316,7 +2316,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		BEGIN (*Read*)
 			pa.keys := r.InLInt();
 			pa.elNb := r.InByte();
-			FOR i := 0 TO 2 * (minEl + 1) - 1 DO
+			FOR i := 0 TO pa.elNb DO
 				pa.elems[i].ptr := r.InLInt();
 				pa.elems[i].endK := r.InSInt();
 			END;
@@ -3470,3 +3470,5 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 		NEW(inff);
 		bL := NIL;
 	END UtilBTree2.
+
+DevDebug.UnloadThis UtilBBTree2 UtilBTree2 

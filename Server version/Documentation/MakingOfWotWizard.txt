@@ -3,10 +3,10 @@ WotWizard Client
 
 First, carry out the instructions in the file "MakingOfWWServer.odc".
 
-Then open this file itself in the BlackBox framework (Blackbox/Duniter/Docu/MakingOfWWViews.odc) and execute the commands below.
+Then open this file itself in the BlackBox framework (NewBB/Duniter/Docu/MakingOfWotWizard.odc) and execute the commands below, by clicking on the black-disk icons (when small windows open, click on OK). Then read the last lines at the bottom of this text.
 
  DevCompiler.CompileThis 
-CpcUtf8Conv BabelCompil BabelInit BabelCars BabelDef BabelLexique BabelSyntaxe BabelAnaSem BabelInterface BabelAvl BabelBabel DuniterLanguage UtilExternal UtilJson UtilAvlTree DuniterBasic DuniterWWViews DuniterSAWWVConfig UtilMoveConfig 
+CpcUtf8Conv BabelCompil BabelInit BabelCars BabelDef BabelLexique BabelSyntaxe BabelAnaSem BabelInterface BabelAvl BabelBabel BabelInit0 DuniterLanguage UtilExternal UtilJson UtilAvlTree UnicodeCase_Mapping UnicodeLetter_Mapping DuniterBasic DuniterWWViews DuniterSAWWVConfig UtilMoveConfig 
 
 "UtilMoveConfig.MoveCfg('Duniter', 'SAWWVConfig.ocf')"
 

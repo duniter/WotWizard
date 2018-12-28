@@ -1015,20 +1015,20 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 	PROCEDURE (d: Data) Read- (VAR r: Reader), NEW, ABSTRACT;
 	
 	(* Create data containing an array of char of length l (chars) and of size sz = l * CHS (bytes), with the help of f. *)
-	PROCEDURE (f: StringFac) New- (sz: INTEGER): String, EXTENSIBLE;
+	PROCEDURE (f: StringFac) New- (size: INTEGER): String, EXTENSIBLE;
 		
 		VAR
 			
 			s: String;
 		
 		BEGIN (*New*)
-			ASSERT(sz >= 0, 20);
-			ASSERT(sz MOD CHS = 0, 21);
+			ASSERT(size >= 0, 20);
+			ASSERT(size MOD CHS = 0, 21);
 			NEW(s);
-			IF sz = 0 THEN
+			IF size = 0 THEN
 				s.c := NIL;
 			ELSE
-				NEW(s.c, sz DIV CHS);
+				NEW(s.c, size DIV CHS);
 			END;
 			RETURN s;
 		END New;
@@ -1711,7 +1711,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 					dist := cont2.rDist; INC(dist);
 					IF cont2.father # dad THEN
 						cont2.father := dad;
-						base. WritePage(root2);
+						base.WritePage(root2);
 					END;
 				END;
 			ELSIF root2 = bNil THEN
@@ -1719,7 +1719,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				dist := cont1.rDist; INC(dist);
 				IF cont1.father # dad THEN
 					cont1.father := dad;
-					base. WritePage(root1);
+					base.WritePage(root1);
 				END;
 			ELSIF (cont1.size > cont2.size) OR (cont1.size = cont2.size) & (root1 < root2) THEN
 				root := root1;
@@ -1736,7 +1736,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				END;
 				dist := cont1.rDist; INC(dist);
 				IF (cont1.father # oldCont.father) OR (cont1.left # oldCont.left) OR (cont1.right # oldCont.right) OR (cont1.lDist # oldCont.lDist) OR (cont1.rDist # oldCont.rDist) THEN
-					base. WritePage(root1);
+					base.WritePage(root1);
 				END;
 			ELSE
 				root := root2;
@@ -1753,7 +1753,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				END;
 				dist := cont2.rDist; INC(dist);
 				IF (cont2.father # oldCont.father) OR (cont2.left # oldCont.left) OR (cont2.right # oldCont.right) OR (cont2.lDist # oldCont.lDist) OR (cont2.rDist # oldCont.rDist) THEN
-					base. WritePage(root2);
+					base.WritePage(root2);
 				END;
 			END;
 		END Merge;
@@ -2038,7 +2038,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			RETURN p.pageP;
 		END ReadPage;
 	
-	(* Read user data d in database base at position ptr. *)
+	(* Read user data d in the database of d at position ptr. *)
 	PROCEDURE (d: DataMan) ReadData* (ptr: INTEGER): Data, NEW;
 		
 		VAR
@@ -2400,7 +2400,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				ind := ind.nextI;
 			END;
 			ASSERT(ind = base.indRing, 21);
-			p := base.ReadPage(ref, inff)(Info); ASSERT(p # NIL, 100);
+			p := base.ReadPage(ref, inff)(Info);
 			IndDel(p.iRoot, p.iH);
 			FOR i := 0 TO infoS - 1 DO
 				a[i] := 0;
@@ -2432,14 +2432,14 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			p: Info;
 		
 		BEGIN (*UpdateRoot*)
-			p := ind.baseI.ReadPage(ind.refI, inff)(Info); ASSERT(p # NIL, 100);
+			p := ind.baseI.ReadPage(ind.refI, inff)(Info);
 			p.iRoot := ind.rootI;
 			p.iH := ind.height;
 			p.iSize := ind.size;
 			ind.baseI.WritePage(ind.refI);
 		END UpdateRoot;
 	
-	(* Change the allocation of p.keys when its size is increased by extra *)
+	(* Change the allocation of p.keys when its content is increased by extra and becomes greater than its size *)
 	PROCEDURE (ind: Index) AdjustKeysSize (p: PageI; extra: INTEGER), NEW;
 		
 		VAR
@@ -2450,9 +2450,9 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			nK: Key;
 		
 		BEGIN (*AdjustKeysSize*)
-			l1 := ind.baseI.ReadPageLength(p.keys);
-			l := p.elems[p.elNb].endK;
-			l2 := l + extra;
+			l1 := ind.baseI.ReadPageLength(p.keys); (* Size *)
+			l := p.elems[p.elNb].endK; (* Initial content size *)
+			l2 := l + extra; (* New content size *)
 			IF l2 > l1 THEN
 				REPEAT
 					INC(l1, sectSize);
@@ -2495,10 +2495,8 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				cl1.c[i - diff] := cl1.c[i];
 			END;
 			ind.baseI.WritePage(pa1.keys);
-			FOR i := dst TO pa2.elNb DO
-				INC(pa2.elems[i].endK, lC);
-			END;
 			FOR i := pa2.elNb TO dst BY - 1 DO
+				INC(pa2.elems[i].endK, lC);
 				pa2.elems[i + nb] := pa2.elems[i];
 			END;
 			diff := pa2.elems[dst - 1].endK - pa1.elems[src - 1].endK;
@@ -2510,8 +2508,6 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			END;
 			FOR i := src + nb TO pa1.elNb DO
 				DEC(pa1.elems[i].endK, lC);
-			END;
-			FOR i := src + nb TO pa1.elNb DO
 				pa1.elems[i - nb] := pa1.elems[i];
 			END;
 			INC(pa2.elNb, nb);
@@ -2536,10 +2532,8 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				k.c[pa.elems[dst - 1].endK + i] := c[i];
 			END;
 			ind.baseI.WritePage(pa.keys);
-			FOR i := dst TO pa.elNb DO
-				INC(pa.elems[i].endK, lC);
-			END;
 			FOR i := pa.elNb TO dst BY - 1 DO
+				INC(pa.elems[i].endK, lC);
 				pa.elems[i + 1] := pa.elems[i];
 			END;
 			pa.elems[dst].ptr := el;
@@ -2573,9 +2567,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			ind.baseI.WritePage(pa.keys);
 			FOR i := src + 1 TO pa.elNb DO
 				DEC(pa.elems[i].endK, lC);
-			END;
-			FOR i := src TO pa.elNb - 1 DO
-				pa.elems[i] := pa.elems[i + 1]
+				pa.elems[i - 1] := pa.elems[i]
 			END;
 			DEC(pa.elNb);
 		END TransOut;
@@ -2794,7 +2786,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				ind.TransIn(page, el, c, lC, 1);
 				ind.baseI.WritePage(ind.rootI);
 			END;
-			IF ~found OR inc THEN
+			IF ~found THEN
 				ind.UpdateRoot;
 			END;
 			RETURN found;
@@ -2854,12 +2846,12 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			RETURN comp = eq;
 		END Search;
 	
-	(* Erase from index ind the key key. If key does not belong to the index, ind.Erase does nothing and returns FALSE, otherwise ir returns TRUE. If the current position of the index was on the erased key, it is reset. *)
+	(* Erase from index ind the key key. If key does not belong to the index, ind.Erase does nothing and returns FALSE, otherwise it returns TRUE. If the current position of the index was on the erased key, it is reset. *)
 	PROCEDURE (ind: Index) Erase* (key: Data): BOOLEAN, NEW;
 		
 		VAR
 			
-			dec, found, minus1: BOOLEAN;
+			dec, minus1, found: BOOLEAN;
 			followP, followNum: INTEGER;
 			
 			pa: PageI;
@@ -3003,20 +2995,20 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 				IF h = 0 THEN (* At the bottom of btree *)
 					dec := FALSE;
 					IF p = ind.stringI THEN (* Null key *)
-						found := FALSE;
+						minus1 := FALSE;
 					ELSE (* Read the value in data1 ... *)
 						s := ind.baseI.ReadPage(p, sif)(StringI);
 						data1 := ind.manager.f.New(ind.baseI.ReadPageLength(p) - stringIS);
 						r.InitReader(ind.baseI.ref, s.key, 0);
 						data1.Read(r);
-						found := ind.manager.CompP(key, data1) = eq; (* ... and compare with the key *)
-						IF found THEN
+						minus1 := ind.manager.CompP(key, data1) = eq; (* ... and compare with the key *)
+						IF minus1 THEN
 							pP := s.prev;
 							pN := s.next;
 						END;
 					END;
-					minus1 := found;
-					IF found THEN (* Key was found, delete it *)
+					found := minus1;
+					IF minus1 THEN (* Key was found, delete it *)
 						(* Remove page from the ring ind.stringI *)
 						sN := ind.baseI.ReadPage(pN, sif)(StringI);
 						sN.prev := pP;
@@ -3077,7 +3069,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 						followNum := rgt + 1;
 					END;
 					Era(pa.elems[rgt].ptr, p, rgt, h - 1);
-					IF found THEN
+					IF minus1 THEN
 						(* If rgt = 0, the corresponding key (or prefix) is upper in the tree and will be deleted later (unless it is ind.stringI) *)
 						IF rgt > 0 THEN
 							pa := ind.baseI.ReadPage(p, pif)(PageI);
@@ -3091,7 +3083,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 									Fix(p, rgt - 1);
 								END;
 							END;
-							found := FALSE; (* key has already been found and erased *)
+							minus1 := FALSE; (* key has already been found and erased *)
 						END;
 					ELSIF dec THEN
 						Fix(p, rgt);
@@ -3104,7 +3096,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			ASSERT(key # NIL, 21);
 			followP := bNil;
 			Era(ind.rootI, bNil, 0, ind.height);
-			IF minus1 THEN
+			IF found THEN
 				DEC(ind.size);
 			END;
 			IF dec THEN (* Subtree has been erased... *)
@@ -3117,11 +3109,19 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 					ind.baseI.EraseDiskPage(followP);
 				END;
 			END;
-			IF minus1 OR dec THEN
+			IF found THEN
 				ind.UpdateRoot;
 			END;
-			RETURN minus1;
+			RETURN found;
 		END Erase;
+	
+	(* Test the emptiness of ind *)
+	PROCEDURE (ind: Index) IsEmpty* (): BOOLEAN, NEW;
+		
+		BEGIN (*IsEmpty*)
+			ASSERT(ind.baseI # NIL, 20);
+			RETURN ind.baseI.ReadPage(ind.stringI, sif)(StringI).next = ind.stringI;
+		END IsEmpty;
 	
 	(* Return the number of different keys in ind *)
 	PROCEDURE (ind: Index) NumberOfKeys* (): INTEGER, NEW;
@@ -3187,7 +3187,7 @@ Prefixes are useful if keys are long or if their lengths vary much. In this case
 			RETURN pos;
 		END GetCurrPos;
 	
-	(* Set the current position of ind to pos. WARNING: the content of ind must not have changed since the setting of pos by GetCurrPos, i.e. no call of ind.Rechins, with a return of FALSE, nor of ind.Erase with a return of TRUE, must have occurred; otherwise impredictable errors may happen. *)
+	(* Set the current position of ind to pos. WARNING: the content of ind must not have changed since the setting of pos by GetCurrPos, i.e. no call of ind.SearchIns, with a return of FALSE, nor of ind.Erase with a return of TRUE, must have occurred; otherwise impredictable errors may happen. *)
 	PROCEDURE (ind: Index) SetCurrPos* (pos: IndexPos), NEW;
 		
 		BEGIN (*SetCurrPos*)

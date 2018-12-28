@@ -133,6 +133,7 @@ Util/Mod/BTree2.odc
 Util/Mod/Json.odc
 Util/Mod/NetStressD.odc
 Util/Mod/Sets.odc
+Util/Mod/Sets4.odc
 Util/Mod/Sort.odc
 Util/Rsrc/Func.tbl
 Util/Rsrc/FuncEnv.tbl

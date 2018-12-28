@@ -5,12 +5,17 @@ Download the Blackbox Component Framework Version 1.7 at:
 	
 	http://blackboxframework.org/stable/blackbox-1.7.zip
 
-and extract it into the "Blackbox" directory (you may have copied this directory elsewhere before).
+and extract it into a new empty directory (let's call it "NewBB").
+Download the source code of the last "Server" version of WotWizard at:
 
-Then, run "Blackbox/BlackBox.exe", open this file itself in the BlackBox framework (Blackbox/Duniter/Docu/MakingOf.odc) and execute the commands below, by clicking on the successive following .
+	https://github.com/duniter/WotWizard/releases
+
+and extract the content of the "Server version/Blackbox" directory into "NewBB" (merge all subdirectories and replace all files when asked).
+
+Then, run "NewBB/BlackBox.exe" (double click), open this file (command "File -> Open") itself in the BlackBox framework (NewBB/Duniter/Docu/MakingOfWWServer.odc) and execute the commands below, by clicking on the black-disk icons (when small windows open, click on OK). Then read the last lines at the bottom of this text.
 
  DevCompiler.CompileThis 
-CpcUtf8Conv BabelCompil BabelInit BabelInit0 BabelCars BabelDef BabelLexique BabelSyntaxe BabelAnaSem BabelInterface BabelAvl BabelBabel UtilJson UtilAlea UtilSort BasicsBits BasicsAssert BasicsStrings BasicsFiles SQLiteHost SQLiteStrings SQLiteDriver UnicodeCase_Mapping UnicodeLetter_Mapping DuniterLog UtilAvlTree DuniterBasic UtilSets UtilBTree UtilBBTree DuniterBlockchain DuniterSandbox DuniterWotWizard DuniterServer DuniterSAConfig UtilMoveConfig 
+CpcUtf8Conv BabelCompil BabelInit BabelInit0 BabelCars BabelDef BabelLexique BabelSyntaxe BabelAnaSem BabelInterface BabelAvl BabelBabel UtilJson UtilAlea UtilSort BasicsBits BasicsAssert BasicsStrings BasicsFiles SQLiteHost SQLiteLib SQLiteStrings SQLiteDriver UnicodeCase_Mapping UnicodeLetter_Mapping DuniterLog UtilAvlTree DuniterBasic UtilSets UtilBTree UtilBBTree DuniterBlockchain DuniterSandbox DuniterWotWizard DuniterServer DuniterSAConfig UtilMoveConfig 
 
 "UtilMoveConfig.MoveCfg('Duniter', 'SAConfig.ocf')"
 

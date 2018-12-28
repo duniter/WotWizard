@@ -66,6 +66,13 @@ MODULE UtilAlea;
 			RETURN res;
 		END Random;
 	
+	(* Generates a new integer number between min (included) and max (excluded) *)
+	PROCEDURE (g: Generator) IntRand* (min, max: LONGINT): LONGINT, NEW;
+		
+		BEGIN (*IntRand*)
+			RETURN min + ENTIER((max - min) * g.Random());
+		END IntRand;
+	
 	(* Generates a new pseudo-random real number x with gaussian (normal) deviates. Probability distribution p(x) = 1 / sqrt(2 * pi) * exp(-x^2 / 2). Box-Muller method. *)
 	PROCEDURE (g: Generator) GaussRand* (): REAL, NEW;
 		
@@ -81,7 +88,7 @@ MODULE UtilAlea;
 					v2 := 2. * g.Random() - 1.;
 					r := v1 * v1 + v2 * v2;
 				UNTIL (r < 1.) & (r > 0.);
-				r := Math.Sqrt( -2. * Math.Ln(r) / r);
+				r := Math.Sqrt(  - 2. * Math.Ln(r) / r);
 				g.g := v1 * r;
 				RETURN v2 * r;
 			END;
@@ -112,8 +119,8 @@ MODULE UtilAlea;
 			g.iy := g.r[rLong - 1];
 		END Randomize;
 	
-	PROCEDURE New* (): Generator;
 	(* Initializes the generator with a random seed. *)
+	PROCEDURE New* (): Generator;
 		
 		VAR
 			
@@ -131,6 +138,12 @@ MODULE UtilAlea;
 		BEGIN (*Random*)
 			RETURN gen.Random();
 		END Random;
+	
+	PROCEDURE IntRand* (min, max: LONGINT): LONGINT;
+		
+		BEGIN (*IntRand*)
+			RETURN gen.IntRand(min, max);
+		END IntRand;
 	
 	PROCEDURE GaussRand* (): REAL;
 		
