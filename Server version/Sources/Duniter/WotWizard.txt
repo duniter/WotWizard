@@ -115,6 +115,11 @@ MODULE DuniterWotWizard;
 			end: Node;
 		END;
 		
+		(* Set of Pubkeys, used in FillFile *)
+		PubSet = POINTER TO RECORD (A.Elem)
+			p: B.Pubkey;
+		END;
+		
 		Debug* = PROCEDURE (f: File; i0: INTEGER);
 	
 	CONST
@@ -255,6 +260,20 @@ MODULE DuniterWotWizard;
 					b := CompareProp(e1, e2);
 				END;
 				RETURN b;
+			END;
+		END Compare;
+	
+	PROCEDURE (pub1: PubSet) Compare (pub2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH pub2: PubSet DO
+				IF pub1.p < pub2.p THEN
+					RETURN A.lt;
+				END;
+				IF pub1.p > pub2.p THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
 			END;
 		END Compare;
 	
@@ -916,7 +935,7 @@ MODULE DuniterWotWizard;
 			posB, posBI: B.CertPos;
 			from, to: B.Pubkey;
 			toHash, h: S.Hash;
-			i, j, nbCertifs, princCertif, bnb: INTEGER;
+			i, j, nbCertifs, princCertif, bnb, n: INTEGER;
 			exp, date, mt, t: LONGINT;
 			d: Dossier;
 			c: Certif;
@@ -925,14 +944,18 @@ MODULE DuniterWotWizard;
 			s: ARRAY 11 OF CHAR;
 			cdL, l: CdList;
 			proportionOfSentries: REAL;
+			useful: A.Tree;
+			ps: PubSet;
+			e: A.Elem;
 		
 		BEGIN (*FillFile*)
 			NEW(cdL); l := cdL; (* Chained list of Dossier and Certif *)
 			dNb := 0; (* Number of Dossier *)
+			A.New(useful);
 			ok := S.IdNextHash(TRUE, toHash);
 			WHILE ok DO (* For all identity hash in sandbox *)
 				b := S.IdHash(toHash, idInBC, to, uid, exp); ASSERT(b, 100);
-				IF ~idInBC OR B.IdPubComplete(to, uid, b, h, bnb, exp) & (exp >= 0) (* not leaving; to be verified with the Duniter new version *) THEN
+				IF ~idInBC OR B.IdPubComplete(to, uid, b, h, bnb, exp) & ~b & (exp >= 0) (* not member & not leaving; to be verified with the Duniter new version *) THEN
 					nbCertifs := 0; certs := NIL;
 					IF idInBC & B.CertTo(to, posB) THEN
 						posBI := posB;
@@ -949,96 +972,105 @@ MODULE DuniterWotWizard;
 							END;
 						UNTIL ~okP;
 					END;
-					IF nbCertifs < B.pars.sigQty THEN
-						IF S.CertTo(toHash, pos) THEN
-							posI := pos;
-							REPEAT
-								okP := pos.CertNextPos(from, toHash);
-								IF okP THEN
-									b := S.Cert(from, toHash, to, exp) ; ASSERT(b, 102);
-									FixCertNextDate(from, date);
-									IF date <= exp THEN (* Not-expired certification *)
-										INC(nbCertifs);
-										NEW(cert); NEW(cert.pub); cert.pub^ := from; cert.date := date;
-										cert.next := certs; certs := cert;
-									END;
+					IF S.CertTo(toHash, pos) THEN
+						posI := pos;
+						REPEAT
+							okP := pos.CertNextPos(from, toHash);
+							IF okP THEN
+								b := S.Cert(from, toHash, to, exp) ; ASSERT(b, 102);
+								FixCertNextDate(from, date);
+								IF date <= exp THEN (* Not-expired certification *)
+									INC(nbCertifs);
+									NEW(cert); NEW(cert.pub); cert.pub^ := from; cert.date := date;
+									cert.next := certs; certs := cert;
 								END;
-							UNTIL ~okP;
-						END;
-						IF (nbCertifs >= B.pars.sigQty) & NotTooFar(certs, nbCertifs, princCertif, proportionOfSentries) THEN
-							INC(dNb);
-							NEW(d); NEW(d.pub);
-							NEW(l.next); l := l.next;
-							l.cd := d;
-							d.princCertif := princCertif;
-							d.proportionOfSentries := proportionOfSentries;
-							b := S.IdHash(toHash, idInBC, d.pub, d.id, d.limit); ASSERT(b, 103);
-							NEW(d.certifs, nbCertifs);
-							j := 0;
-							IF idInBC THEN
-								posB := posBI;
-								okP := posB.CertNextPos(from, to); ASSERT(okP, 104);
-								REPEAT
-									b := B.Cert(from, to, bnb, exp); ASSERT(b, 105);
-									FixCertNextDate(from, date);
-									IF date <= exp THEN
-										NEW(c); NEW(c.fromP);
-										c.fromP^ := from;
-										b := B.IdPub(from, c.from); ASSERT(b, 106);
-										c.date := date;
-										c.limit := exp;
-										d.certifs[j] := c;
-										INC(j);
-									END;
-									okP := posB.CertNextPos(from, to);
-								UNTIL ~okP;
 							END;
-							pos := posI;
-							okP := pos.CertNextPos(from, toHash); ASSERT(okP, 107);
+						UNTIL ~okP;
+					END;
+					IF (nbCertifs >= B.pars.sigQty) & NotTooFar(certs, nbCertifs, princCertif, proportionOfSentries) THEN
+						INC(dNb);
+						NEW(d); NEW(d.pub);
+						NEW(l.next); l := l.next;
+						l.cd := d;
+						d.princCertif := princCertif;
+						d.proportionOfSentries := proportionOfSentries;
+						b := S.IdHash(toHash, idInBC, d.pub, d.id, d.limit); ASSERT(b, 103);
+						NEW(d.certifs, nbCertifs);
+						j := 0;
+						IF idInBC THEN
+							posB := posBI;
+							okP := posB.CertNextPos(from, to); ASSERT(okP, 104);
 							REPEAT
-								b := S.Cert(from, toHash, to, exp); ASSERT(b, 108);
+								b := B.Cert(from, to, bnb, exp); ASSERT(b, 105);
 								FixCertNextDate(from, date);
 								IF date <= exp THEN
+									NEW(ps); ps.p := from; e := ps;
+									b := useful.SearchIns(e, n);
 									NEW(c); NEW(c.fromP);
 									c.fromP^ := from;
-									b := B.IdPub(from, c.from); ASSERT(b, 109);
+									b := B.IdPub(from, c.from); ASSERT(b, 106);
 									c.date := date;
 									c.limit := exp;
 									d.certifs[j] := c;
 									INC(j);
 								END;
-								okP := pos.CertNextPos(from, toHash);
+								okP := posB.CertNextPos(from, to);
 							UNTIL ~okP;
 						END;
+						pos := posI;
+						okP := pos.CertNextPos(from, toHash); ASSERT(okP, 107);
+						REPEAT
+							b := S.Cert(from, toHash, to, exp); ASSERT(b, 108);
+							FixCertNextDate(from, date);
+							IF date <= exp THEN
+								NEW(ps); ps.p := from; e := ps;
+								b := useful.SearchIns(e, n);
+								NEW(c); NEW(c.fromP);
+								c.fromP^ := from;
+								b := B.IdPub(from, c.from); ASSERT(b, 109);
+								c.date := date;
+								c.limit := exp;
+								d.certifs[j] := c;
+								INC(j);
+							END;
+							okP := pos.CertNextPos(from, toHash);
+						UNTIL ~okP;
 					END;
 				END;
 				ok := S.IdNextHash(FALSE, toHash);
 			END;
+			Strings.IntToString(dNb, s);
+			L.log.Msg("There are " + s + " Dossier(s) in File");
 			cNb := 0;
 			ok := S.CertNextTo(TRUE, pos);
 			WHILE ok DO
 				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) THEN
 					REPEAT
 						IF B.IdPubComplete(to, uid, b, h, bnb, t) & b THEN
-							NEW(c); NEW(c.fromP);
-							c.fromP^ := from;
-							b := B.IdPub(from, c.from); ASSERT(b, 110);
-							c.to := uid;
-							FixCertNextDate(from, c.date);
-							c.limit := exp;
-							(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite ; peut-être inutile maintenant *)
-							mt := 0;
-							b := B.TimeOf(B.LastBlock() - 1, mt); ASSERT(b OR (B.LastBlock() = 0), 111);
-							IF (c.date <= c.limit) & (c.date > mt) THEN
-								INC(cNb);
-								NEW(l.next); l := l.next;
-								l.cd := c;
+							NEW(ps); ps.p := from; e := ps;
+							IF useful.Search(e, n) THEN (* Keep only certifications whose sender is also a sender in a dossier *)
+								NEW(c); NEW(c.fromP);
+								c.fromP^ := from;
+								b := B.IdPub(from, c.from); ASSERT(b, 110);
+								c.to := uid;
+								FixCertNextDate(from, c.date);
+								c.limit := exp;
+								(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite ; peut-être inutile maintenant *)
+								mt := 0;
+								b := B.TimeOf(B.LastBlock() - 1, mt); ASSERT(b OR (B.LastBlock() = 0), 111);
+								IF (c.date <= c.limit) & (c.date > mt) THEN
+									INC(cNb);
+									NEW(l.next); l := l.next;
+									l.cd := c;
+								END;
 							END;
 						END;
 					UNTIL ~(pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp));
 				END;
 				ok := S.CertNextTo(FALSE, pos);
 			END;
+			Strings.IntToString(cNb, s);
+			L.log.Msg("There are " + s + " Certif(s) in File");
 			l.next := NIL; cdL := cdL.next;
 			IF dNb = 0 THEN
 				f := NIL;
@@ -1052,10 +1084,6 @@ MODULE DuniterWotWizard;
 				END;
 				SortFile(f, 0);
 			END;
-			Strings.IntToString(dNb, s);
-			L.log.Msg("There are " + s + " Dossier(s) in File");
-			Strings.IntToString(cNb, s);
-			L.log.Msg("There are " + s + " Certif(s) in File");
 		END FillFile;
 	
 	(* Calculate the current set of entries, sorted by dates (occur) and by names (invOccur) *)
