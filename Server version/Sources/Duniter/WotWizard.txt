@@ -1042,12 +1042,13 @@ MODULE DuniterWotWizard;
 			Strings.IntToString(dNb, s);
 			L.log.Msg("There are " + s + " Dossier(s) in File");
 			cNb := 0;
+			NEW(ps);
 			ok := S.CertNextTo(TRUE, pos);
 			WHILE ok DO
 				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) THEN
 					REPEAT
 						IF B.IdPubComplete(to, uid, b, h, bnb, t) & b THEN
-							NEW(ps); ps.p := from; e := ps;
+							ps.p := from; e := ps;
 							IF useful.Search(e, n) THEN (* Keep only certifications whose sender is also a sender in a dossier *)
 								NEW(c); NEW(c.fromP);
 								c.fromP^ := from;

@@ -1789,11 +1789,12 @@ MODULE DuniterBlockchain;
 				b := ind.SearchIns(idP);
 				ind.WriteValue(pC);
 				ind.Close;
+				NEW(iK);
 				IF oldPC # B.bNil THEN
-					NEW(iK); iK.ref := oldPC;
-					b := certTimeT.Erase(iK); ASSERT(~b, 103);
+					iK.ref := oldPC;
+					b := certTimeT.Erase(iK); ASSERT(b, 103);
 				END;
-				NEW(iK); iK.ref := pC;
+				iK.ref := pC;
 				b := certTimeT.SearchIns(iK); ASSERT(~b, 104);
 				IF withList THEN
 					NEW(cL); cL.next := undoList; cL.type := certAddList; cL.ref := pC; cL.aux := oldPC;

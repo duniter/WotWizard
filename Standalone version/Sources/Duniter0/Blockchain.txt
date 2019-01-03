@@ -44,9 +44,11 @@ MODULE Duniter0Blockchain;
 		(* Max length of a Hash *)
 		hashLen* = 64;
 		
-		secureGap = 100; (* Number of last blocks to be read again at every update, since they could have changed *)
+		(* Number of last blocks to be read again at every update, since they could have changed *)
+		secureGap = 100;
 		
-		dBase = "Duniter0\DBase.data"; (* Name of the WotWizard database, in the WotWizard.exe directory *)
+		(* Name of the WotWizard database, in the WotWizard.exe directory *)
+		dBase = "Duniter0\DBase.data";
 		
 		(* Numbers of the places of the indexes in dBase *)
 		timePlace = 0; (* Index timeT *)
@@ -274,21 +276,21 @@ MODULE Duniter0Blockchain;
 			ref: Pubkey;
 		END;
 		
+		(* Factory of PubKey *)
+		PubKeyFac = POINTER TO RECORD (B.DataFac)
+		END;
+		
+		(* Manager of PubKey *)
+		PubKeyMan = POINTER TO RECORD (B.KeyManager)
+		END;
+		
 		(* Hashkey index key *)
 		HashKey = POINTER TO RECORD (B.Data)
 			ref: Hash;
 		END;
 		
-		(* Factory of PubKey *)
-		PubKeyFac = POINTER TO RECORD (B.DataFac)
-		END;
-		
 		(* Factory of HashKey *)
 		HashKeyFac = POINTER TO RECORD (B.DataFac)
-		END;
-		
-		(* Manager of PubKey *)
-		PubKeyMan = POINTER TO RECORD (B.KeyManager)
 		END;
 		
 		(* Manager of HashKey *)
@@ -413,8 +415,8 @@ MODULE Duniter0Blockchain;
 		
 		(* Key managers *)
 		pubKeyMan: PubKeyMan;
-		uidKeyMan: UidKeyMan;
 		hashKeyMan: HashKeyMan;
+		uidKeyMan: UidKeyMan;
 		intKeyMan: IntKeyMan;
 		idKTimeMan: IdKTimeMan;
 		certKTimeMan: CertKTimeMan;
@@ -771,33 +773,10 @@ MODULE Duniter0Blockchain;
 			END;
 		END PKMCompP;
 	
-	PROCEDURE HKMCompP (h1, h2: B.Data): BYTE;
-		
-		BEGIN (*HKMCompP*)
-			ASSERT((h1 # NIL) & (h2 # NIL), 20);
-			WITH h1: HashKey DO
-				WITH h2: HashKey DO
-					IF h1.ref < h2.ref THEN
-						RETURN B.lt;
-					END;
-					IF h1.ref > h2.ref THEN
-						RETURN B.gt;
-					END;
-					RETURN B.eq;
-				END;
-			END;
-		END HKMCompP;
-	
 	PROCEDURE (pm: PubKeyMan) CompP (p1, p2: B.Data): BYTE;
 		
 		BEGIN (*CompP*)
 			RETURN PKMCompP(p1, p2);
-		END CompP;
-	
-	PROCEDURE (hm: HashKeyMan) CompP (h1, h2: B.Data): BYTE;
-		
-		BEGIN (*CompP*)
-			RETURN HKMCompP(h1, h2);
 		END CompP;
 	
 	PROCEDURE (pm: PubKeyMan) PrefP (p1: B.Data; VAR p2: B.Data);
@@ -825,6 +804,29 @@ MODULE Duniter0Blockchain;
 			END;
 			p2 := p;
 		END PrefP;
+	
+	PROCEDURE HKMCompP (h1, h2: B.Data): BYTE;
+		
+		BEGIN (*HKMCompP*)
+			ASSERT((h1 # NIL) & (h2 # NIL), 20);
+			WITH h1: HashKey DO
+				WITH h2: HashKey DO
+					IF h1.ref < h2.ref THEN
+						RETURN B.lt;
+					END;
+					IF h1.ref > h2.ref THEN
+						RETURN B.gt;
+					END;
+					RETURN B.eq;
+				END;
+			END;
+		END HKMCompP;
+	
+	PROCEDURE (hm: HashKeyMan) CompP (h1, h2: B.Data): BYTE;
+		
+		BEGIN (*CompP*)
+			RETURN HKMCompP(h1, h2);
+		END CompP;
 	
 	PROCEDURE (hm: HashKeyMan) PrefP (h1: B.Data; VAR h2: B.Data);
 		
@@ -2258,6 +2260,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				b := ind.SearchIns(idP);
 				ind.WriteValue(pC);
 				ind.Close;
+				NEW(iK);
 				IF oldPC = B.bNil THEN
 					NEW(idU);
 					idP.ref := c.from;
@@ -2285,10 +2288,10 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 					b := ind.SearchIns(idU);
 					ind.Close;
 				ELSE
-					NEW(iK); iK.ref := oldPC;
-					b := certTimeT.Erase(iK); ASSERT(~b, 108);
+					iK.ref := oldPC;
+					b := certTimeT.Erase(iK); ASSERT(b, 108);
 				END;
-				NEW(iK); iK.ref := pC;
+				iK.ref := pC;
 				b := certTimeT.SearchIns(iK); ASSERT(~b, 109);
 				IF withList THEN
 					NEW(cL); cL.next := undoList; cL.type := certAddList; cL.ref := pC; cL.aux := oldPC;
@@ -2466,7 +2469,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 						b := idHashT.Erase(h); ASSERT(b, 103);
 						idMan.EraseData(l.ref);
 					|joinList:
-						(* Let the identity be no more member; erase the last JoinAndLeaveL data corresponding to l.ref; if this is also the first data, erase the corresponding JoinAndLeave data and its key in joinAndLeaveT *)
+						(* Let the identity no more be member; erase the last JoinAndLeaveL data corresponding to l.ref; if this is also the first data, erase the corresponding JoinAndLeave data and its key in joinAndLeaveT *)
 						id := idMan.ReadData(l.ref)(Identity);
 						id.member := FALSE;
 						idMan.WriteData(l.ref, id);
