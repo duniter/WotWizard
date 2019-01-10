@@ -2557,6 +2557,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 							p.ref := c.to;
 							b := ind.Search(p); ASSERT(b, 119);
 							ind.WriteValue(l.aux);
+							ind.Close;
 							p.ref := c.to;
 							b := certToT.Search(p); ASSERT(b, 120);
 							n := certToT.ReadValue();
@@ -2564,8 +2565,9 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 							p.ref := c.from;
 							b := ind.Search(p); ASSERT(b, 121);
 							ind.WriteValue(l.aux);
+							ind.Close;
 							li.ref := l.aux;
-							b := certTimeT.SearchIns(li); ASSERT(b, 122);
+							b := certTimeT.SearchIns(li); ASSERT(~b, 122);
 						END;
 						certMan.EraseData(l.ref);
 					|certRemoveList:

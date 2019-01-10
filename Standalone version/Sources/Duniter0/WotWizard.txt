@@ -1081,7 +1081,7 @@ MODULE Duniter0WotWizard;
 							IF idInBC THEN
 								posB := posBI;
 								okP := posB.CertNextPos(from, to); ASSERT(okP, 104);
-								REPEAT
+								WHILE okP DO
 									b := B.Cert(from, to, bnb, exp); ASSERT(b, 105);
 									FixCertNextDate(from, date);
 									IF date <= exp THEN
@@ -1096,11 +1096,11 @@ MODULE Duniter0WotWizard;
 										INC(j);
 									END;
 									okP := posB.CertNextPos(from, to);
-								UNTIL ~okP;
+								END;
 							END;
 							pos := posI;
 							okP := pos.CertNextPos(from, toHash); ASSERT(okP, 107);
-							REPEAT
+							WHILE okP DO
 								b := S.Cert(from, toHash, to, exp); ASSERT(b, 108);
 								FixCertNextDate(from, date);
 								IF date <= exp THEN
@@ -1115,7 +1115,7 @@ MODULE Duniter0WotWizard;
 									INC(j);
 								END;
 								okP := pos.CertNextPos(from, toHash);
-							UNTIL ~okP;
+							END;;
 						END;
 					END;
 				END;

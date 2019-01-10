@@ -106,6 +106,12 @@ MODULE Duniter0IdentitySearch;
 				IF b # A.eq THEN
 					RETURN b;
 				END;
+				IF i1.future & ~i2.future THEN
+					RETURN A.lt;
+				END;
+				IF ~i1.future & i2.future THEN
+					RETURN A.gt;
+				END;
 				IF i1.hash < i2.hash THEN
 					RETURN A.lt;
 				END;
@@ -322,22 +328,22 @@ MODULE Duniter0IdentitySearch;
 			RETURN t;
 		END Find;
 	
-	PROCEDURE GetCDate (IN from, to, toH: ARRAY OF CHAR; OUT exp: LONGINT; OUT date: ARRAY OF CHAR);
+	PROCEDURE GetCDate (IN from, to, toH: ARRAY OF CHAR; future: BOOLEAN; OUT exp: LONGINT; OUT date: ARRAY OF CHAR);
 		
 		VAR
 			
-			b, member: BOOLEAN;
+			b: BOOLEAN;
 			fromP, toP, p: B.Pubkey;
 			bloc: INTEGER;
 			d: BA.DateTime;
 		
 		BEGIN (*GetCDate*)
 			b := B.IdUid(from, fromP); ASSERT(b, 100);
-			member := B.IdUid(to, toP);
-			IF member THEN
-				b := B.Cert(fromP, toP, bloc, exp) OR S.Cert(fromP, toH$, p, exp); ASSERT(b, 101);
-			ELSE
+			IF future THEN
 				b := S.Cert(fromP, toH$, p, exp); ASSERT(b, 102);
+			ELSE
+				b := B.IdUid(to, toP);
+				b := B.Cert(fromP, toP, bloc, exp); ASSERT(b, 101);
 			END;
 			BA.TimestampToString(exp, d);
 			date := d$;
@@ -403,7 +409,7 @@ MODULE Duniter0IdentitySearch;
 				WHILE okS DO
 					NEW(idE);
 					idE.hash := toH;
-					b := S.Cert(from, toH, to, exp) & (B.IdPubComplete(to, idE.uid, m, idE.hash, bnb, exp) OR S.IdHash(toH, bb, p, idE.uid, exp)); ASSERT(b, 102);
+					b := S.Cert(from, toH, to, exp) & (B.IdPubComplete(to, idE.uid, m, hash, bnb, exp) OR S.IdHash(toH, bb, p, idE.uid, exp)); ASSERT(b, 102);
 					idE.future := TRUE;
 					e := idE;
 					b := t.SearchIns(e, n); ASSERT(~b, 103);
@@ -437,8 +443,9 @@ MODULE Duniter0IdentitySearch;
 				identity.fields[8] := "";
 			ELSE
 				sentCerts.GetItem(sentCerts.index, s);
+				b := s[0] = futureIcon;
 				FilterItem(s);
-				GetCDate(identity.fields[0], s, sentHash[sentCerts.index], exp, identity.fields[8]);
+				GetCDate(identity.fields[0], s, sentHash[sentCerts.index], b, exp, identity.fields[8]);
 			END;
 			identity.fields[9] := identity.fields[8];
 			
@@ -506,8 +513,9 @@ MODULE Duniter0IdentitySearch;
 				identity.fields[6] := "";
 			ELSE
 				receivedCerts.GetItem(receivedCerts.index, s);
+				b := s[0] = futureIcon;
 				FilterItem(s);
-				GetCDate(s, identity.fields[0], receivedHash[receivedCerts.index], exp, identity.fields[6]);
+				GetCDate(s, identity.fields[0], receivedHash[receivedCerts.index], b, exp, identity.fields[6]);
 			END;
 			identity.fields[7] := identity.fields[6];
 		END Certs;
@@ -548,9 +556,7 @@ MODULE Duniter0IdentitySearch;
 			
 			certifiers: POINTER TO ARRAY OF B.Pubkey;
 			s: Dialog.String;
-			i, j, n, bnb: INTEGER;
-			hash: B.Hash;
-			exp: LONGINT;
+			i, j, n: INTEGER;
 			b: BOOLEAN;
 			prop: REAL;
 		
@@ -951,9 +957,10 @@ MODULE Duniter0IdentitySearch;
 					f.WriteLn;
 					FOR i := 0 TO receivedCerts.len - 1 DO
 						receivedCerts.GetItem(i, item);
+						b := item[0] = futureIcon;
 						es.ids[i] := item;
 						FilterItem(item);
-						GetCDate(item, identity.fields[0], receivedHash[i], es.exps[i], es.dates[i]);
+						GetCDate(item, identity.fields[0], receivedHash[i], b, es.exps[i], es.dates[i]);
 					END;
 					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
 					f.WriteMsg("#Duniter0:SortedByCExpDates");
@@ -1055,8 +1062,9 @@ MODULE Duniter0IdentitySearch;
 					FOR i := 0 TO sentCerts.len - 1 DO
 						sentCerts.GetItem(i, item);
 						es.ids[i] := item;
+						b := item[0] = futureIcon;
 						FilterItem(item);
-						GetCDate(identity.fields[0], item, sentHash[i], es.exps[i], es.dates[i]);
+						GetCDate(identity.fields[0], item, sentHash[i], b, es.exps[i], es.dates[i]);
 					END;
 					f.WriteLn;
 					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
@@ -1130,6 +1138,7 @@ MODULE Duniter0IdentitySearch;
 			
 			s: Dialog.String;
 			exp: LONGINT;
+			future: BOOLEAN;
 		
 		BEGIN (*CertsNotifier*)
 			IF op = Dialog.changed THEN
@@ -1137,16 +1146,18 @@ MODULE Duniter0IdentitySearch;
 					|3:
 						IF receivedCerts.len > 0 THEN
 							receivedCerts.GetItem(MIN(MAX(receivedCerts.index, 0), receivedCerts.len - 1), s);
+							future := s[0] = futureIcon;
 							FilterItem(s);
-							GetCDate(s, identity.fields[0], receivedHash[receivedCerts.index], exp, identity.fields[2 * n]);
+							GetCDate(s, identity.fields[0], receivedHash[receivedCerts.index], future, exp, identity.fields[2 * n]);
 						ELSE
 							identity.fields[2 * n] := ""
 						END;
 					|4:
 						IF sentCerts.len > 0 THEN
 							sentCerts.GetItem(MIN(MAX(sentCerts.index, 0), sentCerts.len - 1), s);
+							future := s[0] = futureIcon;
 							FilterItem(s);
-							GetCDate(identity.fields[0], s, sentHash[sentCerts.index], exp, identity.fields[2 * n]);
+							GetCDate(identity.fields[0], s, sentHash[sentCerts.index], future, exp, identity.fields[2 * n]);
 						ELSE
 							identity.fields[2 * n] := ""
 						END;

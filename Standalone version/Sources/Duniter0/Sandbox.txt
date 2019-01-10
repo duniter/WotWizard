@@ -671,7 +671,7 @@ MODULE Duniter0Sandbox;
 			A.New(certFromT); A.New(certToT);
 			FOR i := 0 TO t.rows - 1 DO
 				t.Read(i, curC);
-				IF (now <= curC.expires_on) & (IdHash(curC.toHash, inBC, pubkey, uid, exp) OR B.IdPubComplete(curC.to, uid, member, hash, bnb, exp) & (hash = curC.toHash) & member) & (~B.Cert(curC.from, curC.to, bnb, exp) OR (curC.expires_on > exp + B.pars.sigReplay)) THEN
+				IF (now <= curC.expires_on) & (IdHash(curC.toHash, inBC, pubkey, uid, exp) OR B.IdPubComplete(curC.to, uid, member, hash, bnb, exp) & (hash = curC.toHash) & member) & (~B.Cert(curC.from, curC.to, bnb, exp) OR (curC.expires_on - B.pars.sigWindow > exp - B.pars.sigValidity + B.pars.sigReplay)) THEN
 					NEW(c);
 					c.from := curC.from;
 					c.to := curC.to;

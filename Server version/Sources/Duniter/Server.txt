@@ -26,7 +26,7 @@ MODULE DuniterServer;
 	
 	CONST
 		
-		version = "2.8.2se";
+		version = "2.8.3se";
 		rsrcDir = "Duniter/Rsrc"; (* Directory for the two following files *)
 		parametersName = "Parameters.txt"; (* File containing the greatest allowed allocated memory size for W.CalcPermutations *)
 		runningName = "Running.odc"; (* File whose existence shows that WWServer.exe is running *)

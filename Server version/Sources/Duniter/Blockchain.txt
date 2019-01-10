@@ -2006,6 +2006,7 @@ MODULE DuniterBlockchain;
 							p.ref := c.to;
 							b := ind.Search(p); ASSERT(b, 108);
 							ind.WriteValue(SHORT(l.aux));
+							ind.Close;
 							p.ref := c.to;
 							b := certToT.Search(p); ASSERT(b, 109);
 							n := certToT.ReadValue();
@@ -2013,8 +2014,9 @@ MODULE DuniterBlockchain;
 							p.ref := c.from;
 							b := ind.Search(p); ASSERT(b, 110);
 							ind.WriteValue(SHORT(l.aux));
+							ind.Close;
 							i.ref := SHORT(l.aux);
-							b := certTimeT.SearchIns(i); ASSERT(b, 111);
+							b := certTimeT.SearchIns(i); ASSERT(~b, 111);
 						END;
 						certMan.EraseData(l.ref);
 					|certRemoveList:

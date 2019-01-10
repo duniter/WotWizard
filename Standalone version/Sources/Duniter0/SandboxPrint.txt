@@ -32,13 +32,16 @@ MODULE Duniter0SandboxPrint;
 			ss: Views.Title;
 			t: TextModels.Model;
 			f: TextMappers.Formatter;
+			nbHash, nbUid, nbPub, nbCert: INTEGER;
 		
 		BEGIN (*Print*)
 			t := TextModels.dir.New();
 			f.ConnectTo(t);
 			
+			nbHash := 0;
 			ok := S.IdNextHash(TRUE, hash);
 			WHILE ok DO
+				INC(nbHash);
 				b := S.IdHash(hash, inBC, pubkey, uid, exp); ASSERT(b, 100);
 				f.WriteString(hash); f.WriteLn;
 				f.WriteTab;
@@ -55,16 +58,20 @@ MODULE Duniter0SandboxPrint;
 				ok := S.IdNextHash(FALSE, hash);
 			END;
 			f.WriteLn;
+			nbPub := 0;
 			ok := S.IdNextPubkey(TRUE, pubkey, hash);
 			WHILE ok DO
+				INC(nbPub);
 				f.WriteString(pubkey); f.WriteLn; f.WriteTab;
 				f.WriteString(hash);
 				f.WriteLn;
 				ok := S.IdNextPubkey(FALSE, pubkey, hash);
 			END;
 			f.WriteLn;
+			nbUid := 0;
 			ok := S.IdNextUid(TRUE, uid, hash);
 			WHILE ok DO
+				INC(nbUid);
 				f.WriteString(uid); f.WriteLn; f.WriteTab;
 				f.WriteString(hash);
 				f.WriteLn;
@@ -72,10 +79,12 @@ MODULE Duniter0SandboxPrint;
 			END;
 			f.WriteLn;
 			
+			nbCert := 0;
 			ok := S.CertNextFrom(TRUE, pos);
 			WHILE ok DO
 				okP := pos.CertNextPos(from, toHash);
 				WHILE okP DO
+					INC(nbCert);
 					f.WriteString(from);
 					IF B.IdPub(from, uid) THEN
 						f.WriteLn; f.WriteTab;
@@ -121,6 +130,11 @@ MODULE Duniter0SandboxPrint;
 				END;
 				ok := S.CertNextTo(FALSE, pos);
 			END;
+			
+			f.WriteMsg("#Duniter0:HashNb"); f.WriteString(" = "); f.WriteInt(nbHash); f.WriteLn;
+			f.WriteMsg("#Duniter0:PubNb"); f.WriteString(" = "); f.WriteInt(nbPub); f.WriteLn;
+			f.WriteMsg("#Duniter0:UidNb"); f.WriteString(" = "); f.WriteInt(nbUid); f.WriteLn;
+			f.WriteMsg("#Duniter0:CertNb"); f.WriteString(" = "); f.WriteInt(nbCert); f.WriteLn;
 			
 			Dialog.MapString("#Duniter0:Sandbox", ss);
 			Views.OpenAux(TextViews.dir.New(t), ss);
