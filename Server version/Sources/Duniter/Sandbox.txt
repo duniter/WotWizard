@@ -412,6 +412,7 @@ MODULE DuniterSandbox;
 				END;
 				RETURN TRUE;
 			END;
+			pos.posT := NIL;
 			RETURN FALSE;
 		END CertFrom;
 	
@@ -437,6 +438,7 @@ MODULE DuniterSandbox;
 				END;
 				RETURN TRUE;
 			END;
+			pos.posT := NIL;
 			RETURN FALSE;
 		END CertTo;
 	
@@ -444,6 +446,9 @@ MODULE DuniterSandbox;
 	PROCEDURE (IN pos: CertPos) CertPosLen* (): INTEGER, NEW;
 		
 		BEGIN (*CertPosLen*)
+			IF pos.posT = NIL THEN
+				RETURN 0;
+			END;
 			RETURN pos.posT.NumberOfElems();
 		END CertPosLen;
 	
@@ -455,6 +460,9 @@ MODULE DuniterSandbox;
 			e: A.Elem;
 		
 		BEGIN (*CertNextPos*)
+			IF pos.posT = NIL THEN
+				RETURN FALSE;
+			END;
 			pos.posCur := pos.posT.Next(pos.posCur);
 			e := pos.posCur;
 			IF e = NIL THEN
@@ -672,7 +680,7 @@ MODULE DuniterSandbox;
 			A.New(certFromT); A.New(certToT);
 			FOR i := 0 TO t.rows - 1 DO
 				t.Read(i, curC);
-				IF (now <= curC.expires_on) & (IdHash(curC.toHash, inBC, pubkey, uid, exp) OR B.IdPubComplete(curC.to, uid, member, hash, bnb, exp) & (hash = curC.toHash) & member) & (~B.Cert(curC.from, curC.to, bnb, exp) OR (curC.expires_on > exp + B.pars.sigReplay)) THEN
+				IF (now <= curC.expires_on) & (IdHash(curC.toHash, inBC, pubkey, uid, exp) OR B.IdPubComplete(curC.to, uid, member, hash, bnb, exp) & (hash = curC.toHash) & member) & (~B.Cert(curC.from, curC.to, bnb, exp) OR (curC.expires_on - B.pars.sigWindow > exp - B.pars.sigValidity + B.pars.sigReplay)) THEN
 					NEW(c);
 					c.from := curC.from;
 					c.to := curC.to;

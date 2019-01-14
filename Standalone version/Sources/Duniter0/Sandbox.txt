@@ -412,6 +412,7 @@ MODULE Duniter0Sandbox;
 				END;
 				RETURN TRUE;
 			END;
+			pos.posT := NIL;
 			RETURN FALSE;
 		END CertFrom;
 	
@@ -437,6 +438,7 @@ MODULE Duniter0Sandbox;
 				END;
 				RETURN TRUE;
 			END;
+			pos.posT := NIL;
 			RETURN FALSE;
 		END CertTo;
 	
@@ -444,6 +446,9 @@ MODULE Duniter0Sandbox;
 	PROCEDURE (IN pos: CertPos) CertPosLen* (): INTEGER, NEW;
 		
 		BEGIN (*CertPosLen*)
+			IF pos.posT = NIL THEN
+				RETURN 0;
+			END;
 			RETURN pos.posT.NumberOfElems();
 		END CertPosLen;
 	
@@ -455,6 +460,9 @@ MODULE Duniter0Sandbox;
 			e: A.Elem;
 		
 		BEGIN (*CertNextPos*)
+			IF pos.posT = NIL THEN
+				RETURN FALSE;
+			END;
 			pos.posCur := pos.posT.Next(pos.posCur);
 			e := pos.posCur;
 			IF e = NIL THEN

@@ -957,8 +957,8 @@ MODULE DuniterWotWizard;
 				b := S.IdHash(toHash, idInBC, to, uid, exp); ASSERT(b, 100);
 				IF ~idInBC OR B.IdPubComplete(to, uid, b, h, bnb, exp) & ~b & (exp >= 0) (* not member & not leaving; to be verified with the Duniter new version *) THEN
 					nbCertifs := 0; certs := NIL;
-					IF idInBC & B.CertTo(to, posB) THEN
-						posBI := posB;
+					IF idInBC & B.CertTo(to, posBI) THEN
+						posB := posBI;
 						REPEAT
 							okP := posB.CertNextPos(from, to);
 							IF okP THEN
@@ -972,8 +972,8 @@ MODULE DuniterWotWizard;
 							END;
 						UNTIL ~okP;
 					END;
-					IF S.CertTo(toHash, pos) THEN
-						posI := pos;
+					IF S.CertTo(toHash, posI) THEN
+						pos := posI;
 						REPEAT
 							okP := pos.CertNextPos(from, toHash);
 							IF okP THEN
