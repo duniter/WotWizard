@@ -10,6 +10,8 @@ You can find the executables here:
 
 There are two versions of WotWizard: Server or Standalone.
 
+**Warning**: You should use the 1.6.29 version of duniter or any later version in the series 1.6.x. Don't use a 1.7.x version.
+
 Server version:
 
 Server version is divided into:
