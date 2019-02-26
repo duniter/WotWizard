@@ -11,10 +11,12 @@ You should have received a copy of the GNU General Public License along with thi
 WotWizard builds, from the blockchain and sandbox of Duniter, a prediction of the future entries of candidates into the Duniter Web of Trust (WOT). It uses a simulation of the Duniter mechanism. When several possibilities may happen, each one is listed with its probability. The published lists are automatically updated every five minutes, and any change is signaled visually.
 The StandAlone Version contains several tools and a fast Web of Trust Explorer.
 
+Warning: You should use the 1.6.29 version of duniter or any later version in the series 1.6.x. Don't use a 1.7.x version.
+
 How to use it?
 This program needs a Duniter node running on the same computer.
 This program runs natively on Windows. If your computer runs on Linux, install "wine" first, and, in a terminal, run "winecfg" and configure the drives to be sure that the Duniter database (see below) can be reached.
-Put the file "WotWizard.exe" into an empty directory, put the Windows dll "sqlite3.dll" into the same directory and run WotWizard with a double-click or with the line command from the directory (under Linux):
+Put the file "WotWizard.exe" into an empty directory, put the Windows dll "sqlite3.dll" into the same directory and run WotWizard with a double-click or with the command line from the directory (under Linux):
 	
 	$wine WotWizard.exe
 
@@ -58,7 +60,7 @@ Web of Trust Explorer
 Open the WoT Explorer with the menu command "Web of Trust -> Explorer".
 
 See the explorer map.
-You can search any identity in the blockchain or the sandbox by typing its first characters or the first characters of its public key into the first top field and by clicking on the "Search" button. The possible identities appear in the list at the bottom: choose the one you want to look at. Some details appear in the "Identity" frame, and the certifications, received and sent, in the "Certifications" frame. You can look at the identity of one of the senders or receivers by clicking on the corresponding "Go" button; step back with the arrow buttons. You can also display a text of informations on certifiers or certified identities by clicking on one of the "D" buttons (list of present certifiers or certified identities, sorted by alphabetic order and by expiration dates of certifications, and list of all non-revoked certifiers or certified identities of all times, able to certify or be certified again).
+You can search any identity in the blockchain or the sandbox by typing its first characters or the first characters of its public key into the first top field and by clicking on the "Search" button. The possible identities appear in the list at the bottom: choose the one you want to look at. Some details appear in the "Identity" frame, and the certifications, received and sent, in the "Certifications" frame. You can look at the identity of one of the senders or receivers by clicking on the corresponding "Go" button; step back with the arrow buttons. You can also display a text of informations on certifiers or certified identities by clicking on one of the "D" buttons (list of present certifiers or certified identities, sorted by alphabetic order, by expiration dates of membership (or limit date before revocation if the identity is no more member -  "×" before her name) and by expiration dates of certifications, and list of all non-revoked certifiers or certified identities of all times, able to certify or be certified again).
 Displayed dates are member's registration date into the blockchain, expiration dates, of member's membership and of her certifications, and the availability date of the next sent certification in the field "Availability" (if already available, this date comes after an exclamation mark "!"). If member's end of membership has been requested, her expiration date of membership is preceded by a cross (×). In this case, she can no more get new certifications, and, without renewal of her membership, she will be excluded at this date.
 
 The degree of centrality c of a member is the number of oriented paths (certifier -> certified) of shortest lengths to which she belongs and whose length is, at most, stepMax (5) plus one steps from the certifier. The centrality level c' of a member is calculated from her degree of centrality c by the expression:

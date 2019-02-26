@@ -932,7 +932,7 @@ MODULE DuniterWotWizard;
 			
 			ok, okP, b, idInBC: BOOLEAN;
 			pos, posI: S.CertPos;
-			posB, posBI: B.CertPos;
+			posB, posBI, posBF: B.CertPos;
 			from, to: B.Pubkey;
 			toHash, h: S.Hash;
 			i, j, nbCertifs, princCertif, bnb, n, cNbU: INTEGER;
@@ -961,7 +961,7 @@ MODULE DuniterWotWizard;
 						posB := posBI;
 						REPEAT
 							okP := posB.CertNextPos(from, to);
-							IF okP THEN
+							IF okP & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN (* Don't consider certifications sent by a member who already has sent sigStock (100) certifications *)
 								b := B.Cert(from, to, bnb, exp) ; ASSERT(b, 101);
 								FixCertNextDate(from, date);
 								IF date <= exp THEN (* Not-expired certification *)
@@ -976,7 +976,7 @@ MODULE DuniterWotWizard;
 						pos := posI;
 						REPEAT
 							okP := pos.CertNextPos(from, toHash);
-							IF okP THEN
+							IF okP & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN
 								b := S.Cert(from, toHash, to, exp) ; ASSERT(b, 102);
 								FixCertNextDate(from, date);
 								IF date <= exp THEN (* Not-expired certification *)
@@ -1001,18 +1001,20 @@ MODULE DuniterWotWizard;
 							posB := posBI;
 							okP := posB.CertNextPos(from, to);
 							WHILE okP DO
-								b := B.Cert(from, to, bnb, exp); ASSERT(b, 104);
-								FixCertNextDate(from, date);
-								IF date <= exp THEN
-									NEW(ps); ps.p := from; e := ps;
-									b := useful.SearchIns(e, n);
-									NEW(c); NEW(c.fromP);
-									c.fromP^ := from;
-									b := B.IdPub(from, c.from); ASSERT(b, 105);
-									c.date := date;
-									c.limit := exp;
-									d.certifs[j] := c;
-									INC(j);
+								IF ~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock) THEN
+									b := B.Cert(from, to, bnb, exp); ASSERT(b, 104);
+									FixCertNextDate(from, date);
+									IF date <= exp THEN
+										NEW(ps); ps.p := from; e := ps;
+										b := useful.SearchIns(e, n);
+										NEW(c); NEW(c.fromP);
+										c.fromP^ := from;
+										b := B.IdPub(from, c.from); ASSERT(b, 105);
+										c.date := date;
+										c.limit := exp;
+										d.certifs[j] := c;
+										INC(j);
+									END;
 								END;
 								okP := posB.CertNextPos(from, to);
 							END;
@@ -1020,18 +1022,20 @@ MODULE DuniterWotWizard;
 						pos := posI;
 						okP := pos.CertNextPos(from, toHash);
 						WHILE okP DO
-							b := S.Cert(from, toHash, to, exp); ASSERT(b, 106);
-							FixCertNextDate(from, date);
-							IF date <= exp THEN
-								NEW(ps); ps.p := from; e := ps;
-								b := useful.SearchIns(e, n);
-								NEW(c); NEW(c.fromP);
-								c.fromP^ := from;
-								b := B.IdPub(from, c.from); ASSERT(b, 107);
-								c.date := date;
-								c.limit := exp;
-								d.certifs[j] := c;
-								INC(j);
+							IF ~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock) THEN
+								b := S.Cert(from, toHash, to, exp); ASSERT(b, 106);
+								FixCertNextDate(from, date);
+								IF date <= exp THEN
+									NEW(ps); ps.p := from; e := ps;
+									b := useful.SearchIns(e, n);
+									NEW(c); NEW(c.fromP);
+									c.fromP^ := from;
+									b := B.IdPub(from, c.from); ASSERT(b, 107);
+									c.date := date;
+									c.limit := exp;
+									d.certifs[j] := c;
+									INC(j);
+								END;
 							END;
 							okP := pos.CertNextPos(from, toHash);
 						END;
@@ -1053,7 +1057,7 @@ MODULE DuniterWotWizard;
 			WHILE ok DO
 				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) THEN
 					REPEAT
-						IF B.IdPubComplete(to, uid, b, h, bnb, t) & b THEN
+						IF B.IdPubComplete(to, uid, b, h, bnb, t) & b & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN
 							FixCertNextDate(from, date);
 							(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite ; peut-être inutile maintenant *)
 							IF (date <= exp) & (date > mt) THEN

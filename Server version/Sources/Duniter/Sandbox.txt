@@ -572,7 +572,7 @@ MODULE DuniterSandbox;
 		
 		BEGIN (*MembershipIds*)
 			t := d.NewTable(); ASSERT(t # NIL, 100);
-			REPEAT
+			REPEAT (* Membership applications *)
 				t.Exec("SELECT m.idtyHash, m.membership, m.issuer, m.userid, m.expires_on FROM membership m INNER JOIN block b ON m.blockHash = b.hash WHERE NOT b.fork ORDER BY m.blockNumber ASC");
 				ASSERT(t.res IN {0, 6}, 101);
 			UNTIL t.res = 0;
@@ -587,18 +587,18 @@ MODULE DuniterSandbox;
 					WITH e: IdHashE DO
 						e.ref.pubkey := curOwn.pubkey;
 						e.ref.uid := curOwn.uid;
-						e.ref.expires_on := MAX(e.ref.expires_on, curOwn.expires_on);
+						e.ref.expires_on := MAX(e.ref.expires_on, curOwn.expires_on); (* The last one is the good one *)
 					END;
-				ELSE ASSERT(curOwn.inOrOut$ = "OUT", 103);
+				ELSE ASSERT(curOwn.inOrOut$ = "OUT", 103); (* Leaving *)
 					b := tr.Delete(idH);
 				END;
 			END;
 			A.New(idHashT);
 			e := tr.Next(NIL);
-			WHILE e # NIL DO
+			WHILE e # NIL DO (* For every membership applications *)
 				WITH e: IdHashE DO
-					IF B.IdHash(e.ref.hash, p) THEN
-						IF B.IdPubComplete(p, uid, b, h, bnb, exp) & ~b & (exp # BA.revoked) THEN
+					IF B.IdHash(e.ref.hash, p) THEN (* If identity already in BC... *)
+						IF B.IdPubComplete(p, uid, b, h, bnb, exp) & ~b & (exp # BA.revoked) THEN (* ... and if no more member but not revoked *)
 							NEW(id);
 							id.inBC := TRUE; id.hash := e.ref.hash; id.pubkey := p;
 							id.uid := uid; id.bid := bnb;
@@ -606,8 +606,8 @@ MODULE DuniterSandbox;
 							NEW(idH); idH.ref := id; ee := idH;
 							b := idHashT.SearchIns(ee, n); ASSERT(~b, 104);
 						END;
-					ELSIF ~(B.IdPub(e.ref.pubkey, uid) OR B.IdUid(e.ref.uid, p)) THEN
-						REPEAT
+					ELSIF ~(B.IdPub(e.ref.pubkey, uid) OR B.IdUid(e.ref.uid, p)) THEN  (* Not in BC *)
+						REPEAT (* New identities *)
 							t.Exec("SELECT pubkey, uid, buid, expires_on FROM idty WHERE revocation_sig IS NULL AND hash = '" + e.ref.hash + "'");
 							ASSERT(t.res IN {0, 6}, 105);
 						UNTIL t.res = 0;

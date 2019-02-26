@@ -157,11 +157,13 @@ MODULE Duniter0IdentitySearch;
 			r: RingEl;
 		
 		BEGIN (*Push*)
-			NEW(r);
-			r.next := ring; r.prev := ring.pos;
-			ring.prev := r; ring.pos.next := r;
-			ring.pos := r;
-			NEW(r.item, LEN(item$) + 1); r.item^ := item$;
+			IF (ring.pos = ring) OR (ring.pos.item$ # item$) THEN
+				NEW(r);
+				r.next := ring; r.prev := ring.pos;
+				ring.prev := r; ring.pos.next := r;
+				ring.pos := r;
+				NEW(r.item, LEN(item$) + 1); r.item^ := item$;
+			END;
 		END Push;
 	
 	PROCEDURE (ring: RingHd) Change (IN item: ARRAY OF CHAR), NEW;
@@ -295,7 +297,7 @@ MODULE Duniter0IdentitySearch;
 					NEW(idE);
 					idE.uid := uid; idE.hash := hash;
 					e := idE;
-					b := set.SearchIns(e, n); ASSERT(~b, 102);
+					b := set.SearchIns(e, n); (* ASSERT(~b, 102);*)
 					INC(nF);
 					IF identityDispFut THEN
 						NEW(idE);
@@ -914,10 +916,11 @@ MODULE Duniter0IdentitySearch;
 			title: Views.Title;
 			a: TextModels.Attributes;
 			es: ExpSort;
-			p: B.Pubkey;
+			p, q: B.Pubkey;
 			b, bb, m: BOOLEAN;
 			h: B.Hash;
 			uid: BA.String;
+			exp: LONGINT;
 		
 		BEGIN (*PrintCertifiers*)
 			IF identity.fields[0] # "" THEN
@@ -935,21 +938,29 @@ MODULE Duniter0IdentitySearch;
 					NEW(es.ids, receivedCerts.len);
 					NEW(es.dates, receivedCerts.len);
 					NEW(es.exps, receivedCerts.len);
+					j := 0;
 					FOR i := 0 TO receivedCerts.len - 1 DO
 						receivedCerts.GetItem(i, item);
 						f.WriteString(item); f.WriteLn;
-						es.ids[i] := item;
+						es.ids[j] := item;
+						b := item[0] # futureIcon;
 						FilterItem(item);
-						b := B.IdUidComplete(item, p, m, h, bnb, es.exps[i]) OR S.IdHash(receivedHash[i], bb, p, uid, es.exps[i]); ASSERT(b, 100);
-						BA.TimestampToString(es.exps[i], es.dates[i]);
+						IF b OR B.IdUid(item, p) & B.IdUid(identity.fields[0], q) & ~B.Cert(p, q, bnb, exp) OR S.IdHash(identity.fields[5]$, bb, q, uid, exp) & ~bb THEN
+							b := B.IdUidComplete(item, p, m, h, bnb, es.exps[j]); ASSERT(b, 100);
+							IF ~m THEN
+								es.ids[j] := oldIcon + item;
+							END;
+							BA.TimestampToString(es.exps[j], es.dates[j]);
+							INC(j);
+						END;
 					END;
 					f.WriteLn;
 					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
 					f.WriteMsg("#Duniter0:SortedByMExpDates");
 					f.rider.SetAttr(a);
 					f.WriteLn; f.WriteLn;
-					es.QuickSort(0, receivedCerts.len - 1);
-					FOR i := 0 TO receivedCerts.len - 1 DO
+					es.QuickSort(0, j - 1);
+					FOR i := 0 TO j - 1 DO
 						f.WriteString(es.dates[i]); f.WriteTab;
 						f.WriteString(es.ids[i]);
 						f.WriteLn;
@@ -1013,15 +1024,16 @@ MODULE Duniter0IdentitySearch;
 			cert: B.StringArr;
 			t: TextModels.Model;
 			f: TextMappers.Formatter;
-			i, bnb: INTEGER;
+			i, bnb, j: INTEGER;
 			item: Dialog.String;
 			title: Views.Title;
 			a: TextModels.Attributes;
 			es: ExpSort;
-			p: B.Pubkey;
+			p, q: B.Pubkey;
 			b, bb, m: BOOLEAN;
 			h: B.Hash;
 			uid: BA.String;
+			exp: LONGINT;
 		
 		BEGIN (*PrintCertified*)
 			IF identity.fields[0] # "" THEN
@@ -1039,21 +1051,32 @@ MODULE Duniter0IdentitySearch;
 					NEW(es.ids, sentCerts.len);
 					NEW(es.dates, sentCerts.len);
 					NEW(es.exps, sentCerts.len);
+					j := 0;
 					FOR i := 0 TO sentCerts.len - 1 DO
 						sentCerts.GetItem(i, item);
 						f.WriteString(item); f.WriteLn;
-						es.ids[i] := item;
+						es.ids[j] := item;
+						b := item[0] # futureIcon;
 						FilterItem(item);
-						b := B.IdUidComplete(item, p, m, h, bnb, es.exps[i]) OR S.IdHash(sentHash[i], bb, p, uid, es.exps[i]); ASSERT(b, 100);
-						BA.TimestampToString(es.exps[i], es.dates[i]);
+						IF b OR B.IdUid(identity.fields[0], p) & B.IdUid(item, q) & ~B.Cert(p, q, bnb, exp) OR S.IdHash(sentHash[i], bb, q, uid, exp) & ~bb THEN
+							IF B.IdUidComplete(item, p, m, h, bnb, es.exps[j]) THEN
+								IF ~m THEN
+									es.ids[j] := oldIcon + item;
+								END;
+							ELSE
+								b := S.IdHash(sentHash[i], bb, p, uid, es.exps[j]); ASSERT(b, 100);
+							END;
+							BA.TimestampToString(es.exps[j], es.dates[j]);
+							INC(j);
+						END;
 					END;
 					f.WriteLn;
 					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
 					f.WriteMsg("#Duniter0:SortedByMExpDates");
 					f.rider.SetAttr(a);
 					f.WriteLn; f.WriteLn;
-					es.QuickSort(0, sentCerts.len - 1);
-					FOR i := 0 TO sentCerts.len - 1 DO
+					es.QuickSort(0, j - 1);
+					FOR i := 0 TO j - 1 DO
 						f.WriteString(es.dates[i]); f.WriteTab;
 						f.WriteString(es.ids[i]);
 						f.WriteLn;
@@ -1175,8 +1198,20 @@ MODULE Duniter0IdentitySearch;
 			END;
 		END NbNotifier;
 	
+	PROCEDURE Update (VAR changed: BOOLEAN);
+		
+		BEGIN (*Update*)
+			IF changed & (identity.fields[0] # "") THEN
+				hint.item := identity.fields[0];
+				Search;
+			END;
+		END Update;
+	
 	BEGIN (*Duniter0IdentitySearch*)
 		identity.calcDist := TRUE; identity.calcQual := FALSE; identity.calcCentr := FALSE;
 		identityDispOld := FALSE; identityDispMem := TRUE; identityDispFut := TRUE;
 		InitRing(ring);
+		B.AddUpdateProc(Update)
+	CLOSE
+		B.RemoveUpdateProc(Update);
 	END Duniter0IdentitySearch.

@@ -438,9 +438,11 @@ MODULE Duniter0Events;
 				END;
 				f.WriteString('    ');
 				f.WriteString(ms[i].id);
+				(*
 				f.WriteString('    (');
 				f.WriteString(ms[i](CertifEnd).criticalCertifier);
 				f.WriteString(")");
+				*)
 				f.WriteLn;
 			END;
 			Views.OpenAux(TextViews.dir.New(t), s);

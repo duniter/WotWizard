@@ -20,7 +20,7 @@ MODULE DuniterServerML;
 	
 	CONST
 		
-		version = "2.8.5se";
+		version = "2.8.6se";
 		
 		textConv = "CpcUtf8Conv.ExportUtf8";
 		
