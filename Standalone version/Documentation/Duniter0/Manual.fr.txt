@@ -85,6 +85,8 @@ Piscine : Affiche les identités et les certifications présentes dans la pisci
 5) Certifications triées par les clés publiques de leurs récepteurs, avec hash du récepteur, clé publique de l'émetteur et date d'expiration
 Nombre de membres : Affiche la liste des dates des blocs où le nombre de membres a changé et des nombres de membres correspondants depuis le début de la monnaie (avec tracé).
 Nombre de membres jour par jour : Affiche la liste des numéros des jours et des nombres de membres correspondants depuis le début de la monnaie (avec tracé).
+Distances: Affiche les distances de tous les membres à la toile de confiance (proportions des membres référents atteignables en stepMax (5) pas au plus), triées par proportions (avec tracé), puis par pseudo.
+Distances (json) : Affiche les distances de tous les membres au format json.
 Qualités : Affiche les qualités de tous les membres, triées par qualités (avec tracé), puis par pseudo.
 Qualités (json) : Affiche les qualités de tous les membres au format json.
 Centralités : Affiche les niveaux de centralité de tous les membres, triés par niveaux de centralité (avec tracé), puis par pseudo.

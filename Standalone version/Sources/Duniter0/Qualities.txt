@@ -18,6 +18,10 @@ MODULE Duniter0Qualities;
 
 	IMPORT
 		
+		(**
+		L := Log,
+		**)
+		
 		BA := Duniter0Basic, B := Duniter0Blockchain, UtilSort;
 	
 	TYPE
@@ -58,18 +62,38 @@ MODULE Duniter0Qualities;
 			RETURN BA.CompP(s.t[p1].id, s.t[p2].id) = BA.lt;
 		END Less;
 	
-	PROCEDURE PercentOfSentries (IN pubkey: B.Pubkey): REAL;
+	PROCEDURE PercentOfSentries (dist: BOOLEAN; IN pubkey: B.Pubkey): REAL;
 		
 		VAR
 			
-			pubs: ARRAY 1 OF B.Pubkey;
+			pub: ARRAY 1 OF B.Pubkey;
+			pubs: POINTER TO ARRAY OF B.Pubkey;
+			ok: BOOLEAN;
+			n, i: INTEGER;
+			pos: B.CertPos;
+			to: B.Pubkey;
 		
 		BEGIN (*PercentOfSentries*)
-			pubs[0] := pubkey;
-			RETURN B.PercentOfSentries(pubs);
+			IF dist THEN
+				ok := B.CertTo(pubkey, pos);
+				IF ok THEN
+					n := pos.CertPosLen() + 1;
+				ELSE
+					n := 1
+				END;
+				NEW(pubs, n);
+				pubs[0] := pubkey;
+				FOR i := 1 TO n - 1 DO
+					ok := pos.CertNextPos(pubs[i], to); ASSERT(ok);
+				END;
+				RETURN B.PercentOfSentries(pubs);
+			ELSE
+				pub[0] := pubkey;
+				RETURN B.PercentOfSentries(pub);
+			END;
 		END PercentOfSentries;
 	
-	PROCEDURE Count* (OUT props, propsId: Props);
+	PROCEDURE Count* (dist: BOOLEAN; OUT props, propsId: Props);
 		
 		VAR
 			
@@ -88,7 +112,7 @@ MODULE Duniter0Qualities;
 			WHILE ok DO
 				NEW(c);
 				b := B.IdPub(p, c.id); ASSERT(b, 100);
-				c.prop := PercentOfSentries(p);
+				c.prop := PercentOfSentries(dist, p);
 				props[i] := c;
 				INC(i);
 				ok := B.IdNextPubkeyM(FALSE, p);
@@ -103,10 +127,10 @@ MODULE Duniter0Qualities;
 			sId.QuickSort(0, n - 1);
 		END Count;
 	
-	PROCEDURE CountOne* (p: B.Pubkey): REAL;
+	PROCEDURE CountOne* (dist: BOOLEAN; p: B.Pubkey): REAL;
 		
 		BEGIN (*CountOne*)
-			RETURN PercentOfSentries(p);
+			RETURN PercentOfSentries(dist, p);
 		END CountOne;
 	
 	END Duniter0Qualities.

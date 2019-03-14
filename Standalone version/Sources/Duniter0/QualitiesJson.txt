@@ -20,7 +20,7 @@ MODULE Duniter0QualitiesJson;
 		
 		B := Duniter0Blockchain, J := UtilJson, Dialog, TextMappers, TextModels, TextViews, Views;
 	
-	PROCEDURE Print*;
+	PROCEDURE Print (dist: BOOLEAN);
 		
 		VAR
 			
@@ -31,9 +31,13 @@ MODULE Duniter0QualitiesJson;
 			f: TextMappers.Formatter;
 		
 		BEGIN (*Print*)
-			Q.Count(props, propsId);
+			Q.Count(dist, props, propsId);
 			J.StartObject;
-			J.PushString("Qualities");
+			IF dist THEN
+				J.PushString("Distances");
+			ELSE
+				J.PushString("Qualities");
+			END;
 			J.BuildField("description");
 			J.PushInteger(B.LastBlock());
 			J.BuildField("block");
@@ -43,7 +47,11 @@ MODULE Duniter0QualitiesJson;
 				J.PushString(propsId[i].id);
 				J.BuildField("id");
 				J.PushReal(100. * propsId[i].prop);
-				J.BuildField("quality");
+				IF dist THEN
+					J.BuildField("distance");
+				ELSE
+					J.BuildField("quality");
+				END;
 				J.BuildObject;
 			END;
 			J.BuildArray;
@@ -52,12 +60,30 @@ MODULE Duniter0QualitiesJson;
 			t := TextModels.dir.New();
 			f.ConnectTo(t);
 			J.GetJson().Write(f);
-			Dialog.MapString("#Duniter0:Qualities", s);
+			IF dist THEN
+				Dialog.MapString("#Duniter0:Distances", s);
+			ELSE
+				Dialog.MapString("#Duniter0:Qualities", s);
+			END;
 			Views.OpenAux(TextViews.dir.New(t), s);
 		END Print;
+	
+	PROCEDURE PrintQual*;
+		
+		BEGIN (*PrintQual*)
+			Print(FALSE);
+		END PrintQual;
+	
+	PROCEDURE PrintDist*;
+		
+		BEGIN (*PrintDist*)
+			Print(TRUE);
+		END PrintDist;
 		
 	END Duniter0QualitiesJson.
 
 DevDebug.UnloadThis Duniter0QualitiesPrint Duniter0QualitiesJson Duniter0QualitiesSetsArr Duniter0QualitiesSetsAVL Duniter0QualitiesAVL 
 
-Duniter0QualitiesJson.Print;
+Duniter0QualitiesJson.PrintDist;
+
+Duniter0QualitiesJson.PrintQual;

@@ -1895,8 +1895,12 @@ MODULE Duniter0Blockchain;
 				NEW(tL); tL.next := undoList; tL.type := timeList; tL.ref := tRef; tL.aux := 0;
 				undoList := undoListMan.WriteAllocateData(tL);
 			END;
+			(*
 			now := MAX(now, t.mTime);
 			rNow := MAX(rNow, t.time);
+			*)
+			now := t.mTime;
+			rNow := t.time;
 		END Times;
 	
 	PROCEDURE RemoveCertifiersCertified (withList: BOOLEAN; idRef: B.FilePos; id: Identity);
@@ -1966,6 +1970,30 @@ MODULE Duniter0Blockchain;
 			END;
 		END RemoveCertifiersCertified;
 	
+	PROCEDURE RevokeId (withList: BOOLEAN; IN p: Pubkey);
+		
+		VAR
+			
+			idP: PubKey;
+			b: BOOLEAN;
+			idRef: B.FilePos;
+			id: Identity;
+			idL: UndoList; (* leaversList *)
+		
+		BEGIN (*RevokeId*)
+			NEW(idP); idP.ref := p;
+			b := idPubT.Search(idP); ASSERT(b, 100);
+			idRef := idPubT.ReadValue();
+			id := idMan.ReadData(idRef)(Identity);
+			IF withList THEN
+				NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+				undoList := undoListMan.WriteAllocateData(idL);
+			END;
+			id.expires_on := BA.revoked;
+			RemoveCertifiersCertified(withList, idRef, id);
+			idMan.WriteData(idRef, id);
+		END RevokeId;
+	
 	(*
 	- Le membre demande à partir ; il passe par les champs leavers et excluded ; ses éléments d'identité (uid et clé publique) peuvent être réutilisés par lui-même mais pas par d'autres; il ne peut plus recevoir de certification.
 	- Le membre révoque son identité explicitement ; champs revoked et excluded ; ses éléments d'identité sont bloqués à jamais.
@@ -1992,6 +2020,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			s: ARRAY 101 OF CHAR;
 			b: BOOLEAN;
 			id, oldId: Identity;
+			p: Pubkey;
 			idP: PubKey;
 			idU: B.String;
 			idH: HashKey;
@@ -2041,6 +2070,12 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 					idRef := idPubT.ReadValue();
 					oldId := idMan.ReadData(idRef)(Identity);
 					ASSERT(~oldId.member & (oldId.uid$ = id.uid$) & (oldId.hash = id.hash), 106);
+					NEW(iK); iK.ref := idRef;
+					b := idTimeT.Erase(iK);
+					IF withList THEN
+						NEW(idL); idL.next := undoList; idL.type := idRemoveTimeList; idL.ref := idRef; idL.aux := 0;
+						undoList := undoListMan.WriteAllocateData(idL);
+					END;
 					id.block_number := oldId.block_number;
 					id.certifiers := oldId.certifiers; id.certified := oldId.certified;
 					idMan.WriteData(idRef, id);
@@ -2134,22 +2169,20 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			i := 1;
 			WHILE ssR[i] # ']' DO (* revoked *)
 				INC(i);
-				NEW(idP);
-				ScanS(ssR, ':', idP.ref, i);
+				ScanS(ssR, ':', p, i);
 				SkipS(ssR, '"', i);
 				IF ssR[i] # ']' THEN
 					INC(i);
 				END;
+				NEW(idP); idP.ref := p;
 				b := idPubT.Search(idP); ASSERT(b, 118);
 				idRef := idPubT.ReadValue();
-				id := idMan.ReadData(idRef)(Identity);
-				IF withList THEN
-					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+				NEW(iK); iK.ref := idRef;
+				IF idTimeT.Erase(iK) & withList THEN
+					NEW(idL); idL.next := undoList; idL.type := idRemoveTimeList; idL.ref := idRef; idL.aux := 0;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
-				id.expires_on := BA.revoked;
-				RemoveCertifiersCertified(withList, idRef, id);
-				idMan.WriteData(idRef, id);
+				RevokeId(withList, p);
 			END;
 			
 			i := 1;
@@ -2289,10 +2322,10 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 					ind.Close;
 				ELSE
 					iK.ref := oldPC;
-					b := certTimeT.Erase(iK); ASSERT(b, 108);
+					b := certTimeT.Erase(iK); ASSERT(b, 107);
 				END;
 				iK.ref := pC;
-				b := certTimeT.SearchIns(iK); ASSERT(~b, 109);
+				b := certTimeT.SearchIns(iK); ASSERT(~b, 108);
 				IF withList THEN
 					NEW(cL); cL.next := undoList; cL.type := certAddList; cL.ref := pC; cL.aux := oldPC;
 					undoList := undoListMan.WriteAllocateData(cL);
@@ -2372,29 +2405,6 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				END;
 			END;
 		END RemoveExpiredCerts;
-	
-	PROCEDURE RevokeId (withList: BOOLEAN; p: Pubkey);
-		
-		VAR
-			
-			idP: PubKey;
-			b: BOOLEAN;
-			idRef: B.FilePos;
-			id: Identity;
-			idL: UndoList; (* leaversList *)
-		
-		BEGIN (*RevokeId*)
-			NEW(idP); idP.ref := p;
-			b := idPubT.Search(idP); ASSERT(b, 100);
-			idRef := idPubT.ReadValue();
-			id := idMan.ReadData(idRef)(Identity);
-			IF withList THEN
-				NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
-				undoList := undoListMan.WriteAllocateData(idL);
-			END;
-			id.expires_on := BA.revoked;
-			idMan.WriteData(idRef, id);
-		END RevokeId;
 	
 	PROCEDURE RevokeExpiredIds (now, secureNow: LONGINT);
 		

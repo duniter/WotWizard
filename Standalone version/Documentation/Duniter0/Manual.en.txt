@@ -86,6 +86,8 @@ Sandbox: Display identities and certifications in sandbox;
 5) Certifications sorted by receivers' hashes, with receiver's hash, sender's public key & expiration date
 Number of Members: Give the list of block dates where the number of members changed and corresponding members' number since the beginning of the money (with drawing).
 Number of Members Day by Day: Give the list of day numbers and corresponding members' number since the beginning of the money (with drawing).
+Distances: Give the distances of all members to the web of trust (proportion of sentries reachable in at most stepMax (5) steps) sorted by proportions (with drawing) and by aliases.
+Distances (json): Give the distances of all members in json format.
 Qualities: Give the qualities of all members sorted by qualities (with drawing) and by aliases.
 Qualities (json): Give the qualities of all members in json format.
 Centralities: Give the centrality levels of all members sorted by centrality levels (with drawing) and by aliases.

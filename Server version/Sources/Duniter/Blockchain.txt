@@ -45,9 +45,11 @@ MODULE DuniterBlockchain;
 		(* Max length of a Hash *)
 		hashLen* = 64;
 		
-		secureGap = 100; (* Number of last blocks to be read again at every update, since they could have changed *)
+		(* Number of last blocks to be read again at every update, since they could have changed *)
+		secureGap = 100;
 		
-		dBase = "Duniter\DBase.data"; (* Name of the WotWizard database, in the WotWizard.exe directory *)
+		(* Name of the WotWizard database, in the WotWizard.exe directory *)
+		dBase = "Duniter\DBase.data";
 		
 		(* Numbers of the places of the indexes in dBase *)
 		timePlace = 0; (* Index timeT *)
@@ -233,21 +235,21 @@ MODULE DuniterBlockchain;
 			ref: Pubkey;
 		END;
 		
+		(* Factory of PubKey *)
+		PubKeyFac = POINTER TO RECORD (B.DataFac)
+		END;
+		
+		(* Manager of PubKey *)
+		PubKeyMan = POINTER TO RECORD (B.KeyManager)
+		END;
+		
 		(* Hashkey index key *)
 		HashKey = POINTER TO RECORD (B.Data)
 			ref: Hash;
 		END;
 		
-		(* Factory of PubKey *)
-		PubKeyFac = POINTER TO RECORD (B.DataFac)
-		END;
-		
 		(* Factory of HashKey *)
 		HashKeyFac = POINTER TO RECORD (B.DataFac)
-		END;
-		
-		(* Manager of PubKey *)
-		PubKeyMan = POINTER TO RECORD (B.KeyManager)
 		END;
 		
 		(* Manager of HashKey *)
@@ -1545,6 +1547,29 @@ MODULE DuniterBlockchain;
 			now := MAX(now, t.mTime);
 		END Times;
 	
+	PROCEDURE RevokeId (withList: BOOLEAN; IN p: Pubkey);
+		
+		VAR
+			
+			idP: PubKey;
+			b: BOOLEAN;
+			idRef: INTEGER;
+			id: Identity;
+			idL: UndoList; (* leaversList *)
+		
+		BEGIN (*RevokeId*)
+			NEW(idP); idP.ref := p;
+			b := idPubT.Search(idP); ASSERT(b, 100);
+			idRef := idPubT.ReadValue();
+			id := idMan.ReadData(idRef)(Identity);
+			IF withList THEN
+				NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+				undoList := undoListMan.WriteAllocateData(idL);
+			END;
+			id.expires_on := BA.revoked;
+			idMan.WriteData(idRef, id);
+		END RevokeId;
+	
 	(* For one block, add joining & leaving identities in joinAndLeaveT and updade identities in idPubT and idUidT; update certFromT & certToT too *)
 	PROCEDURE Identities (withList: BOOLEAN; IN ssJ, ssA, ssL, ssR, ssE, nb: ARRAY OF CHAR; t: S.Table);
 		
@@ -1554,6 +1579,7 @@ MODULE DuniterBlockchain;
 			s: ARRAY 101 OF CHAR;
 			b: BOOLEAN;
 			id, oldId: Identity;
+			p: Pubkey;
 			idP: PubKey;
 			idU: B.String;
 			idH: HashKey;
@@ -1601,6 +1627,12 @@ MODULE DuniterBlockchain;
 					idRef := idPubT.ReadValue();
 					oldId := idMan.ReadData(idRef)(Identity);
 					ASSERT(~oldId.member & (oldId.uid$ = id.uid$) & (oldId.hash = id.hash), 106);
+					NEW(iK); iK.ref := idRef;
+					b := idTimeT.Erase(iK);
+					IF withList THEN
+						NEW(idL); idL.next := undoList; idL.type := idRemoveTimeList; idL.ref := idRef; idL.aux := 0;
+						undoList := undoListMan.WriteAllocateData(idL);
+					END;
 					id.block_number := oldId.block_number;
 					idMan.WriteData(idRef, id);
 					b := idUidT.SearchIns(idU); ASSERT(b, 107);
@@ -1676,21 +1708,20 @@ MODULE DuniterBlockchain;
 			i := 1;
 			WHILE ssR[i] # ']' DO (* revoked *)
 				INC(i);
-				NEW(idP);
-				ScanS(ssR, ':', idP.ref, i);
+				ScanS(ssR, ':', p, i);
 				SkipS(ssR, '"', i);
 				IF ssR[i] # ']' THEN
 					INC(i);
 				END;
+				NEW(idP); idP.ref := p;
 				b := idPubT.Search(idP); ASSERT(b, 118);
 				idRef := idPubT.ReadValue();
-				id := idMan.ReadData(idRef)(Identity);
-				IF withList THEN
-					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+				NEW(iK); iK.ref := idRef;
+				IF idTimeT.Erase(iK) & withList THEN
+					NEW(idL); idL.next := undoList; idL.type := idRemoveTimeList; idL.ref := idRef; idL.aux := 0;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
-				id.expires_on := BA.revoked;
-				idMan.WriteData(idRef, id);
+				RevokeId(withList, p);
 			END;
 			
 			i := 1;
@@ -1875,29 +1906,6 @@ MODULE DuniterBlockchain;
 				END;
 			END;
 		END RemoveExpiredCerts;
-	
-	PROCEDURE RevokeId (withList: BOOLEAN; p: Pubkey);
-		
-		VAR
-			
-			idP: PubKey;
-			b: BOOLEAN;
-			idRef: INTEGER;
-			id: Identity;
-			idL: UndoList; (* leaversList *)
-		
-		BEGIN (*RevokeId*)
-			NEW(idP); idP.ref := p;
-			b := idPubT.Search(idP); ASSERT(b, 100);
-			idRef := idPubT.ReadValue();
-			id := idMan.ReadData(idRef)(Identity);
-			IF withList THEN
-				NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
-				undoList := undoListMan.WriteAllocateData(idL);
-			END;
-			id.expires_on := BA.revoked;
-			idMan.WriteData(idRef, id);
-		END RevokeId;
 	
 	PROCEDURE RevokeExpiredIds (now, secureNow: LONGINT);
 		
