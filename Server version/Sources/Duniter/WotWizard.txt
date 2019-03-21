@@ -936,7 +936,7 @@ MODULE DuniterWotWizard;
 			from, to: B.Pubkey;
 			toHash, h: S.Hash;
 			i, j, nbCertifs, princCertif, bnb, n, cNbU: INTEGER;
-			exp, date, mt, t: LONGINT;
+			exp, exp2, app, date, mt, t: LONGINT;
 			d: Dossier;
 			c: Certif;
 			uid: B.String;
@@ -954,21 +954,17 @@ MODULE DuniterWotWizard;
 			A.New(useful);
 			ok := S.IdNextHash(TRUE, toHash);
 			WHILE ok DO (* For all identity hash in sandbox *)
-				b := S.IdHash(toHash, idInBC, to, uid, exp); ASSERT(b, 100);
-				IF ~idInBC OR B.IdPubComplete(to, uid, b, h, bnb, exp) & ~b & (exp >= 0) (* not member & not leaving; to be verified with the Duniter new version *) THEN
+				b := S.IdHash(toHash, idInBC, to, uid, exp2); ASSERT(b, 100);
+				IF ~idInBC OR B.IdPubComplete(to, uid, b, h, bnb, app, exp) & ~b & (exp >= 0) & (exp2 - B.pars.msWindow > app + B.pars.msPeriod) (* identity in sandBox or not member & not leaving & new membership application date later than previous one plus msPeriod; to be verified with the Duniter new version *) THEN
 					nbCertifs := 0; certs := NIL;
 					IF idInBC & B.CertTo(to, posBI) THEN
 						posB := posBI;
 						REPEAT
 							okP := posB.CertNextPos(from, to);
-							IF okP & B.IdPubComplete(from, uid, b, h, bnb, exp) & b & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN (* Don't consider certifications sent by a non-member or by a member who already has sent sigStock (100) certifications *)
-								b := B.Cert(from, to, bnb, exp) ; ASSERT(b, 101);
-								FixCertNextDate(from, date);
-								IF date <= exp THEN (* Not-expired certification *)
-									INC(nbCertifs);
-									NEW(cert); NEW(cert.pub); cert.pub^ := from; cert.date := date;
-									cert.next := certs; certs := cert;
-								END;
+							IF okP & B.IdPubComplete(from, uid, b, h, bnb, app, exp) & b & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN (* Don't consider certifications sent by a non-member or by a member who already has sent sigStock (100) certifications *)
+								INC(nbCertifs);
+								NEW(cert); NEW(cert.pub); cert.pub^ := from; cert.date := BA.already;
+								cert.next := certs; certs := cert;
 							END;
 						UNTIL ~okP;
 					END;
@@ -976,8 +972,8 @@ MODULE DuniterWotWizard;
 						pos := posI;
 						REPEAT
 							okP := pos.CertNextPos(from, toHash);
-							IF okP & B.IdPubComplete(from, uid, b, h, bnb, exp) & b & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN
-								b := S.Cert(from, toHash, to, exp) ; ASSERT(b, 102);
+							IF okP & B.IdPubComplete(from, uid, b, h, bnb, app, exp) & b & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN
+								b := S.Cert(from, toHash, to, exp) ; ASSERT(b, 101);
 								FixCertNextDate(from, date);
 								IF date <= exp THEN (* Not-expired certification *)
 									INC(nbCertifs);
@@ -994,50 +990,43 @@ MODULE DuniterWotWizard;
 						l.cd := d;
 						d.princCertif := princCertif;
 						d.proportionOfSentries := proportionOfSentries;
-						b := S.IdHash(toHash, idInBC, d.pub, d.id, d.limit); ASSERT(b, 103);
+						b := S.IdHash(toHash, idInBC, d.pub, d.id, d.limit); ASSERT(b, 102);
 						NEW(d.certifs, nbCertifs);
 						j := 0;
 						IF idInBC THEN
-							posB := posBI;
-							okP := posB.CertNextPos(from, to);
+							okP := posBI.CertNextPos(from, to);
 							WHILE okP DO
-								IF B.IdPubComplete(from, uid, b, h, bnb, exp) & b & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN
-									b := B.Cert(from, to, bnb, exp); ASSERT(b, 104);
-									FixCertNextDate(from, date);
-									IF date <= exp THEN
-										NEW(ps); ps.p := from; e := ps;
-										b := useful.SearchIns(e, n);
-										NEW(c); NEW(c.fromP);
-										c.fromP^ := from;
-										b := B.IdPub(from, c.from); ASSERT(b, 105);
-										c.date := date;
-										c.limit := exp;
-										d.certifs[j] := c;
-										INC(j);
-									END;
+								IF B.IdPubComplete(from, uid, b, h, bnb, app, exp) & b & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN
+									b := B.Cert(from, to, bnb, exp); ASSERT(b, 103);
+									NEW(c); NEW(c.fromP);
+									c.fromP^ := from;
+									b := B.IdPub(from, c.from); ASSERT(b, 104);
+									c.date := BA.already;
+									c.limit := exp;
+									d.certifs[j] := c;
+									INC(j);
 								END;
-								okP := posB.CertNextPos(from, to);
+								okP := posBI.CertNextPos(from, to);
 							END;
 						END;
-						pos := posI;
-						okP := pos.CertNextPos(from, toHash);
+						okP := posI.CertNextPos(from, toHash);
 						WHILE okP DO
-							IF B.IdPubComplete(from, uid, b, h, bnb, exp) & b & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN
-								b := S.Cert(from, toHash, to, exp); ASSERT(b, 106);
+							IF B.IdPubComplete(from, uid, b, h, bnb, app, exp) & b & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN
+								b := S.Cert(from, toHash, to, exp); ASSERT(b, 105);
 								FixCertNextDate(from, date);
 								IF date <= exp THEN
 									NEW(ps); ps.p := from; e := ps;
 									b := useful.SearchIns(e, n);
 									NEW(c); NEW(c.fromP);
 									c.fromP^ := from;
-									b := B.IdPub(from, c.from); ASSERT(b, 107);
+									b := B.IdPub(from, c.from); ASSERT(b, 106);
 									c.date := date;
 									c.limit := exp;
 									d.certifs[j] := c;
 									INC(j);
 								END;
 							END;
-							okP := pos.CertNextPos(from, toHash);
+							okP := posI.CertNextPos(from, toHash);
 						END;
 					END;
 				END;
@@ -1049,7 +1038,7 @@ MODULE DuniterWotWizard;
 			IF n = 0 THEN (* Encore utile ? *)
 				mt := 0
 			ELSE
-				b := B.TimeOf(n - 1, mt); ASSERT(b, 108);
+				b := B.TimeOf(n - 1, mt); ASSERT(b, 107);
 			END;
 			cNb := 0; cNbU := 0;
 			NEW(ps);
@@ -1057,16 +1046,16 @@ MODULE DuniterWotWizard;
 			WHILE ok DO
 				IF pos.CertNextPos(from, toHash) & S.Cert(from, toHash, to, exp) THEN
 					REPEAT
-						IF B.IdPubComplete(to, uid, b, h, bnb, t) & b & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN
+						IF B.IdPubComplete(to, uid, b, h, bnb, app, t) & b & (~B.CertFrom(from, posBF) OR (posBF.CertPosLen() < B.pars.sigStock)) THEN
 							FixCertNextDate(from, date);
 							(* Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite ; peut-être inutile maintenant *)
 							IF (date <= exp) & (date > mt) THEN
 								INC(cNb);
 								ps.p := from; e := ps;
-								IF useful.Search(e, n) THEN (* Keep only certifications whose sender is also a sender in a dossier *)
+								IF useful.Search(e, n) THEN (* Keep only certifications whose sender is also a sender of a certification in SandBox in a dossier *)
 									NEW(c); NEW(c.fromP);
 									c.fromP^ := from;
-									b := B.IdPub(from, c.from); ASSERT(b, 109);
+									b := B.IdPub(from, c.from); ASSERT(b, 108);
 									c.to := uid;
 									c.limit := exp;
 									c.date := date;

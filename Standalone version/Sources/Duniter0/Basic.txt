@@ -26,6 +26,7 @@ MODULE Duniter0Basic;
 		
 		never* = MAX(LONGINT); (* In WotWizard window *)
 		revoked* = MIN(LONGINT); (* Limit date for revoked members *)
+		already* =MIN(LONGINT) + 1; (* Already available certification date *)
 		
 		lt* = A.lt;
 		eq* = A.eq;
@@ -83,6 +84,8 @@ MODULE Duniter0Basic;
 				Dialog.MapString("#Duniter0:Never", dt);
 			ELSIF t = revoked THEN
 				Dialog.MapString("#Duniter0:Revoked", dt);
+			ELSIF t = already THEN
+				dt := "**/**/******:**:**";
 			ELSE
 				TimestampToDate(ABS(t), date, time);
 				Dates.DateToString(date, Dates.short, da);

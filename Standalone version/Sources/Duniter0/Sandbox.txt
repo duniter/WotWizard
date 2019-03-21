@@ -568,7 +568,7 @@ MODULE Duniter0Sandbox;
 			h: Hash;
 			uid: String;
 			r: S.Row;
-			exp: LONGINT;
+			exp, app: LONGINT;
 		
 		BEGIN (*MembershipIds*)
 			t := d.NewTable(); ASSERT(t # NIL, 100);
@@ -598,7 +598,7 @@ MODULE Duniter0Sandbox;
 			WHILE e # NIL DO (* For every membership applications *)
 				WITH e: IdHashE DO
 					IF B.IdHash(e.ref.hash, p) THEN (* If identity already in BC... *)
-						IF B.IdPubComplete(p, uid, b, h, bnb, exp) & ~b & (exp # BA.revoked) THEN (* ... and if no more member but not revoked *)
+						IF B.IdPubComplete(p, uid, b, h, bnb, app, exp) & ~b & (exp # BA.revoked) THEN (* ... and if no more member but not revoked *)
 							NEW(id);
 							id.inBC := TRUE; id.hash := e.ref.hash; id.pubkey := p;
 							id.uid := uid; id.bid := bnb;
@@ -665,7 +665,7 @@ MODULE Duniter0Sandbox;
 			b, inBC, member: BOOLEAN;
 			uid: String;
 			hash: Hash;
-			now, exp: LONGINT;
+			now, exp, app: LONGINT;
 			pubkey: Pubkey;
 		
 		BEGIN (*Certifications*)
@@ -679,7 +679,7 @@ MODULE Duniter0Sandbox;
 			A.New(certFromT); A.New(certToT);
 			FOR i := 0 TO t.rows - 1 DO
 				t.Read(i, curC);
-				IF (now <= curC.expires_on) & (IdHash(curC.toHash, inBC, pubkey, uid, exp) OR B.IdPubComplete(curC.to, uid, member, hash, bnb, exp) & (hash = curC.toHash) & member) & (~B.Cert(curC.from, curC.to, bnb, exp) OR (curC.expires_on - B.pars.sigWindow > exp - B.pars.sigValidity + B.pars.sigReplay)) THEN
+				IF (now <= curC.expires_on) & (IdHash(curC.toHash, inBC, pubkey, uid, exp) OR B.IdPubComplete(curC.to, uid, member, hash, bnb, app, exp) & (hash = curC.toHash) & member) & (~B.Cert(curC.from, curC.to, bnb, exp) OR (curC.expires_on - B.pars.sigWindow > exp - B.pars.sigValidity + B.pars.sigReplay)) THEN
 					NEW(c);
 					c.from := curC.from;
 					c.to := curC.to;

@@ -176,7 +176,8 @@ MODULE DuniterBlockchain;
 			type: BYTE;
 			(* timeList -> Time; joinList, activeList, leaveList -> Identity; certAddList, certRemoveList -> Certification *)
 			ref: INTEGER;
-			aux: LONGINT;
+			aux,
+			aux2: LONGINT;
 		END;
 		
 		(* Factory of UndoList *)
@@ -199,6 +200,7 @@ MODULE DuniterBlockchain;
 			member: BOOLEAN;
 			hash: Hash;
 			block_number: INTEGER; (* Where the Identity is written *)
+			application, (* Date of last membership application (joiners, actives, leavers) *)
 			expires_on: LONGINT;
 		END;
 		
@@ -428,6 +430,7 @@ MODULE DuniterBlockchain;
 			id.member := r.InBool();
 			r.InChars(id.hash);
 			id.block_number := r.InInt();
+			id.application := r.InLInt();
 			id.expires_on := r.InLInt();
 		END Read;
 	
@@ -439,6 +442,7 @@ MODULE DuniterBlockchain;
 			w.OutBool(id.member);
 			w.OutChars(id.hash);
 			w.OutInt(id.block_number);
+			w.OutLInt(id.application);
 			w.OutLInt(id.expires_on);
 		END Write;
 	
@@ -489,6 +493,7 @@ MODULE DuniterBlockchain;
 			l.type := r.InByte();
 			l.ref := r.InInt();
 			l.aux := r.InLInt();
+			l.aux2 := r.InLInt();
 		END Read;
 	
 	PROCEDURE (l: UndoList) Write (VAR w: B.Writer);
@@ -498,6 +503,7 @@ MODULE DuniterBlockchain;
 			w.OutByte(l.type);
 			w.OutInt(l.ref);
 			w.OutLInt(l.aux);
+			w.OutLInt(l.aux2);
 		END Write;
 	
 	PROCEDURE (lf: UndoListFac) New (size: INTEGER): UndoList;
@@ -634,33 +640,10 @@ MODULE DuniterBlockchain;
 			END;
 		END PKMCompP;
 	
-	PROCEDURE HKMCompP (h1, h2: B.Data): BYTE;
-		
-		BEGIN (*HKMCompP*)
-			ASSERT((h1 # NIL) & (h2 # NIL), 20);
-			WITH h1: HashKey DO
-				WITH h2: HashKey DO
-					IF h1.ref < h2.ref THEN
-						RETURN B.lt;
-					END;
-					IF h1.ref > h2.ref THEN
-						RETURN B.gt;
-					END;
-					RETURN B.eq;
-				END;
-			END;
-		END HKMCompP;
-	
 	PROCEDURE (pm: PubKeyMan) CompP (p1, p2: B.Data): BYTE;
 		
 		BEGIN (*CompP*)
 			RETURN PKMCompP(p1, p2);
-		END CompP;
-	
-	PROCEDURE (hm: HashKeyMan) CompP (h1, h2: B.Data): BYTE;
-		
-		BEGIN (*CompP*)
-			RETURN HKMCompP(h1, h2);
 		END CompP;
 	
 	PROCEDURE (pm: PubKeyMan) PrefP (p1: B.Data; VAR p2: B.Data);
@@ -688,6 +671,29 @@ MODULE DuniterBlockchain;
 			END;
 			p2 := p;
 		END PrefP;
+	
+	PROCEDURE HKMCompP (h1, h2: B.Data): BYTE;
+		
+		BEGIN (*HKMCompP*)
+			ASSERT((h1 # NIL) & (h2 # NIL), 20);
+			WITH h1: HashKey DO
+				WITH h2: HashKey DO
+					IF h1.ref < h2.ref THEN
+						RETURN B.lt;
+					END;
+					IF h1.ref > h2.ref THEN
+						RETURN B.gt;
+					END;
+					RETURN B.eq;
+				END;
+			END;
+		END HKMCompP;
+	
+	PROCEDURE (hm: HashKeyMan) CompP (h1, h2: B.Data): BYTE;
+		
+		BEGIN (*CompP*)
+			RETURN HKMCompP(h1, h2);
+		END CompP;
 	
 	PROCEDURE (hm: HashKeyMan) PrefP (h1: B.Data; VAR h2: B.Data);
 		
@@ -918,7 +924,7 @@ MODULE DuniterBlockchain;
 		END IdPub;
 	
 	(* Pubkey -> Identity *)
-	PROCEDURE IdPubComplete* (IN pubkey: Pubkey; OUT uid: String; OUT member: BOOLEAN; OUT hash: Hash; OUT block_number: INTEGER; OUT expires_on: LONGINT): BOOLEAN;
+	PROCEDURE IdPubComplete* (IN pubkey: Pubkey; OUT uid: String; OUT member: BOOLEAN; OUT hash: Hash; OUT block_number: INTEGER; OUT application, expires_on: LONGINT): BOOLEAN;
 		
 		VAR
 			
@@ -934,6 +940,7 @@ MODULE DuniterBlockchain;
 				member := id.member;
 				hash := id.hash;
 				block_number := id.block_number;
+				application := id.application;
 				expires_on := id.expires_on;
 				RETURN TRUE;
 			END;
@@ -960,7 +967,7 @@ MODULE DuniterBlockchain;
 		END IdUid;
 	
 	(* uid -> Identity *)
-	PROCEDURE IdUidComplete* (IN uid: ARRAY OF CHAR; OUT pubkey: Pubkey; OUT member: BOOLEAN; OUT hash: Hash; OUT block_number: INTEGER; OUT expires_on: LONGINT): BOOLEAN;
+	PROCEDURE IdUidComplete* (IN uid: ARRAY OF CHAR; OUT pubkey: Pubkey; OUT member: BOOLEAN; OUT hash: Hash; OUT block_number: INTEGER; OUT application, expires_on: LONGINT): BOOLEAN;
 		
 		VAR
 			
@@ -976,6 +983,7 @@ MODULE DuniterBlockchain;
 				member := id.member;
 				hash := id.hash;
 				block_number := id.block_number;
+				application := id.application;
 				expires_on := id.expires_on;
 				RETURN TRUE;
 			END;
@@ -1544,7 +1552,7 @@ MODULE DuniterBlockchain;
 				NEW(tL); tL.next := undoList; tL.type := timeList; tL.ref := tRef; tL.aux := 0;
 				undoList := undoListMan.WriteAllocateData(tL);
 			END;
-			now := MAX(now, t.mTime);
+			now := t.mTime;
 		END Times;
 	
 	PROCEDURE RevokeId (withList: BOOLEAN; IN p: Pubkey);
@@ -1563,7 +1571,7 @@ MODULE DuniterBlockchain;
 			idRef := idPubT.ReadValue();
 			id := idMan.ReadData(idRef)(Identity);
 			IF withList THEN
-				NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+				NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on; idL.aux2 := id.application;
 				undoList := undoListMan.WriteAllocateData(idL);
 			END;
 			id.expires_on := BA.revoked;
@@ -1597,8 +1605,8 @@ MODULE DuniterBlockchain;
 				ScanS(ssJ, ':', id.pubkey, i);
 				SkipS(ssJ, ':', i);
 				ScanS(ssJ, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 100);
-				b := TimeOf(n, id.expires_on); ASSERT(b, 101);
-				INC(id.expires_on, pars.msValidity);
+				b := TimeOf(n, id.application); ASSERT(b, 101);
+				id.expires_on := id.application + pars.msValidity;
 				SkipS(ssJ, ':', i);
 				SkipS(ssJ, ':', i);
 				ScanS(ssJ, '"', s, i); NEW(id.uid, LEN(s$) + 1); id.uid^ := s$;
@@ -1640,7 +1648,7 @@ MODULE DuniterBlockchain;
 					b := idHashT.SearchIns(idH); ASSERT(b, 109);
 					ASSERT(idHashT.ReadValue() = idRef, 110);
 					IF withList THEN
-						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := oldId.expires_on;
+						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := oldId.expires_on; idL.aux2 := oldId.application;
 						undoList := undoListMan.WriteAllocateData(idL);
 					END;
 				ELSE
@@ -1677,11 +1685,11 @@ MODULE DuniterBlockchain;
 				id := idMan.ReadData(idRef)(Identity);
 				ASSERT(id.member, 115);
 				IF withList THEN
-					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on; idL.aux2 := id.application;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
-				b := TimeOf(n, id.expires_on); ASSERT(b, 116);
-				INC(id.expires_on, pars.msValidity);
+				b := TimeOf(n, id.application); ASSERT(b, 116);
+				id.expires_on := id.application + pars.msValidity;
 				idMan.WriteData(idRef, id);
 			END;
 			
@@ -1690,17 +1698,20 @@ MODULE DuniterBlockchain;
 				INC(i);
 				NEW(idP);
 				ScanS(ssL, ':', idP.ref, i);
+				SkipS(ssL, ':', i);
+				ScanS(ssL, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 117);
 				SkipS(ssL, '"', i);
 				IF ssL[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 117);
+				b := idPubT.Search(idP); ASSERT(b, 118);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
 				IF withList THEN
-					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on; idL.aux2 := id.application;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
+				b := TimeOf(n, id.application); ASSERT(b, 119);
 				id.expires_on := - ABS(id.expires_on); (* id.expires_on < 0 if leaving *)
 				idMan.WriteData(idRef, id);
 			END;
@@ -1714,7 +1725,7 @@ MODULE DuniterBlockchain;
 					INC(i);
 				END;
 				NEW(idP); idP.ref := p;
-				b := idPubT.Search(idP); ASSERT(b, 118);
+				b := idPubT.Search(idP); ASSERT(b, 120);
 				idRef := idPubT.ReadValue();
 				NEW(iK); iK.ref := idRef;
 				IF idTimeT.Erase(iK) & withList THEN
@@ -1733,10 +1744,10 @@ MODULE DuniterBlockchain;
 				IF ssE[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 119);
+				b := idPubT.Search(idP); ASSERT(b, 121);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
-				ASSERT(id.member, 120);
+				ASSERT(id.member, 122);
 				id.member := FALSE;
 				idMan.WriteData(idRef, id);
 				IF withList THEN
@@ -1745,13 +1756,13 @@ MODULE DuniterBlockchain;
 				END;
 				IF id.expires_on >= 0 THEN (* ~leaving *)
 					IF withList THEN
-						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on; idL.aux2 := id.application;
 						undoList := undoListMan.WriteAllocateData(idL);
 					END;
 					INC(id.expires_on, pars.msValidity);
 					idMan.WriteData(idRef, id);
 					NEW(iK); iK.ref := idRef;
-					b := idTimeT.SearchIns(iK); ASSERT(~b, 121);
+					b := idTimeT.SearchIns(iK); ASSERT(~b, 123);
 					IF withList THEN
 						NEW(idL); idL.next := undoList; idL.type := idAddTimeList; idL.ref := idRef; idL.aux := 0;
 						undoList := undoListMan.WriteAllocateData(idL);
@@ -1985,6 +1996,7 @@ MODULE DuniterBlockchain;
 						(* Undo the Identity.expires_on update *)
 						id := idMan.ReadData(l.ref)(Identity);
 						id.expires_on := l.aux;
+						id.application := l.aux2;
 						idMan.WriteData(l.ref, id);
 					|leaveList:
 						(* Update the last JoinAndLeaveL data corresponding to l.ref *)

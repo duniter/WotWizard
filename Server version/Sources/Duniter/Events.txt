@@ -58,14 +58,14 @@ MODULE DuniterEvents;
 			p: B.Pubkey;
 			h: B.Hash;
 			bnb, i: INTEGER;
-			exp: LONGINT;
+			exp, app: LONGINT;
 		
 		BEGIN (*MembershipsEnds*)
 			NEW(ms.m, B.IdLenM());
 			i := 0;
 			ok := B.IdNextUidM(TRUE, id);
 			WHILE ok DO
-				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b & mem);
+				b := B.IdUidComplete(id, p, mem, h, bnb, app, exp); ASSERT(b & mem);
 				NEW(ms.m[i]);
 				ms.m[i].id := id; ms.m[i].exp := exp; BA.TimestampToString(exp, ms.m[i].expS);
 				INC(i);

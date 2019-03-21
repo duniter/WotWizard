@@ -26,10 +26,11 @@ MODULE DuniterBasic;
 		
 		textConv = "CpcUtf8Conv.ExportUtf8";
 		
-		oldIcon = '×';
+		oldIcon = '×'; (* Icon for old items (old or leaving members) *)
 		
-		never* = MAX(LONGINT);
-		revoked* = MIN(LONGINT);
+		never* = MAX(LONGINT); (* In WotWizard window *)
+		revoked* = MIN(LONGINT); (* Limit date for revoked members *)
+		already* =MIN(LONGINT) + 1; (* Already available certification date *)
 		
 		lt* = A.lt;
 		eq* = A.eq;
@@ -86,12 +87,14 @@ MODULE DuniterBasic;
 				Dialog.MapString("#Duniter:Never", dt);
 			ELSIF t = revoked THEN
 				Dialog.MapString("#Duniter0:Revoked", dt);
+			ELSIF t = already THEN
+				dt := "**/**/******:**:**";
 			ELSE
 				TimestampToDate(ABS(t), date, time);
 				Dates.DateToString(date, Dates.short, da);
 				Dates.TimeToString(time, ti);
 				dt := da + " " + ti;
-				IF t < 0 THEN (* missing *)
+				IF t < 0 THEN (* leaving member *)
 					dt := oldIcon + dt;
 				END;
 			END;
@@ -152,7 +155,7 @@ MODULE DuniterBasic;
 			RETURN c;
 		END DownC;
 	
-	(* Standard comparison procedure for identifiers; they are first compared with ~strict, and if still equal, with strict *)
+	(* Standard comparison procedure for identifiers; they are first compared with only significant characters and case ignored, and if still equal, with all characters and case taken into account *)
 	PROCEDURE CompP* (IN s1, s2: ARRAY OF CHAR): BYTE;
 		
 		VAR

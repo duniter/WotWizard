@@ -26,7 +26,7 @@ MODULE Duniter0IdentitySearch;
 		
 		maxItems = 100;
 		
-		nonEditableNb = 12;
+		nonEditableNb = 13;
 		
 		oldIcon = '×';
 		futureIcon = 'º';
@@ -82,7 +82,7 @@ MODULE Duniter0IdentitySearch;
 			distanceOK-,
 			calcQual*,
 			calcCentr*: BOOLEAN;
-			fields*: NonEditable; (* uid (0), pubkey (1), limit date (2), limit date of received cert (3), limit date of sent cert (4), hash (5), proportionOfSentries (6), availability (7), inscriptionBlock (8), inscriptionDate (9), quality (10), centrality (11) *)
+			fields*: NonEditable; (* uid (0), pubkey (1), limit date (2), limit date of received cert (3), limit date of sent cert (4), hash (5), proportionOfSentries (6), availability (7), inscriptionBlock (8), inscriptionDate (9), quality (10), centrality (11), applicationDate (12) *)
 		END;
 		
 		receivedCertsNb-,
@@ -233,7 +233,7 @@ MODULE Duniter0IdentitySearch;
 			uid: BA.String;
 			pub, p: B.Pubkey;
 			hash: S.Hash;
-			exp: LONGINT;
+			exp, app: LONGINT;
 			pos, bloc, n: INTEGER;
 			hintD: BA.String;
 		
@@ -245,7 +245,7 @@ MODULE Duniter0IdentitySearch;
 			ok := B.IdNextUid(FALSE, uid);
 			WHILE ok DO
 				ok := BA.Prefix(hintD, uid);
-				IF ok & B.IdUidComplete(uid, p, active, hash, bloc, exp) THEN
+				IF ok & B.IdUidComplete(uid, p, active, hash, bloc, app, exp) THEN
 					NEW(idE);
 					idE.uid := uid; idE.hash := hash;
 					e := idE;
@@ -271,7 +271,7 @@ MODULE Duniter0IdentitySearch;
 				WHILE ok DO
 					Strings.Find(p, hint, 0, pos);
 					ok := pos = 0;
-					IF ok & B.IdPubComplete(p, uid, active, hash, bloc, exp) THEN
+					IF ok & B.IdPubComplete(p, uid, active, hash, bloc, app, exp) THEN
 						NEW(idE);
 						idE.uid := uid; idE.hash := hash; idE.future := FALSE; idE.active := active;
 						e := idE;
@@ -368,9 +368,9 @@ MODULE Duniter0IdentitySearch;
 			posS: S.CertPos;
 			from, to: B.Pubkey;
 			i, bnb, n: INTEGER;
-			exp: LONGINT;
+			exp, app: LONGINT;
 			uid: BA.String;
-			toH, hash: S.Hash;
+			toH: S.Hash;
 			p: B.Pubkey;
 			t: A.Tree;
 			idE: IdE;
@@ -401,7 +401,7 @@ MODULE Duniter0IdentitySearch;
 				okB := okB & posB.CertNextPos(from, to);
 				WHILE okB DO
 					NEW(idE);
-					b := B.IdPubComplete(to, idE.uid, m, idE.hash, bnb, exp); ASSERT(b, 100);
+					b := B.IdPubComplete(to, idE.uid, m, idE.hash, bnb, app, exp); ASSERT(b, 100);
 					idE.future := FALSE;
 					e := idE;
 					b := t.SearchIns(e, n); ASSERT(~b, 101);
@@ -411,7 +411,12 @@ MODULE Duniter0IdentitySearch;
 				WHILE okS DO
 					NEW(idE);
 					idE.hash := toH;
-					b := S.Cert(from, toH, to, exp) & (B.IdPubComplete(to, idE.uid, m, hash, bnb, exp) OR S.IdHash(toH, bb, p, idE.uid, exp)); ASSERT(b, 102);
+					(*
+					b := S.Cert(from, toH, to, exp) & (B.IdPubComplete(to, idE.uid, m, hash, bnb, app, exp) OR S.IdHash(toH, bb, p, idE.uid, exp)); ASSERT(b, 102);
+					*)
+					(**)
+					b := S.Cert(from, toH, to, exp) & (B.IdPub(to, idE.uid) OR S.IdHash(toH, bb, p, idE.uid, exp)); ASSERT(b, 102);
+					(**)
 					idE.future := TRUE;
 					e := idE;
 					b := t.SearchIns(e, n); ASSERT(~b, 103);
@@ -458,7 +463,7 @@ MODULE Duniter0IdentitySearch;
 				receivedCertsNb := 0;
 			END;
 			IF inBC THEN
-				okS := B.IdPubComplete(pubkey, uid, m, toH, bnb, exp) & S.CertTo(toH, posS);
+				okS := B.IdPubComplete(pubkey, uid, m, toH, bnb, app, exp) & S.CertTo(toH, posS);
 			ELSE
 				okS := S.CertTo(h, posS);
 			END;
@@ -477,7 +482,7 @@ MODULE Duniter0IdentitySearch;
 			okB := okB & posB.CertNextPos(from, to);
 			WHILE okB DO
 				NEW(idE);
-				b := B.IdPubComplete(from, idE.uid, m, idE.hash, bnb, exp); ASSERT(b, 104);
+				b := B.IdPubComplete(from, idE.uid, m, idE.hash, bnb, app, exp); ASSERT(b, 104);
 				idE.future := FALSE;
 				e := idE;
 				b := t.SearchIns(e, n); ASSERT(~b, 105);
@@ -522,12 +527,12 @@ MODULE Duniter0IdentitySearch;
 			identity.fields[7] := identity.fields[6];
 		END Certs;
 	
-	PROCEDURE Get (IN hash: S.Hash; IN uid: ARRAY OF CHAR; OUT bloc, blocDate, pubkey, limitDate: ARRAY OF CHAR; OUT inBC, member: BOOLEAN);
+	PROCEDURE Get (IN hash: S.Hash; IN uid: ARRAY OF CHAR; OUT bloc, blocDate, pubkey, applicationDate, limitDate: ARRAY OF CHAR; OUT inBC, member: BOOLEAN);
 		
 		VAR
 			
 			bnb: INTEGER;
-			exp, mt, t: LONGINT;
+			exp, app, mt, t: LONGINT;
 			uid2: BA.String;
 			p: B.Pubkey;
 			h: S.Hash;
@@ -535,7 +540,7 @@ MODULE Duniter0IdentitySearch;
 			b, bb, m: BOOLEAN;
 		
 		BEGIN (*Get*)
-			inBC := B.IdUidComplete(uid, p, m, h, bnb, exp);
+			inBC := B.IdUidComplete(uid, p, m, h, bnb, app, exp);
 			member := inBC & m;
 			IF inBC THEN
 				Strings.IntToString(bnb, bloc);
@@ -547,9 +552,11 @@ MODULE Duniter0IdentitySearch;
 				d := "";
 			END;
 			blocDate := d$;
+			BA.TimestampToString(app, d);
+			applicationDate := d$;
 			BA.TimestampToString(exp, d);
-			pubkey := p$;
 			limitDate := d$;
+			pubkey := p$;
 		END Get;
 	
 	PROCEDURE NotTooFar (member: BOOLEAN; OUT proportionOfSentries: ARRAY OF CHAR): BOOLEAN;
@@ -665,7 +672,7 @@ MODULE Duniter0IdentitySearch;
 				ring.Change(identity.fields[0]);
 				hash := identityHash[identityList.index];
 				identity.fields[10] := hash$;
-				Get(hash, identity.fields[0], identity.fields[16], identity.fields[18], identity.fields[2], identity.fields[4], inBC, identity.member);
+				Get(hash, identity.fields[0], identity.fields[16], identity.fields[18], identity.fields[2], identity.fields[24], identity.fields[4], inBC, identity.member);
 				identity.sentry := identity.member & B.IsSentry(identity.fields[2]$);
 				FixCertNextDate(identity.member, identity.fields[2]$, identity.fields[14]);
 				Certs(hash, identity.fields[2]$, inBC);
@@ -920,7 +927,7 @@ MODULE Duniter0IdentitySearch;
 			b, bb, m: BOOLEAN;
 			h: B.Hash;
 			uid: BA.String;
-			exp: LONGINT;
+			exp, app: LONGINT;
 		
 		BEGIN (*PrintCertifiers*)
 			IF identity.fields[0] # "" THEN
@@ -946,7 +953,7 @@ MODULE Duniter0IdentitySearch;
 						b := item[0] # futureIcon;
 						FilterItem(item);
 						IF b OR B.IdUid(item, p) & B.IdUid(identity.fields[0], q) & ~B.Cert(p, q, bnb, exp) OR S.IdHash(identity.fields[5]$, bb, q, uid, exp) & ~bb THEN
-							b := B.IdUidComplete(item, p, m, h, bnb, es.exps[j]); ASSERT(b, 100);
+							b := B.IdUidComplete(item, p, m, h, bnb, app, es.exps[j]); ASSERT(b, 100);
 							IF ~m THEN
 								es.ids[j] := oldIcon + item;
 							END;
@@ -1033,7 +1040,7 @@ MODULE Duniter0IdentitySearch;
 			b, bb, m: BOOLEAN;
 			h: B.Hash;
 			uid: BA.String;
-			exp: LONGINT;
+			exp, app: LONGINT;
 		
 		BEGIN (*PrintCertified*)
 			IF identity.fields[0] # "" THEN
@@ -1059,7 +1066,7 @@ MODULE Duniter0IdentitySearch;
 						b := item[0] # futureIcon;
 						FilterItem(item);
 						IF b OR B.IdUid(identity.fields[0], p) & B.IdUid(item, q) & ~B.Cert(p, q, bnb, exp) OR S.IdHash(sentHash[i], bb, q, uid, exp) & ~bb THEN
-							IF B.IdUidComplete(item, p, m, h, bnb, es.exps[j]) THEN
+							IF B.IdUidComplete(item, p, m, h, bnb, app, es.exps[j]) THEN
 								IF ~m THEN
 									es.ids[j] := oldIcon + item;
 								END;

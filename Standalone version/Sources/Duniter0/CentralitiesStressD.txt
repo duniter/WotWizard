@@ -129,11 +129,11 @@ MODULE Duniter0CentralitiesStressD;
 			b: BOOLEAN;
 			h: B.Hash;
 			bnb: INTEGER;
-			exp: LONGINT;
+			exp, app: LONGINT;
 		
 		BEGIN (*Enumerate*)
 			IF B.IdNextUid(first, id) THEN
-				b := B.IdUidComplete(id, p, member, h, bnb, exp); ASSERT(b, 100);
+				b := B.IdUidComplete(id, p, member, h, bnb, app, exp); ASSERT(b, 100);
 				node := NewNode(p);
 				RETURN TRUE;
 			END;

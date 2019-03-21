@@ -186,7 +186,8 @@ MODULE Duniter0Blockchain;
 			type: BYTE;
 			(* timeList -> Time; joinList, activeList, leaveList -> Identity; certAddList, certRemoveList -> Certification, etc... *)
 			ref,
-			aux: LONGINT;
+			aux,
+			aux2: LONGINT;
 		END;
 		
 		(* Factory of UndoList *)
@@ -229,6 +230,7 @@ MODULE Duniter0Blockchain;
 			member: BOOLEAN;
 			hash: Hash;
 			block_number: INTEGER; (* Where the Identity is written *)
+			application, (* Date of last membership application (joiners, actives, leavers) *)
 			expires_on: LONGINT;
 			certifiers, (* Index of all certifiers uid, old or present, of this Identity ; B.String -> nothing *)
 			certified: B.FilePos; (* Index of all uid, old or present, certified by this Identity ; B.String -> nothing *)
@@ -536,6 +538,7 @@ MODULE Duniter0Blockchain;
 			id.member := r.InBool();
 			r.InChars(id.hash);
 			id.block_number := r.InInt();
+			id.application := r.InLInt();
 			id.expires_on := r.InLInt();
 			id.certifiers := r.InLInt();
 			id.certified := r.InLInt();
@@ -549,6 +552,7 @@ MODULE Duniter0Blockchain;
 			w.OutBool(id.member);
 			w.OutChars(id.hash);
 			w.OutInt(id.block_number);
+			w.OutLInt(id.application);
 			w.OutLInt(id.expires_on);
 			w.OutLInt(id.certifiers);
 			w.OutLInt(id.certified);
@@ -601,6 +605,7 @@ MODULE Duniter0Blockchain;
 			l.type := r.InByte();
 			l.ref := r.InLInt();
 			l.aux := r.InLInt();
+			l.aux2 := r.InLInt();
 		END Read;
 	
 	PROCEDURE (l: UndoList) Write (VAR w: B.Writer);
@@ -610,6 +615,7 @@ MODULE Duniter0Blockchain;
 			w.OutByte(l.type);
 			w.OutLInt(l.ref);
 			w.OutLInt(l.aux);
+			w.OutLInt(l.aux2);
 		END Write;
 	
 	PROCEDURE (lf: UndoListFac) New (size: INTEGER): UndoList;
@@ -1153,7 +1159,7 @@ MODULE Duniter0Blockchain;
 		END IdPubM;
 	
 	(* Pubkey -> Identity *)
-	PROCEDURE IdPubComplete* (IN pubkey: Pubkey; OUT uid: String; OUT member: BOOLEAN; OUT hash: Hash; OUT block_number: INTEGER; OUT expires_on: LONGINT): BOOLEAN;
+	PROCEDURE IdPubComplete* (IN pubkey: Pubkey; OUT uid: String; OUT member: BOOLEAN; OUT hash: Hash; OUT block_number: INTEGER; OUT application, expires_on: LONGINT): BOOLEAN;
 		
 		VAR
 			
@@ -1169,6 +1175,7 @@ MODULE Duniter0Blockchain;
 				member := id.member;
 				hash := id.hash;
 				block_number := id.block_number;
+				application := id.application;
 				expires_on := id.expires_on;
 				RETURN TRUE;
 			END;
@@ -1217,7 +1224,7 @@ MODULE Duniter0Blockchain;
 		END IdUidM;
 	
 	(* uid -> Identity *)
-	PROCEDURE IdUidComplete* (IN uid: ARRAY OF CHAR; OUT pubkey: Pubkey; OUT member: BOOLEAN; OUT hash: Hash; OUT block_number: INTEGER; OUT expires_on: LONGINT): BOOLEAN;
+	PROCEDURE IdUidComplete* (IN uid: ARRAY OF CHAR; OUT pubkey: Pubkey; OUT member: BOOLEAN; OUT hash: Hash; OUT block_number: INTEGER; OUT application, expires_on: LONGINT): BOOLEAN;
 		
 		VAR
 			
@@ -1233,6 +1240,7 @@ MODULE Duniter0Blockchain;
 				member := id.member;
 				hash := id.hash;
 				block_number := id.block_number;
+				application := id.application;
 				expires_on := id.expires_on;
 				RETURN TRUE;
 			END;
@@ -1895,10 +1903,6 @@ MODULE Duniter0Blockchain;
 				NEW(tL); tL.next := undoList; tL.type := timeList; tL.ref := tRef; tL.aux := 0;
 				undoList := undoListMan.WriteAllocateData(tL);
 			END;
-			(*
-			now := MAX(now, t.mTime);
-			rNow := MAX(rNow, t.time);
-			*)
 			now := t.mTime;
 			rNow := t.time;
 		END Times;
@@ -1986,7 +1990,7 @@ MODULE Duniter0Blockchain;
 			idRef := idPubT.ReadValue();
 			id := idMan.ReadData(idRef)(Identity);
 			IF withList THEN
-				NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+				NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on; idL.aux2 := id.application;
 				undoList := undoListMan.WriteAllocateData(idL);
 			END;
 			id.expires_on := BA.revoked;
@@ -2040,8 +2044,8 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				ScanS(ssJ, ':', id.pubkey, i);
 				SkipS(ssJ, ':', i);
 				ScanS(ssJ, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 100);
-				b := TimeOf(n, id.expires_on, tt); ASSERT(b, 101);
-				INC(id.expires_on, pars.msValidity);
+				b := TimeOf(n, id.application, tt); ASSERT(b, 101);
+				id.expires_on := id.application + pars.msValidity;
 				SkipS(ssJ, ':', i);
 				SkipS(ssJ, ':', i);
 				ScanS(ssJ, '"', s, i); NEW(id.uid, LEN(s$) + 1); id.uid^ := s$;
@@ -2084,7 +2088,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 					b := idHashT.SearchIns(idH); ASSERT(b, 109);
 					ASSERT(idHashT.ReadValue() = idRef, 110);
 					IF withList THEN
-						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := oldId.expires_on;
+						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := oldId.expires_on; idL.aux2 := oldId.application;
 						undoList := undoListMan.WriteAllocateData(idL);
 					END;
 				ELSE
@@ -2138,11 +2142,11 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				id := idMan.ReadData(idRef)(Identity);
 				ASSERT(id.member, 115);
 				IF withList THEN
-					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on; idL.aux2 := id.application;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
-				b := TimeOf(n, id.expires_on, tt); ASSERT(b, 116);
-				INC(id.expires_on, pars.msValidity);
+				b := TimeOf(n, id.application, tt); ASSERT(b, 116);
+				id.expires_on := id.application + pars.msValidity;
 				idMan.WriteData(idRef, id);
 			END;
 			
@@ -2151,17 +2155,20 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				INC(i);
 				NEW(idP);
 				ScanS(ssL, ':', idP.ref, i);
+				SkipS(ssL, ':', i);
+				ScanS(ssL, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 117);
 				SkipS(ssL, '"', i);
 				IF ssL[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 117);
+				b := idPubT.Search(idP); ASSERT(b, 118);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
 				IF withList THEN
-					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on; idL.aux2 := id.application;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
+				b := TimeOf(n, id.application, tt); ASSERT(b, 119);
 				id.expires_on := - ABS(id.expires_on); (* id.expires_on < 0 if leaving *)
 				idMan.WriteData(idRef, id);
 			END;
@@ -2175,7 +2182,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 					INC(i);
 				END;
 				NEW(idP); idP.ref := p;
-				b := idPubT.Search(idP); ASSERT(b, 118);
+				b := idPubT.Search(idP); ASSERT(b, 120);
 				idRef := idPubT.ReadValue();
 				NEW(iK); iK.ref := idRef;
 				IF idTimeT.Erase(iK) & withList THEN
@@ -2194,18 +2201,18 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				IF ssE[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 119);
+				b := idPubT.Search(idP); ASSERT(b, 121);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
-				ASSERT(id.member, 120);
+				ASSERT(id.member, 122);
 				id.member := FALSE;
 				idMan.WriteData(idRef, id);
-				b := joinAndLeaveT.Search(idP); ASSERT(b, 121);
+				b := joinAndLeaveT.Search(idP); ASSERT(b, 123);
 				jlRef := joinAndLeaveT.ReadValue();
 				jl := joinAndLeaveMan.ReadData(jlRef)(JoinAndLeave);
 				jlL := joinAndLeaveLMan.ReadData(jl.list)(JoinAndLeaveL);
-				ASSERT(jlL.leavingBlock = hasNotLeaved, 122);
-				Strings.StringToInt(nb, jlL.leavingBlock, res); ASSERT(res = 0, 123);
+				ASSERT(jlL.leavingBlock = hasNotLeaved, 124);
+				Strings.StringToInt(nb, jlL.leavingBlock, res); ASSERT(res = 0, 125);
 				joinAndLeaveMan.WriteData(jl.list, jlL);
 				IF withList THEN
 					NEW(idL); idL.next := undoList; idL.type := leaveList; idL.ref := idRef; idL.aux := 0;
@@ -2213,13 +2220,13 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				END;
 				IF id.expires_on >= 0 THEN (* ~leaving *)
 					IF withList THEN
-						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on;
+						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on; idL.aux2 := id.application;
 						undoList := undoListMan.WriteAllocateData(idL);
 					END;
 					INC(id.expires_on, pars.msValidity);
 					idMan.WriteData(idRef, id);
 					NEW(iK); iK.ref := idRef;
-					b := idTimeT.SearchIns(iK); ASSERT(~b, 124);
+					b := idTimeT.SearchIns(iK); ASSERT(~b, 126);
 					IF withList THEN
 						NEW(idL); idL.next := undoList; idL.type := idAddTimeList; idL.ref := idRef; idL.aux := 0;
 						undoList := undoListMan.WriteAllocateData(idL);
@@ -2503,6 +2510,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 						(* Undo the Identity.expires_on update *)
 						id := idMan.ReadData(l.ref)(Identity);
 						id.expires_on := l.aux;
+						id.application := l.aux2;
 						idMan.WriteData(l.ref, id);
 					|leaveList:
 						(* Update the last JoinAndLeaveL data corresponding to l.ref *)

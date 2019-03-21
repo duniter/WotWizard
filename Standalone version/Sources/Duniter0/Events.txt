@@ -87,14 +87,14 @@ MODULE Duniter0Events;
 			p: B.Pubkey;
 			h: B.Hash;
 			bnb, i: INTEGER;
-			exp: LONGINT;
+			exp, app: LONGINT;
 		
 		BEGIN (*MembershipsEnds*)
 			NEW(ms.m, B.IdLenM());
 			i := 0;
 			ok := B.IdNextUidM(TRUE, id);
 			WHILE ok DO
-				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b & mem, 100);
+				b := B.IdUidComplete(id, p, mem, h, bnb, app, exp); ASSERT(b & mem, 100);
 				NEW(ms.m[i]);
 				ms.m[i].id := id; ms.m[i].exp := exp; BA.TimestampToString(exp, ms.m[i].expS);
 				INC(i);
@@ -114,13 +114,13 @@ MODULE Duniter0Events;
 			p: B.Pubkey;
 			h: B.Hash;
 			bnb, i: INTEGER;
-			exp: LONGINT;
+			exp, app: LONGINT;
 		
 		BEGIN (*MissingEnds*)
 			i := 0;
 			ok := B.IdNextUid(TRUE, id);
 			WHILE ok DO
-				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b, 100);
+				b := B.IdUidComplete(id, p, mem, h, bnb, app, exp); ASSERT(b, 100);
 				IF ~mem & (exp # BA.revoked) THEN
 					INC(i);
 				END;
@@ -130,7 +130,7 @@ MODULE Duniter0Events;
 			i := 0;
 			ok := B.IdNextUid(TRUE, id);
 			WHILE ok DO
-				b := B.IdUidComplete(id, p, mem, h, bnb, exp); ASSERT(b, 101);
+				b := B.IdUidComplete(id, p, mem, h, bnb, app, exp); ASSERT(b, 101);
 				IF ~mem & (exp # BA.revoked) THEN
 					NEW(ms.m[i]);
 					ms.m[i].id := id; ms.m[i].exp := exp; BA.TimestampToString(exp, ms.m[i].expS);
