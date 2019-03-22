@@ -26,7 +26,7 @@ MODULE Duniter0IdentitySearch;
 		
 		maxItems = 100;
 		
-		nonEditableNb = 13;
+		nonEditableNb = 12;
 		
 		oldIcon = '×';
 		futureIcon = 'º';
@@ -82,7 +82,7 @@ MODULE Duniter0IdentitySearch;
 			distanceOK-,
 			calcQual*,
 			calcCentr*: BOOLEAN;
-			fields*: NonEditable; (* uid (0), pubkey (1), limit date (2), limit date of received cert (3), limit date of sent cert (4), hash (5), proportionOfSentries (6), availability (7), inscriptionBlock (8), inscriptionDate (9), quality (10), centrality (11), applicationDate (12) *)
+			fields*: NonEditable; (* uid (0), pubkey (1), limit date (2), limit date of received cert (3), limit date of sent cert (4), hash (5), proportionOfSentries (6), availability (7), inscriptionBlock (8), inscriptionDate (9), quality (10), centrality (11) *)
 		END;
 		
 		receivedCertsNb-,
@@ -527,7 +527,7 @@ MODULE Duniter0IdentitySearch;
 			identity.fields[7] := identity.fields[6];
 		END Certs;
 	
-	PROCEDURE Get (IN hash: S.Hash; IN uid: ARRAY OF CHAR; OUT bloc, blocDate, pubkey, applicationDate, limitDate: ARRAY OF CHAR; OUT inBC, member: BOOLEAN);
+	PROCEDURE Get (IN hash: S.Hash; IN uid: ARRAY OF CHAR; OUT bloc, blocDate, pubkey, limitDate: ARRAY OF CHAR; OUT inBC, member: BOOLEAN);
 		
 		VAR
 			
@@ -551,12 +551,10 @@ MODULE Duniter0IdentitySearch;
 				bloc := "";
 				d := "";
 			END;
+			pubkey := p$;
 			blocDate := d$;
-			BA.TimestampToString(app, d);
-			applicationDate := d$;
 			BA.TimestampToString(exp, d);
 			limitDate := d$;
-			pubkey := p$;
 		END Get;
 	
 	PROCEDURE NotTooFar (member: BOOLEAN; OUT proportionOfSentries: ARRAY OF CHAR): BOOLEAN;
@@ -672,7 +670,7 @@ MODULE Duniter0IdentitySearch;
 				ring.Change(identity.fields[0]);
 				hash := identityHash[identityList.index];
 				identity.fields[10] := hash$;
-				Get(hash, identity.fields[0], identity.fields[16], identity.fields[18], identity.fields[2], identity.fields[24], identity.fields[4], inBC, identity.member);
+				Get(hash, identity.fields[0], identity.fields[16], identity.fields[18], identity.fields[2], identity.fields[4], inBC, identity.member);
 				identity.sentry := identity.member & B.IsSentry(identity.fields[2]$);
 				FixCertNextDate(identity.member, identity.fields[2]$, identity.fields[14]);
 				Certs(hash, identity.fields[2]$, inBC);
