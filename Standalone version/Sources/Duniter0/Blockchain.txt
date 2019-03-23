@@ -2218,12 +2218,16 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 					NEW(idL); idL.next := undoList; idL.type := leaveList; idL.ref := idRef; idL.aux := 0;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
-				IF id.expires_on >= 0 THEN (* ~leaving *)
+				IF id.expires_on # BA.revoked THEN
 					IF withList THEN
 						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on; idL.aux2 := id.application;
 						undoList := undoListMan.WriteAllocateData(idL);
 					END;
-					INC(id.expires_on, pars.msValidity);
+					IF id.expires_on >= 0 THEN (* ~leaving *)
+						INC(id.expires_on, pars.msValidity);
+					ELSE
+						DEC(id.expires_on, pars.msValidity);
+					END;
 					idMan.WriteData(idRef, id);
 					NEW(iK); iK.ref := idRef;
 					b := idTimeT.SearchIns(iK); ASSERT(~b, 126);
