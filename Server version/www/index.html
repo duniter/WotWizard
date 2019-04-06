@@ -57,6 +57,23 @@
       p.not_before_or_never:after {
         content: "";
       }
+      .warning {
+        width: 97.5%;
+        padding: 1rem;
+        background-color: #fff3d9;
+        color: #0a0a0a;
+        border: 1px solid rgba(10, 10, 10, 0.25);
+      }
+      .warning h4 {
+        margin-top: 0;
+      }
+      .warning p {
+        margin-bottom: 0;
+        padding-left: 0;
+      }
+      .hide {
+        display: none;
+      }
     </style>
     <script src="./jquery.js"></script>
     <script type="text/javascript">
@@ -106,6 +123,17 @@
             $('#timeBCT').text(jsonMeta.now + ' BCT¹')
             $('#currentBlock').text(jsonMeta.block)
             $('#computationDuration').text(jsonMeta.computation_duration)
+            var dateMMDDYYYY = jsonMeta.now
+            var DD = dateMMDDYYYY.substr(0, 2)
+            var MM = dateMMDDYYYY.substr(3, 2)
+            var YYYY = dateMMDDYYYY.substr(6, 4)
+            var HHMMSS = dateMMDDYYYY.substr(11, 8)
+            var dateISO = new Date(MM + '/' + DD + '/' + YYYY + ' ' + HHMMSS)
+            var diffToNow = (Date.now() - dateISO.getTime()) / 1000
+            var hoursOffset = diffToNow / 3600
+            if (hoursOffset > 4) {
+              document.getElementById('ww-stuck').style.display = 'block'
+            }
             // By date
             for (var i = 0; i < jsonByDate.dates.length; i++) {
               var entry = jsonByDate.dates[i]
@@ -170,6 +198,15 @@
     </script>
   </head>
   <body>
+    <div class="warning" id="ww-stuck" style='display: none'>
+      <h4>WotWizard semble bloqué.</h4>
+      <p>
+        WotWizard n'est pas très à jour : le logiciel est peut-être bloqué, ou bien la blockchain avance trop lentement.
+      </p>
+      <p>
+        Les informations ci-dessous sont donc potentiellement <i>obsolètes</i>.
+      </p>
+    </div>
     <h2>Dossiers en attente : <span id="nbFolders"></span></h2>
     <h3>Heure actuelle : <span id="timeBCT"></span></h3>
     <h3>Bloc courant : #<span id="currentBlock"></span></h3>
