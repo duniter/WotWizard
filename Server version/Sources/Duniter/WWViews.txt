@@ -26,8 +26,8 @@ MODULE DuniterWWViews;
 	
 	CONST
 		
-		calculusPeriod = 5 * 60 * Services.resolution; (* Time between two executions of "WWServer.exe" *)
-		verifyPeriod = 5 * Services.resolution; (* Time between two verifications "WWServer.exe" has stopped *)
+		updatePeriod = 2 * Services.resolution; (* Time between two verifications of "updating.txt" *)
+		calcEndPeriod = 2 * Services.resolution; (* Time between two verifications "WWServer.exe" has stopped *)
 		
 		rsrcDir = "Duniter/Rsrc"; (* Resources directory *)
 		runningName = "Running.odc"; (* Name of the (empty) file which exists while "WWServer.exe" is running *)
@@ -66,12 +66,13 @@ MODULE DuniterWWViews;
 	
 	TYPE
 		
-		(* "WWServer.exe" iteration *)
-		NewCalculus = POINTER TO RECORD (Services.Action)
+		(* "updating.txt" verification *)
+		VerifyUpdate = POINTER TO RECORD (Services.Action)
 		END;
 		
 		(* Iteration of the verification of the execution of "WWServer.exe" *)
 		VerifyCalcEnd = POINTER TO RECORD (Services.Action)
+			update: BOOLEAN;
 		END;
 		
 		(* Type of the view which displays the WotWizard lists *)
@@ -106,9 +107,8 @@ MODULE DuniterWWViews;
 	
 	VAR
 		
-		nC: NewCalculus;
+		vU: VerifyUpdate;
 		vC: VerifyCalcEnd;
-		running: BOOLEAN; (* "WWServer.exe" is running *)
 		
 		dateNameMeta*: INTEGER; (* Sort of the output *)
 		
@@ -446,9 +446,9 @@ MODULE DuniterWWViews;
 				c.context.GetSize(w, h);
 				c.context.SetSize(c.font.StringWidth(s) + radioOffset, h);
 				f.WriteLn;
-				f.WriteLn;
-				f.WriteTab;
 				IF v.modified THEN
+					f.WriteLn;
+					f.WriteTab;
 					InitProp(prop);
 					prop.link := "DuniterWWViews.Clear";
 					prop.label := "#Duniter:Check";
@@ -457,18 +457,8 @@ MODULE DuniterWWViews;
 					f.WriteView(c);
 					c.context.GetSize(w, h);
 					c.context.SetSize(c.font.StringWidth(s) + buttonOffset, h);
+					f.WriteLn;
 				END;
-				f.WriteTab; f.WriteTab;
-				InitProp(prop);
-				prop.link := "DuniterWWViews.UpdateAll";
-				prop.label := "#Duniter:Update";
-				prop.guard := "DuniterWWViews.UpdateAllGuard";
-				Dialog.MapString(prop.label, s);
-				c := Controls.dir.NewPushButton(prop);
-				f.WriteView(c);
-				c.context.GetSize(w, h);
-				c.context.SetSize(c.font.StringWidth(s) + buttonOffset, h);
-				f.WriteLn;
 			END InsertControls;
 		
 		BEGIN (*WriteText*)
@@ -927,48 +917,52 @@ MODULE DuniterWWViews;
 			Views.OpenAux(New(), title);
 		END Open;
 	
-	PROCEDURE UpdateAll*;
+	PROCEDURE UpdateAll;
+		
+		VAR
+			
+			loc: Files.Locator;
 		
 		BEGIN (*UpdateAll*)
-			IF ~running THEN
-				Services.RemoveAction(nC);
-				Services.RemoveAction(vC);
-				Services.DoLater(nC, Services.now);
-			END;
+			loc := Files.dir.This(BA.duniDir); ASSERT(loc.res = 0, 100);
+			REPEAT
+				Files.dir.Delete(loc, BA.syncName); ASSERT(loc.res IN {0, 2}, 101);
+			UNTIL loc.res = 0;
+			Services.DoLater(vU, Services.Ticks() + updatePeriod)
 		END UpdateAll;
 	
-	PROCEDURE UpdateAllGuard* (VAR par: Dialog.Par);
+	PROCEDURE MarkRunning;
 		
-		BEGIN (*UpdateAllGuard*)
-			par.disabled := running;
-		END UpdateAllGuard;
+		VAR
+			
+			loc: Files.Locator;
+			f: Files.File;
+			res: INTEGER;
+		
+		BEGIN (*MarkRunning*)
+			loc := Files.dir.This(rsrcDir); ASSERT(loc.res = 0, 100);
+			f := Files.dir.New(loc, Files.dontAsk); ASSERT(loc.res = 0, 101);
+			f.Register(runningName, "", Files.dontAsk, res); ASSERT(res = 0, 102);
+		END MarkRunning;
 	
-	PROCEDURE (c: NewCalculus) Do;
+	PROCEDURE (v: VerifyUpdate) Do;
 		
-		PROCEDURE MarkRunning;
+		VAR
 			
-			VAR
-				
-				loc: Files.Locator;
-				f: Files.File;
-				res: INTEGER;
-			
-			BEGIN (*MarkRunning*)
-				loc := Files.dir.This(rsrcDir); ASSERT(loc.res = 0, 100);
-				f := Files.dir.New(loc, Files.dontAsk); ASSERT(loc.res = 0, 101);
-				f.Register(runningName, "", Files.dontAsk, res); ASSERT(res = 0, 102);
-				running := TRUE;
-			END MarkRunning;
+			loc: Files.Locator;
+			f: Files.File;
 		
 		BEGIN (*Do*)
-			IF running THEN
-				Services.DoLater(c, Services.Ticks() + verifyPeriod); (* Risque de blocage ; à voir *)
+			loc := Files.dir.This(BA.duniDir); ASSERT(loc.res = 0, 100);
+			f := Files.dir.Old(loc, BA.syncName, Files.shared);
+			IF f = NIL THEN
+				Services.DoLater(v, Services.Ticks() + updatePeriod)
 			ELSE
-				Services.DoLater(c, Services.Ticks() + calculusPeriod);
+				f.Close;
 				MarkRunning;
 				BA.Collect; (* Free the File in MarkRunning *)
 				UtilExternal.Start("WWServer.exe");
-				Services.DoLater(vC, Services.Ticks() + verifyPeriod);
+				Services.DoLater(vC, Services.Ticks() + calcEndPeriod);
 			END;
 		END Do;
 	
@@ -983,29 +977,35 @@ MODULE DuniterWWViews;
 			loc := Files.dir.This(rsrcDir); ASSERT(loc.res = 0, 100);
 			f := Files.dir.Old(loc, runningName, Files.exclusive);
 			IF f = NIL THEN
-				Update;
-				running := FALSE;
+				IF v.update THEN
+					Update;
+				END;
+				UpdateAll;
 			ELSE
 				f.Close;
-				Services.DoLater(v, Services.Ticks() + verifyPeriod);
+				Services.DoLater(v, Services.Ticks() + calcEndPeriod);
 			END;
 		END Do;
 	
 	PROCEDURE Init;
 		
+		VAR
+			
+			v: VerifyCalcEnd;
+		
 		BEGIN (*Init*)
 			dateNameMeta := byName;
 			showOldEntries := TRUE;
-			NEW(vC);
-			NEW(nC);
-			running := FALSE;
-			UpdateAll;
+			NEW(vC); vC.update := TRUE;
+			NEW(vU);
+			NEW(v); v.update := FALSE;
+			Services.DoLater(v, Services.now);
 		END Init;
 	
 	BEGIN (*DuniterWWViews*)
 		Init;
 	CLOSE
-		Services.RemoveAction(nC);
+		Services.RemoveAction(vU);
 		Services.RemoveAction(vC);
 	END DuniterWWViews.
 

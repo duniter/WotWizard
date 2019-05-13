@@ -16,7 +16,11 @@ MODULE UtilJson;
 
 	IMPORT
 		
-		B := BabelCompil, Converters, Files, Stores, Strings, TextMappers, TextModels, TextViews, Views;
+		(**
+		UtilLog,
+		**)
+		
+		B := BabelCompil, Converters, Files, M := Meta, A := UtilMetaArray, Stores, Strings, TextMappers, TextModels, TextViews, Views;
 	
 	CONST
 		
@@ -27,7 +31,8 @@ MODULE UtilJson;
 		
 		StrPtr* = POINTER TO ARRAY OF CHAR;
 		
-		Directory = POINTER TO RECORD (B.Directory) (* For compiler internalizing *)
+		(* For compiler internalizing *)
+		Directory = POINTER TO RECORD (B.Directory)
 			r: Stores.Reader;
 		END;
 		
@@ -35,14 +40,18 @@ MODULE UtilJson;
 			json: Json;
 		END;
 		
+		(* Compilation from a string (ReadString) *)
 		CompilationS = POINTER TO RECORD (Compilation)
 			s: StrPtr;
 			cur: INTEGER;
 		END;
 		
+		(* Compilation from a TextModels.Model (ReadText & ReadFile) *)
 		CompilationT = POINTER TO RECORD (Compilation)
 			r: TextModels.Reader;
 		END;
+		
+		(* Outputs of ReadString, ReadText & ReadFile *)
 		
 		StringP* = POINTER TO ARRAY OF CHAR;
 		
@@ -92,6 +101,7 @@ MODULE UtilJson;
 		Null* = POINTER TO LIMITED RECORD (Value)
 		END;
 		
+		(* Stack used for building Json objects *) 
 		Stack = POINTER TO ABSTRACT RECORD
 			next: Stack;
 		END;
@@ -113,11 +123,18 @@ MODULE UtilJson;
 	
 	VAR
 		
+		(**
+		L: UtilLog.Log;
+		**)
+		
 		comp: B.Compiler; (* Compiler of json texts *)
 		
-		stack: Stack;
+		stack: Stack; (* Stack used for building Json objects *) 
+	
+	(************ Json -> CP ************)
 	
 	(* Implementation of the standard procedures of Babel *)
+	
 	PROCEDURE (d: Directory) ReadInt (OUT i: INTEGER);
 		
 		BEGIN (*ReadInt*)
@@ -179,7 +196,6 @@ MODULE UtilJson;
 			array = 2;
 			nil = 3;
 			cons = 4;
-			field = 5;
 			
 			json = 1;
 			string = 2;
@@ -215,12 +231,12 @@ MODULE UtilJson;
 				
 				BEGIN (*EvalVal*)
 					CASE o.ObjType() OF
-						|B.userObj:
-							RETURN o.ObjUser()(Value);
-						|B.termObj:
-							NEW(j);
-							j.json := Eval(o);
-							RETURN j;
+					|B.userObj:
+						RETURN o.ObjUser()(Value);
+					|B.termObj:
+						NEW(j);
+						j.json := Eval(o);
+						RETURN j;
 					END;
 				END EvalVal;
 			
@@ -284,52 +300,53 @@ MODULE UtilJson;
 			BEGIN (*Eval*)
 				ASSERT(o.ObjType() = B.termObj, 20);
 				CASE o.ObjFunc() OF
-					|object:
-						NEW(ob);
-						ob.fields := EvalObj(o.ObjTermSon(1));
-						RETURN ob;
-					|array:
-						NEW(a);
-						a.elements := EvalArr(o.ObjTermSon(1));
-						RETURN a;
+				|object:
+					NEW(ob);
+					ob.fields := EvalObj(o.ObjTermSon(1));
+					RETURN ob;
+				|array:
+					NEW(a);
+					a.elements := EvalArr(o.ObjTermSon(1));
+					RETURN a;
 				END;
 			END Eval;
 		
 		BEGIN (*Execution*)
 			o := pars[0];
 			CASE fNum OF
-				|json:
-					c.json := Eval(o);
-				|string:
-					NEW(sp);
-					NEW(s, o.ObjStringLen() + 1); o.ObjString(s);
-					NEW(sp.s, LEN(s) - 2);
-					Strings.Extract(s, 1, LEN(s$) - 2, sp.s);
-					res := sp;
-				|number:
-					NEW(s, o.ObjStringLen() + 1); o.ObjString(s);
-					Strings.StringToLInt(s, i, ok);
-					IF ok = 0 THEN
-						NEW(int); int.n := i;
-						res := int;
-					ELSE
-						Strings.StringToReal(s, r, ok); ASSERT(ok = 0, 100);
-						NEW(real); real.r := r;
-						res := real;
-					END;
-				|true,
-				 false:
-					NEW(b);
-					b.bool := fNum = true;
-					res := b;
-				|null:
-					NEW(n);
-					res := n;
+			|json:
+				c.json := Eval(o);
+			|string:
+				NEW(sp);
+				NEW(s, o.ObjStringLen() + 1); o.ObjString(s);
+				NEW(sp.s, LEN(s) - 2);
+				Strings.Extract(s, 1, LEN(s$) - 2, sp.s);
+				res := sp;
+			|number:
+				NEW(s, o.ObjStringLen() + 1); o.ObjString(s);
+				Strings.StringToLInt(s, i, ok);
+				IF ok = 0 THEN
+					NEW(int); int.n := i;
+					res := int;
+				ELSE
+					Strings.StringToReal(s, r, ok); ASSERT(ok = 0, 100);
+					NEW(real); real.r := r;
+					res := real;
+				END;
+			|true,
+			 false:
+				NEW(b);
+				b.bool := fNum = true;
+				res := b;
+			|null:
+				NEW(n);
+				res := n;
 			END;
 			RETURN TRUE;
 		END Execution;
 	
-	PROCEDURE ReadString* (s: StrPtr): Json;
+	(* String -> Json *)
+	PROCEDURE ReadString* (IN s: ARRAY OF CHAR): Json;
 		
 		VAR
 			
@@ -337,7 +354,7 @@ MODULE UtilJson;
 		
 		BEGIN (*ReadString*)
 			NEW(c);
-			c.s := s;
+			NEW(c.s, LEN(s$) + 1); c.s^ := s$;
 			c.cur := 0;
 			IF ~c.Compile(comp, TRUE) THEN
 				RETURN NIL;
@@ -345,7 +362,8 @@ MODULE UtilJson;
 			RETURN c.json;
 		END ReadString;
 	
-	PROCEDURE ReadText* (t: TextModels.Model ): Json;
+	(* TextModels.Model -> Json *)
+	PROCEDURE ReadText* (t: TextModels.Model): Json;
 		
 		VAR
 			
@@ -360,7 +378,8 @@ MODULE UtilJson;
 			RETURN c.json;
 		END ReadText;
 	
-	PROCEDURE ReadFile* (IN path, name: ARRAY OF CHAR ): Json;
+	(* File -> Json *)
+	PROCEDURE ReadFile* (IN dir, name: ARRAY OF CHAR ): Json;
 		
 		CONST
 			
@@ -369,7 +388,6 @@ MODULE UtilJson;
 		VAR
 			
 			n: Files.Name;
-			c: Compilation;
 			loc: Files.Locator;
 			conv: Converters.Converter;
 			v: Views.View;
@@ -380,7 +398,7 @@ MODULE UtilJson;
 				conv := conv.next;
 			END;
 			ASSERT(conv # NIL, 100);
-			loc := Files.dir.This(path); ASSERT(loc.res = 0, 101);
+			loc := Files.dir.This(dir); ASSERT(loc.res = 0, 101);
 			n := name$;
 			v := Views.Old(Views.dontAsk, loc, n, conv);
 			IF (v = NIL) OR ~(v IS TextViews.View) THEN
@@ -389,6 +407,132 @@ MODULE UtilJson;
 			RETURN ReadText(v(TextViews.View).ThisModel());
 		END ReadFile;
 	
+	(* ApplyTo modifies obj according to j; warning: obj must be a pointer to a global, exported and modifiable record variable of its module, and only its exported and modifiable fields are taken into account; in obj, records must not be extended (i.e. their static types must match their dynamic types), but pointers to arrays, if their lengths are not alreadt correct, are allocated with the same length as in j, provided that their BaseTyp is in {(Meta) boolTyp, sCharTyp, charTyp, byteTyp, sIntTyp, intTyp, sRealTyp, realTyp, longTyp, recTyp} (in particular, no pointers; if you want pointers, replace them by records with a pointer field). *)
+	PROCEDURE (j: Json) ApplyTo* (obj: ANYPTR), NEW;
+		
+		VAR
+			
+			i, ii: M.Item;
+			ok: BOOLEAN;
+		
+		PROCEDURE Apply (j: Json; i: M.Item);
+			
+			VAR
+				
+				k: INTEGER;
+			
+			PROCEDURE ApplyVal (v: Value; i: M.Item);
+				
+				BEGIN (*ApplyVal*)
+					IF i.vis = M.exported THEN
+						WITH
+						|v: Bool DO
+							ASSERT(i.typ = M.boolTyp, 21);
+							i.PutBoolVal(v.bool);
+						|v: Integer DO
+							CASE i.typ OF
+							|M.byteTyp,
+							 M.sIntTyp,
+							 M.intTyp:
+								i.PutIntVal(SHORT(v.n));
+							|M.longTyp:
+								i.PutLongVal(v.n);
+							END;
+						|v: JsonVal DO
+							Apply(v.json, i);
+						|v: Null DO
+							ASSERT(i.typ = M.ptrTyp, 22);
+							i.PutPtrVal(NIL);
+						|v: Real DO
+							ASSERT(i.typ IN{M.sRealTyp, M.realTyp}, 23);
+							i.PutRealVal(v.r);
+						|v: String DO
+							IF i.typ = M.ptrTyp THEN
+								IF v.s = NIL THEN
+									i.PutPtrVal(NIL);
+								ELSE
+									ASSERT(i.BaseTyp() = M.arrTyp, 24);
+									ok := i.PtrVal() # NIL;
+									IF ok THEN
+										i.Deref(ii);
+										ok := ii.Len() = LEN(v.s);
+									END;
+									IF ~ok THEN
+										A.MakeArr(i, LEN(v.s));
+									END;
+									i.Deref(ii); i := ii;
+								END;
+							END;
+							IF v.s # NIL THEN
+								CASE i.typ OF
+								|M.sCharTyp,
+								 M.charTyp:
+									ASSERT(LEN(v.s$) = 1, 25);
+									i.PutCharVal(v.s[0]);
+								|M.arrTyp:
+									ASSERT(i.Len() > LEN(v.s$), 26);
+									CASE i.BaseTyp() OF
+									|M.sCharTyp:
+										i.PutSStringVal(SHORT(v.s$), ok); ASSERT(ok, 100);
+									|M.charTyp:
+										i.PutStringVal(v.s$, ok); ASSERT(ok, 101);
+									END;
+								END;
+							END;
+						END;
+					END;
+				END ApplyVal;
+			
+			BEGIN (*Apply*)
+				IF i.vis = M.exported THEN
+					WITH
+					|j: Object DO
+						IF i.typ = M.ptrTyp THEN
+							IF i.PtrVal() = NIL THEN
+								i.PutPtrVal(i.New());
+							END;
+							i.Deref(ii); i := ii;
+						END;
+						ASSERT(i.typ = M.recTyp, 22);
+						FOR k := 0 TO LEN(j.fields) - 1 DO
+							i.Lookup(j.fields[k].name$, ii); ASSERT(ii.obj # M.undef, 23);
+							ApplyVal(j.fields[k].value, ii);
+						END;
+					|j: Array DO
+						IF i.typ = M.ptrTyp THEN
+							IF j.elements = NIL THEN
+								i.PutPtrVal(NIL);
+							ELSE
+								ASSERT(i.BaseTyp() = M.arrTyp, 24);
+								ok := i.PtrVal() # NIL;
+								IF ok THEN
+									i.Deref(ii);
+									ok := ii.Len() = LEN(j.elements);
+								END;
+								IF ~ok THEN
+									A.MakeArr(i, LEN(j.elements));
+								END;
+								i.Deref(ii); i := ii;
+							END;
+						END;
+						IF j.elements # NIL THEN
+							ASSERT((i.typ = M.arrTyp) & (i.Len() >= LEN(j.elements)), 25);
+							FOR k := 0 TO LEN(j.elements) - 1 DO
+								i.Index(k, ii);
+								ApplyVal(j.elements[k], ii);
+							END;
+						END;
+					END;
+				END;
+			END Apply;
+		
+		BEGIN (*ApplyTo*)
+			M.GetItem(obj, i);
+			ASSERT(i.obj = M.varObj, 20);
+			Apply(j, i);
+		END ApplyTo;
+	
+	(* Write writes j with fo *)
 	PROCEDURE (j: Json) Write* (fo: TextMappers.Formatter), NEW;
 		
 		PROCEDURE Indent (indent: INTEGER);
@@ -417,19 +561,19 @@ MODULE UtilJson;
 					p := n;
 					FOR i := 0 TO n - 1 DO
 						CASE s[i] OF
-							'"', '\':
-								INC(p);
-							ELSE
+						|'"', '\':
+							INC(p);
+						ELSE
 						END;
 					END;
 					NEW(ss, p + 1);
 					j := 0;
 					FOR i := 0 TO n - 1 DO
 						CASE s[i] OF
-							'"', '\':
-								ss[j] := '\';
-								INC(j);
-							ELSE
+						|'"', '\':
+							ss[j] := '\';
+							INC(j);
+						ELSE
 						END;
 						ss[j] := s[i];
 						INC(j);
@@ -452,33 +596,27 @@ MODULE UtilJson;
 			
 			PROCEDURE WriteVal (v: Value; indent: INTEGER);
 				
-				VAR
-					
-					i: INTEGER;
-				
 				BEGIN (*WriteVal*)
 					IF ~(v IS JsonVal) THEN
-						FOR i := 1 TO indent DO
-							fo.WriteTab;
-						END;
+						Indent(indent);
 					END;
 					WITH
-						|v: String DO
-							WriteString(v.s);
-						|v: Integer DO
-							fo.WriteInt(v.n);
-						|v: Real DO
-							fo.WriteReal(v.r);
-						|v: JsonVal DO
-							WriteJson(v.json, indent);
-						|v: Bool DO
-							IF v.bool THEN
-								fo.WriteString('true');
-							ELSE
-								fo.WriteString('false');
-							END;
-						|v: Null DO
-							fo.WriteString('null');
+					|v: String DO
+						WriteString(v.s);
+					|v: Integer DO
+						fo.WriteInt(v.n);
+					|v: Real DO
+						fo.WriteReal(v.r);
+					|v: JsonVal DO
+						WriteJson(v.json, indent);
+					|v: Bool DO
+						IF v.bool THEN
+							fo.WriteString('true');
+						ELSE
+							fo.WriteString('false');
+						END;
+					|v: Null DO
+						fo.WriteString('null');
 					END;
 				END WriteVal;
 			
@@ -526,26 +664,30 @@ MODULE UtilJson;
 			
 			BEGIN (*WriteJson*)
 				WITH
-					|j: Object DO
-						Indent(indent);
-						fo.WriteString('{');
-						fo.WriteLn;
-						WriteObj(j.fields, indent + 1);
-						Indent(indent);
-						fo.WriteString('}');
-					|j: Array DO
-						Indent(indent);
-						fo.WriteString('[');
-						fo.WriteLn;
-						WriteArr(j.elements, indent + 1);
-						Indent(indent);
-						fo.WriteString(']');
+				|j: Object DO
+					Indent(indent);
+					fo.WriteString('{');
+					fo.WriteLn;
+					WriteObj(j.fields, indent + 1);
+					Indent(indent);
+					fo.WriteString('}');
+				|j: Array DO
+					Indent(indent);
+					fo.WriteString('[');
+					fo.WriteLn;
+					WriteArr(j.elements, indent + 1);
+					Indent(indent);
+					fo.WriteString(']');
 				END;
 			END WriteJson;
 		
 		BEGIN (*Write*)
 			WriteJson(j, 0);
 		END Write;
+	
+	(************ CP -> Json ************)
+	
+	(* Stack procedures *)
 	
 	PROCEDURE Push (s: Stack);
 		
@@ -567,6 +709,7 @@ MODULE UtilJson;
 			RETURN s;
 		END Pull;
 	
+	(*StartObject begins a json object *)
 	PROCEDURE StartObject*;
 		
 		VAR
@@ -578,6 +721,7 @@ MODULE UtilJson;
 			Push(so);
 		END StartObject;
 	
+	(* StartArray begins a json array *)
 	PROCEDURE StartArray*;
 		
 		VAR
@@ -589,6 +733,7 @@ MODULE UtilJson;
 			Push(sa);
 		END StartArray;
 	
+	(* PushString pushes the string s on the stack *)
 	PROCEDURE PushString* (IN s: ARRAY OF CHAR);
 		
 		VAR
@@ -602,6 +747,7 @@ MODULE UtilJson;
 			Push(sv);
 		END PushString;
 	
+	(* PushInteger pushes the integer n on the stack *)
 	PROCEDURE PushInteger* (n: LONGINT);
 		
 		VAR
@@ -615,6 +761,7 @@ MODULE UtilJson;
 			Push(sv);
 		END PushInteger;
 	
+	(* PushReal pushes the real r on the stack *)
 	PROCEDURE PushReal* (r: REAL);
 		
 		VAR
@@ -628,6 +775,7 @@ MODULE UtilJson;
 			Push(sv);
 		END PushReal;
 	
+	(* PushBoolean pushes the boolean b on the stack *)
 	PROCEDURE PushBoolean* (b: BOOLEAN);
 		
 		VAR
@@ -641,6 +789,7 @@ MODULE UtilJson;
 			Push(sv);
 		END PushBoolean;
 	
+	(* PushNull pushes a json null value on the stack *)
 	PROCEDURE PushNull*;
 		
 		VAR
@@ -654,6 +803,47 @@ MODULE UtilJson;
 			Push(sv);
 		END PushNull;
 	
+	PROCEDURE PushValue* (v: Value);
+		
+		VAR
+			
+			sv: STValue;
+		
+		BEGIN (*PushValue*)
+			NEW(sv);
+			sv.val := v;
+			Push(sv);
+		END PushValue;
+	
+	(* PushJson pushes the Json j on the stack *)
+	PROCEDURE PushJson* (j: Json);
+		
+		VAR
+			
+			sv: STValue;
+			jv: JsonVal;
+		
+		BEGIN (*PushJson*)
+			NEW(jv);
+			jv.json := j;
+			NEW(sv);
+			sv.val := jv;
+			Push(sv);
+		END PushJson;
+	
+	PROCEDURE PushField* (IN f: Field);
+		
+		VAR
+			
+			sf: STField;
+		
+		BEGIN (*PushField*)
+			NEW(sf);
+			sf.name := f.name; sf.value := f.value;
+			Push(sf);
+		END PushField;
+	
+	(* BuildField builds the json object field whose name is name and whose value is the last element on the stack and replaces this element with the built field *)
 	PROCEDURE BuildField* (IN name: ARRAY OF CHAR);
 		
 		VAR
@@ -670,6 +860,7 @@ MODULE UtilJson;
 			Push(sf);
 		END BuildField;
 	
+	(* BuildObject builds a json object from all the fields stacked from the last StartObject call and stacks it *)
 	PROCEDURE BuildObject*;
 		
 		VAR
@@ -704,6 +895,7 @@ MODULE UtilJson;
 			Push(sv);
 		END BuildObject;
 	
+	(* BuildArray builds a json array from all the values stacked from the last StartArray call and stacks it *)
 	PROCEDURE BuildArray*;
 		
 		VAR
@@ -737,6 +929,7 @@ MODULE UtilJson;
 			Push(sv);
 		END BuildArray;
 	
+	(* GetJson builds and returns a Json built from the last object on the stack *)
 	PROCEDURE GetJson* (): Json;
 		
 		VAR
@@ -745,10 +938,145 @@ MODULE UtilJson;
 		
 		BEGIN (*GetJson*)
 			ASSERT((stack # NIL) & (stack IS STValue) & (stack(STValue).val IS JsonVal), 20);
-			j := stack(STValue).val(JsonVal).json;
-			stack := NIL;
+			j := Pull()(STValue).val(JsonVal).json;
 			RETURN j;
 		END GetJson;
+	
+	(* BuildJsonFrom builds and returns a Json describing obj; warning: obj must be a pointer to a global exported record variable of its module, and only its exported fields are taken into account *)
+	PROCEDURE BuildJsonFrom* (obj: ANYPTR): Json;
+		
+		VAR
+			
+			i, ii: M.Item;
+			char: ARRAY 2 OF CHAR;
+			name: M.Name;
+			bT, len: INTEGER;
+			ss: POINTER TO ARRAY OF SHORTCHAR;
+			s: POINTER TO ARRAY OF CHAR;
+			ok: BOOLEAN;
+		
+		PROCEDURE Process (i: M.Item);
+			
+			VAR
+				
+				sc: M.Scanner;
+				k: INTEGER;
+			
+			BEGIN (*Process*)
+				CASE i.typ OF
+				|M.boolTyp:
+					PushBoolean(i.BoolVal());
+				|M.sCharTyp,
+				 M.charTyp:
+					char[0] := i.CharVal();
+					PushString(char);
+				|M.byteTyp,
+				 M.sIntTyp,
+				 M.intTyp:
+					PushInteger(i.IntVal());
+				|M.longTyp:
+					PushInteger(i.LongVal());
+				|M.sRealTyp,
+				 M.realTyp:
+					PushReal(i.RealVal());
+				|M.recTyp:
+					StartObject;
+					sc.ConnectTo(i);
+					sc.Scan;
+					WHILE ~sc.eos DO
+						Process(sc.this);
+						sc.GetObjName(name);
+						BuildField(name);
+						sc.Scan;
+					END;
+					BuildObject;
+				|M.arrTyp:
+					len := i.Len();
+					bT := i.BaseTyp();
+					IF bT = M.sCharTyp THEN
+						NEW(ss, len);
+						i.GetSStringVal(ss, ok); ASSERT(ok, 100);
+						PushString(LONG(ss$));
+					ELSIF bT = M.charTyp THEN
+						NEW(s, len);
+						i.GetStringVal(s, ok); ASSERT(ok, 101);
+						PushString(s$);
+					ELSE
+						StartArray;
+						FOR k := 0 TO i.Len() - 1 DO
+							i.Index(k, ii);
+							Process(ii);
+						END;
+						BuildArray;
+					END;
+				|M.ptrTyp:
+					IF i.PtrVal() = NIL THEN
+						PushNull;
+					ELSE
+						i.Deref(ii);
+						Process(ii);
+					END;
+				END;
+			END Process;
+		
+		BEGIN (*BuildJsonFrom*)
+			IF obj = NIL THEN
+				RETURN NIL;
+			END;
+			M.GetItem(obj, i);
+			ASSERT(i.obj = M.varObj, 20);
+			char[1] := 0X;
+			Process(i);
+			RETURN GetJson();
+		END BuildJsonFrom;
+	
+	PROCEDURE Roll* (n: INTEGER);
+		
+		VAR
+			
+			s, ss: Stack;
+		
+		BEGIN (*Roll*)
+			ASSERT(n >= 1, 20);
+			s := stack;
+			WHILE (s # NIL) & (n > 2) DO
+				s := s.next; DEC(n);
+			END;
+			ASSERT((s # NIL) & (s.next # NIL), 21);
+			IF n >= 2 THEN
+				ss := s.next;
+				s.next := ss.next;
+				ss.next := stack;
+				stack := ss;
+			END;
+		END Roll;
+	
+	PROCEDURE RollD* (n: INTEGER);
+		
+		VAR
+			
+			s, ss: Stack;
+		
+		BEGIN (*RollD*)
+			ASSERT(n >= 1, 20);
+			s := stack;
+			WHILE (s # NIL) & (n > 1) DO
+				s := s.next; DEC(n);
+			END;
+			ASSERT(s # NIL, 21);
+			IF n >= 2 THEN
+				ss := stack;
+				stack := stack.next;
+				ss.next := s.next;
+				s.next := ss;
+			END;
+		END RollD;
+	
+	PROCEDURE Swap*;
+		
+		BEGIN (*Swap*)
+			Roll(2);
+		END Swap;
 	
 	PROCEDURE Init;
 		
@@ -759,6 +1087,10 @@ MODULE UtilJson;
 			f: Files.File;
 		
 		BEGIN (*Init*)
+			(**
+			L := UtilLog.NewLog("Duniter1/Rsrc", "JsonLog.txt", TRUE);
+			**)
+			
 			(* Compilers reading *)
 			NEW(d);
 			loc := Files.dir.This(compDir);
@@ -767,6 +1099,8 @@ MODULE UtilJson;
 			ASSERT(f # NIL, 101);
 			d.r.ConnectTo(f);
 			comp := d.ReadCompiler();
+			
+			(* Initialisation of stack *)
 			stack := NIL;
 		END Init;
 	

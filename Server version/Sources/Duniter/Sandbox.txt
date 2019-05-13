@@ -717,7 +717,7 @@ MODULE DuniterSandbox;
 		BEGIN (*Scan*)
 			L.log.Msg("Loading sandbox");
 			t := Services.Ticks();
-			S.OpenDatabase(driver, "", "", B.duniBase, S.sync, S.hideErrors, d, res); ASSERT(res = 0, 100);
+			S.OpenDatabase(driver, "", "", BA.duniBase, S.sync, S.hideErrors, d, res); ASSERT(res = 0, 100);
 			MembershipIds(d);
 			Certifications(d);
 			BA.TimeToString(Services.Ticks() - t, s);

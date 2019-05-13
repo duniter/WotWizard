@@ -26,15 +26,8 @@ MODULE DuniterBlockchain;
 	
 	CONST
 		
-		(* Default path to the Duniter database *)
-		duniBaseDef = "D:\.config\duniter\duniter_default\duniter.db";
-		
 		(* Driver SQLite *)
 		driver* = "SQLiteDriver";
-		
-		(* Directory & name of the file where the path to the Duniter database is written *)
-		initDir = "Duniter/Rsrc";
-		initName = "Init.txt";
 		
 		(* Number of pages used by UtilBTree *)
 		pageNb = 2000;
@@ -308,7 +301,6 @@ MODULE DuniterBlockchain;
 	
 	VAR
 		
-		duniBase-: Files.Name; (* Path to the Duniter database *)
 		
 		updateList: UpdateList; (* Head of UpdateList *)
 		
@@ -858,7 +850,7 @@ MODULE DuniterBlockchain;
 					database.WritePlace(certToPlace, database.CreateIndex(0));
 					database.WritePlace(certTimePlace, database.CreateIndex(certTimeKeyS));
 					database.WritePlace(undoListPlace, B.bNil);
-					database.WritePlace(lastNPlace, 0);
+					database.WritePlace(lastNPlace, -1);
 					database.WritePlace(idLenPlace, 0);
 				END;
 				timeMan := database.CreateDataMan(timeFac);
@@ -1625,8 +1617,8 @@ MODULE DuniterBlockchain;
 						id.hash := cur.fields[0]$;
 					END;
 				END;
-				ASSERT(id.hash # "", 104);
-				Strings.StringToInt(nb, id.block_number, res); ASSERT(res = 0, 105);
+				ASSERT(id.hash # "", 103);
+				Strings.StringToInt(nb, id.block_number, res); ASSERT(res = 0, 104);
 				bnb := id.block_number;
 				NEW(idU); NEW(idU.c, LEN(id.uid$) + 1); idU.c^ := id.uid$;
 				NEW(idP); idP.ref := id.pubkey;
@@ -1634,7 +1626,7 @@ MODULE DuniterBlockchain;
 				IF idPubT.SearchIns(idP) THEN
 					idRef := idPubT.ReadValue();
 					oldId := idMan.ReadData(idRef)(Identity);
-					ASSERT(~oldId.member & (oldId.uid$ = id.uid$) & (oldId.hash = id.hash), 106);
+					ASSERT(~oldId.member & (oldId.uid$ = id.uid$) & (oldId.hash = id.hash), 105);
 					NEW(iK); iK.ref := idRef;
 					b := idTimeT.Erase(iK);
 					IF withList THEN
@@ -1643,10 +1635,10 @@ MODULE DuniterBlockchain;
 					END;
 					id.block_number := oldId.block_number;
 					idMan.WriteData(idRef, id);
-					b := idUidT.SearchIns(idU); ASSERT(b, 107);
-					ASSERT(idUidT.ReadValue() = idRef, 108);
-					b := idHashT.SearchIns(idH); ASSERT(b, 109);
-					ASSERT(idHashT.ReadValue() = idRef, 110);
+					b := idUidT.SearchIns(idU); ASSERT(b, 106);
+					ASSERT(idUidT.ReadValue() = idRef, 107);
+					b := idHashT.SearchIns(idH); ASSERT(b, 108);
+					ASSERT(idHashT.ReadValue() = idRef, 109);
 					IF withList THEN
 						NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := oldId.expires_on; idL.aux2 := oldId.application;
 						undoList := undoListMan.WriteAllocateData(idL);
@@ -1654,9 +1646,9 @@ MODULE DuniterBlockchain;
 				ELSE
 					idRef := idMan.WriteAllocateData(id);
 					idPubT.WriteValue(idRef);
-					b := idUidT.SearchIns(idU); ASSERT(~b, 111);
+					b := idUidT.SearchIns(idU); ASSERT(~b, 110);
 					idUidT.WriteValue(idRef);
-					b := idHashT.SearchIns(idH); ASSERT(~b, 112);
+					b := idHashT.SearchIns(idH); ASSERT(~b, 111);
 					idHashT.WriteValue(idRef);
 					IF withList THEN
 						NEW(idL); idL.next := undoList; idL.type := idAddList; idL.ref := idRef; idL.aux := 0;
@@ -1675,20 +1667,20 @@ MODULE DuniterBlockchain;
 				NEW(idP);
 				ScanS(ssA, ':', idP.ref, i);
 				SkipS(ssA, ':', i);
-				ScanS(ssA, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 113);
+				ScanS(ssA, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 112);
 				SkipS(ssA, '"', i);
 				IF ssA[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 114);
+				b := idPubT.Search(idP); ASSERT(b, 113);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
-				ASSERT(id.member, 115);
+				ASSERT(id.member, 114);
 				IF withList THEN
 					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on; idL.aux2 := id.application;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
-				b := TimeOf(n, id.application); ASSERT(b, 116);
+				b := TimeOf(n, id.application); ASSERT(b, 115);
 				id.expires_on := id.application + pars.msValidity;
 				idMan.WriteData(idRef, id);
 			END;
@@ -1699,19 +1691,19 @@ MODULE DuniterBlockchain;
 				NEW(idP);
 				ScanS(ssL, ':', idP.ref, i);
 				SkipS(ssL, ':', i);
-				ScanS(ssL, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 117);
+				ScanS(ssL, '-', s, i); Strings.StringToInt(s, n, res); ASSERT(res = 0, 116);
 				SkipS(ssL, '"', i);
 				IF ssL[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 118);
+				b := idPubT.Search(idP); ASSERT(b, 117);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
 				IF withList THEN
 					NEW(idL); idL.next := undoList; idL.type := activeList; idL.ref := idRef; idL.aux := id.expires_on; idL.aux2 := id.application;
 					undoList := undoListMan.WriteAllocateData(idL);
 				END;
-				b := TimeOf(n, id.application); ASSERT(b, 119);
+				b := TimeOf(n, id.application); ASSERT(b, 118);
 				id.expires_on := - ABS(id.expires_on); (* id.expires_on < 0 if leaving *)
 				idMan.WriteData(idRef, id);
 			END;
@@ -1725,7 +1717,7 @@ MODULE DuniterBlockchain;
 					INC(i);
 				END;
 				NEW(idP); idP.ref := p;
-				b := idPubT.Search(idP); ASSERT(b, 120);
+				b := idPubT.Search(idP); ASSERT(b, 119);
 				idRef := idPubT.ReadValue();
 				NEW(iK); iK.ref := idRef;
 				IF idTimeT.Erase(iK) & withList THEN
@@ -1744,10 +1736,10 @@ MODULE DuniterBlockchain;
 				IF ssE[i] # ']' THEN
 					INC(i);
 				END;
-				b := idPubT.Search(idP); ASSERT(b, 121);
+				b := idPubT.Search(idP); ASSERT(b, 120);
 				idRef := idPubT.ReadValue();
 				id := idMan.ReadData(idRef)(Identity);
-				ASSERT(id.member, 122);
+				ASSERT(id.member, 121);
 				id.member := FALSE;
 				idMan.WriteData(idRef, id);
 				IF withList THEN
@@ -1766,7 +1758,7 @@ MODULE DuniterBlockchain;
 					END;
 					idMan.WriteData(idRef, id);
 					NEW(iK); iK.ref := idRef;
-					b := idTimeT.SearchIns(iK); ASSERT(~b, 123);
+					b := idTimeT.SearchIns(iK); ASSERT(~b, 122);
 					IF withList THEN
 						NEW(idL); idL.next := undoList; idL.type := idAddTimeList; idL.ref := idRef; idL.aux := 0;
 						undoList := undoListMan.WriteAllocateData(idL);
@@ -2126,6 +2118,48 @@ MODULE DuniterBlockchain;
 			A.New(poST);
 		END CalculateSentries;
 	
+	PROCEDURE ReadSyncTime (): LONGINT;
+		
+		VAR
+			
+			loc: Files.Locator;
+			name: Files.Name;
+			v: Views.View;
+			t: TextModels.Model;
+			s: TextMappers.Scanner;
+		
+		BEGIN (*ReadSyncTime*)
+			loc := Files.dir.This(BA.duniDir); ASSERT(loc.res = 0, 100);
+			name := BA.syncName;
+			REPEAT
+				v := Views.Old(Views.dontAsk, loc, name, BA.utf8Conv);
+			UNTIL v # NIL;
+			t := v(TextViews.View).ThisModel();
+			s.ConnectTo(t);
+			s.Scan; ASSERT(s.type IN {TextMappers.int, TextMappers.lint});
+			RETURN s.lint;
+		END ReadSyncTime;
+	
+	PROCEDURE WriteSyncTime (t: LONGINT);
+		
+		VAR
+			
+			loc: Files.Locator;
+			name: Files.Name;
+			v: Views.View;
+			txt: TextModels.Model;
+			f: TextMappers.Formatter;
+			res: INTEGER;
+		
+		BEGIN (*WriteSyncTime*)
+			txt := TextModels.dir.New();
+			f.ConnectTo(txt);
+			f.WriteInt(t);
+			loc := Files.dir.This(BA.duniDir); ASSERT(loc.res = 0, 100);
+			name := BA.syncName;
+			Views.Register(TextViews.dir.New(txt), Views.dontAsk, loc, name, BA.utf8Conv, res); ASSERT(res = 0);
+		END WriteSyncTime;
+	
 	(* Insert datas from all the blocks from the secureGapth block before the last read *)
 	PROCEDURE ScanBlocks (d: S.Database);
 		
@@ -2136,14 +2170,16 @@ MODULE DuniterBlockchain;
 			i, res, lastN: INTEGER;
 			s: ARRAY 13 OF CHAR;
 			withList: BOOLEAN;
-			now, secureNow: LONGINT;
+			now, secureNow, t0, t1: LONGINT;
 		
 		BEGIN (*ScanBlocks*)
+			t1 := Services.Ticks() - BA.firstDelay + BA.syncDelay - BA.secureDelay;
+			t0 := ReadSyncTime();
 			idLenM := database.ReadPlace(idLenPlace);
 			undoList := database.ReadPlace(undoListPlace);
 			RemoveSecureGap;
 			lastN := database.ReadPlace(lastNPlace);
-			Strings.IntToString(lastN - secureGap, s);
+			Strings.IntToString(lastN - secureGap + 1, s);
 			t := d.NewTable(); ASSERT(t # NIL, 100);
 			REPEAT
 				t.Exec("SELECT number, medianTime, joiners, actives, leavers, revoked, excluded, certifications FROM block WHERE NOT fork AND number >= " + s + " ORDER BY number ASC");
@@ -2152,7 +2188,15 @@ MODULE DuniterBlockchain;
 			ASSERT((t.rows = 0) OR (t.columns = 8), 102);
 			tt := d.NewTable(); ASSERT(tt # NIL, 103);
 			FOR i := 0 TO t.rows - 1 DO
+				IF Services.Ticks() > t1 THEN
+					INC(t1, BA.addDelay);
+					INC(t0, BA.addDelay);
+					WriteSyncTime(t0);
+				END;
 				t.Read(i, cur);
+				IF i MOD 5000 = 0 THEN
+					L.log.Msg("Block " + cur.fields[0]);
+				END;
 				withList := i >= t.rows - secureGap;
 				Times(withList , cur.fields[0], cur.fields[1]);
 				Identities(withList, cur.fields[2], cur.fields[3], cur.fields[4], cur.fields[5], cur.fields[6], cur.fields[0], tt);
@@ -2160,7 +2204,8 @@ MODULE DuniterBlockchain;
 			END;
 			IF t.rows > 0 THEN
 				t.Read(t.rows - 1, cur);
-				Strings.StringToLInt(cur.fields[1], now, res); ASSERT(res = 0, 104);
+				Strings.StringToInt(cur.fields[0], lastN, res); ASSERT(res = 0, 104);
+				Strings.StringToLInt(cur.fields[1], now, res); ASSERT(res = 0, 105);
 				IF secureGap = 0 THEN
 					secureNow := MAX(LONGINT);
 				ELSE
@@ -2169,23 +2214,16 @@ MODULE DuniterBlockchain;
 					ELSE
 						t.Read(0, cur);
 					END;
-					Strings.StringToLInt(cur.fields[1], secureNow, res); ASSERT(res = 0, 105);
+					Strings.StringToLInt(cur.fields[1], secureNow, res); ASSERT(res = 0, 106);
 				END;
 				RevokeExpiredIds(now, secureNow);
 				RemoveExpiredCerts(now, secureNow); (* Élimine toutes les certifications expirées avec réversibilité dans secureGap *)
 			END;
 			database.WritePlace(undoListPlace, undoList);
-			IF lastN <= secureGap THEN
-				lastN := t.rows;
-			ELSE
-				INC(lastN, t.rows - secureGap);
-			END;
 			database.WritePlace(lastNPlace, lastN);
 			database.WritePlace(idLenPlace, idLenM);
 			database.UpdateBase;
-			IF t.rows > 0 THEN
-				CalculateSentries;
-			END;
+			CalculateSentries;
 		END ScanBlocks;
 	
 	PROCEDURE AddUpdateProc* (updateProc: UpdateProc);
@@ -2245,8 +2283,8 @@ MODULE DuniterBlockchain;
 		BEGIN (*Scan*)
 			L.log.Msg("Updating blockchain in DBase.data");
 			t := Services.Ticks();
-			S.OpenDatabase(driver, "", "", duniBase, S.sync, S.hideErrors, d, res);
-			IF res # 0 THEN L.log.Err(100 + res, duniBase); END;
+			S.OpenDatabase(driver, "", "", BA.duniBase, S.sync, S.hideErrors, d, res);
+			IF res # 0 THEN L.log.Err(100 + res, BA.duniBase); END;
 			ScanBlocks(d);
 			BA.TimeToString(Services.Ticks() - t, s);
 			L.log.Msg("End updating blockchain in DBase.data. Time spent: " + s);
@@ -2264,8 +2302,8 @@ MODULE DuniterBlockchain;
 			res: INTEGER;
 		
 		BEGIN (*Scan1*)
-			S.OpenDatabase(driver, "", "", duniBase, S.sync, S.hideErrors, d, res);
-			IF res # 0 THEN L.log.Err(100 + res, duniBase); END;
+			S.OpenDatabase(driver, "", "", BA.duniBase, S.sync, S.hideErrors, d, res);
+			IF res # 0 THEN L.log.Err(100 + res, BA.duniBase); END;
 			Params(d);
 		END Scan1;
 	
@@ -2288,37 +2326,11 @@ MODULE DuniterBlockchain;
 		
 		VAR
 			
-			l: Files.Locator;
-			v: Views.View;
-			s: TextMappers.Scanner;
-			t: TextModels.Model;
-			f: TextMappers.Formatter;
-			name: Files.Name;
-			res: INTEGER;
 			ti: LONGINT;
 			ss: BA.TimeString;
 		
 		BEGIN (*Init*)
-			duniBase := '';
-			l := Files.dir.This(initDir); L.log.Err(l.res, initDir);
-			v := Views.OldView(l, initName);
-			IF v = NIL THEN
-				duniBase := duniBaseDef;
-				t := TextModels.dir.New();
-				f.ConnectTo(t);
-				f.WriteString('"' + duniBase + '"');
-				name := initName;
-				Views.Register(TextViews.dir.New(t), Views.dontAsk, l, name, BA.utf8Conv, res);
-				L.log.Err(res, name);
-			ELSE
-				ASSERT(v IS TextViews.View, 100);
-				s.ConnectTo(v(TextViews.View).ThisModel());
-				s.Scan;
-				IF s.type = TextMappers.string THEN
-					duniBase := s.string$;
-				END;
-			END;
-			L.log.Msg("Duniter database: " + duniBase);
+			L.log.Msg("Duniter database: " + BA.duniBase);
 			now := 0;
 			L.log.Msg("Scan of block 0");
 			ti := Services.Ticks();

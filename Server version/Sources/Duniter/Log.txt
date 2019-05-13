@@ -43,6 +43,17 @@ MODULE DuniterLog;
 			log.f.Flush;
 		END Msg;
 	
+	PROCEDURE (VAR log: Log) Int* (n: LONGINT), NEW;
+		
+		VAR
+			
+			s: ARRAY 21 OF CHAR;
+		
+		BEGIN (*Int*)
+			Strings.IntToString(n, s);
+			log.Msg(s);
+		END Int;
+	
 	PROCEDURE (VAR log: Log) MMsg* (IN m, p1, p2: ARRAY OF CHAR), NEW;
 		
 		VAR

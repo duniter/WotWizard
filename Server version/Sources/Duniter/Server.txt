@@ -18,15 +18,13 @@ MODULE DuniterServer;
 
 	IMPORT
 		
-		(**
-		Lg := StdLog,
-		**)
+		
 		
 		A := UtilAvlTree, B := DuniterBlockchain, BA := DuniterBasic, L := DuniterLog, Dialog, Files, HostFiles, HostMenus, Math, Services, Strings, TextMappers, TextModels, TextViews, W := DuniterWotWizard, J := UtilJson, Views;
 	
 	CONST
 		
-		version = "2.8.10se";
+		version = "3.0.1se";
 		rsrcDir = "Duniter/Rsrc"; (* Directory for the two following files *)
 		parametersName = "Parameters.txt"; (* File containing the greatest allowed allocated memory size for W.CalcPermutations *)
 		runningName = "Running.odc"; (* File whose existence shows that WWServer.exe is running *)
