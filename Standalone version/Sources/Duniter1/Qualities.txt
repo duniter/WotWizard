@@ -1,0 +1,242 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1Qualities;
+	
+	
+	
+	(* Calculate qualities with UtilSets; numbering of members is done by array; fast *)
+
+	IMPORT
+		
+		(**
+		L := Log,
+		**)
+		
+		BA := Duniter1Basic, B := Duniter1Blockchain, TextMappers, TextModels, TextViews, J := UtilJson, UtilSort;
+	
+	CONST
+		
+		distA = 0;
+		qualA = 1;
+	
+	TYPE
+		
+		Action = POINTER TO RECORD (B.Action)
+			what: INTEGER;
+			output: BA.String;
+		END;
+	
+		PropOfSentries = POINTER TO RECORD
+			id: B.String;
+			prop: REAL;
+		END;
+		
+		Props = POINTER TO ARRAY OF PropOfSentries;
+		
+		PropsSort = EXTENSIBLE RECORD (UtilSort.T)
+			t: Props;
+		END;
+		
+		PropsSortId = RECORD (PropsSort)
+		END;
+	
+	PROCEDURE (VAR s: PropsSort) Swap (i, j: INTEGER);
+		
+		VAR
+			
+			p: PropOfSentries;
+		
+		BEGIN (*Swap*)
+			p := s.t[i]; s.t[i] := s.t[j]; s.t[j] := p;
+		END Swap;
+	
+	PROCEDURE (VAR s: PropsSort) Less (p1, p2: INTEGER): BOOLEAN, EXTENSIBLE;
+		
+		BEGIN (*Less*)
+			RETURN (s.t[p1].prop > s.t[p2].prop) OR (s.t[p1].prop = s.t[p2].prop) & (BA.CompP(s.t[p1].id, s.t[p2].id) = BA.lt);
+		END Less;
+	
+	PROCEDURE (VAR s: PropsSortId) Less (p1, p2: INTEGER): BOOLEAN;
+		
+		BEGIN (*Less*)
+			RETURN BA.CompP(s.t[p1].id, s.t[p2].id) = BA.lt;
+		END Less;
+	
+	PROCEDURE PercentOfSentries (dist: BOOLEAN; IN pubkey: B.Pubkey): REAL;
+		
+		VAR
+			
+			pub: ARRAY 1 OF B.Pubkey;
+			pubs: POINTER TO ARRAY OF B.Pubkey;
+			ok: BOOLEAN;
+			n, i: INTEGER;
+			pos: B.CertPos;
+			to: B.Pubkey;
+		
+		BEGIN (*PercentOfSentries*)
+			IF dist THEN
+				ok := B.CertTo(pubkey, pos);
+				IF ok THEN
+					n := pos.CertPosLen() + 1;
+				ELSE
+					n := 1
+				END;
+				NEW(pubs, n);
+				pubs[0] := pubkey;
+				FOR i := 1 TO n - 1 DO
+					ok := pos.CertNextPos(pubs[i], to); ASSERT(ok);
+				END;
+				RETURN B.PercentOfSentries(pubs);
+			ELSE
+				pub[0] := pubkey;
+				RETURN B.PercentOfSentries(pub);
+			END;
+		END PercentOfSentries;
+	
+	PROCEDURE Count (dist: BOOLEAN; OUT props, propsId: Props);
+		
+		VAR
+			
+			ok, b: BOOLEAN;
+			p: B.Pubkey;
+			i, n: INTEGER;
+			c: PropOfSentries;
+			s: PropsSort;
+			sId: PropsSortId;
+		
+		BEGIN (*Count*)
+			n := B.IdLenM();
+			IF n = 0 THEN
+				props := NIL;
+				propsId := NIL;
+			ELSE
+				NEW(props, n);
+				i := 0;
+				ok := B.IdNextPubkeyM(TRUE, p);
+				WHILE ok DO
+					NEW(c);
+					b := B.IdPub(p, c.id); ASSERT(b, 100);
+					c.prop := PercentOfSentries(dist, p);
+					props[i] := c;
+					INC(i);
+					ok := B.IdNextPubkeyM(FALSE, p);
+				END;
+				s.t := props;
+				s.QuickSort(0, n - 1);
+				NEW(propsId, n);
+				FOR i := 0 TO n - 1 DO
+					propsId[i] := props[i];
+				END;
+				sId.t := propsId;
+				sId.QuickSort(0, n - 1);
+			END;
+		END Count;
+	
+	PROCEDURE List (dist: BOOLEAN): J.Json;
+		
+		VAR
+			
+			props, propsId: Props;
+			i: INTEGER;
+			mt: LONGINT;
+		
+		BEGIN (*List*)
+			Count(dist, props, propsId);
+			J.StartObject;
+			J.StartArray;
+			IF props # NIL THEN
+				FOR i := 0 TO LEN(props) - 1 DO
+					J.StartObject;
+					J.PushString(props[i].id);
+					J.BuildField("id");
+					J.PushReal(props[i].prop);
+					J.BuildField("prop");
+					J.BuildObject;
+				END;
+			END;
+			J.BuildArray;
+			J.BuildField("values");
+			J.StartArray;
+			IF propsId # NIL THEN
+				FOR i := 0 TO LEN(propsId) - 1 DO
+					J.StartObject;
+					J.PushString(propsId[i].id);
+					J.BuildField("id");
+					J.PushReal(propsId[i].prop);
+					J.BuildField("prop");
+					J.BuildObject;
+				END;
+			END;
+			J.BuildArray;
+			J.BuildField("values_byId");
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			mt := B.Now();
+			J.PushInteger(mt);
+			J.BuildField("now");
+			J.BuildObject;
+			RETURN J.GetJson();
+		END List;
+	
+	PROCEDURE Json (j: J.Json; IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*Json*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			j.Write(f);
+			BA.VRegister(TextViews.dir.New(t), BA.waitLoc, name$, 100, "Qualities.Json");
+		END Json;
+	
+	PROCEDURE (a: Action) Activate;
+		
+		BEGIN (*Activate*)
+			CASE a.what OF
+				|distA:
+					Json(List(TRUE), a.output);
+				|qualA:
+					Json(List(FALSE), a.output);
+			END;
+		END Activate;
+	
+	PROCEDURE Distances* (IN output: ARRAY OF CHAR);
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Distances*)
+			NEW(a);
+			a.what := distA;
+			NEW(a.output, LEN(output$) + 1); a.output^ := output$;
+			B.AddAction(a);
+		END Distances;
+	
+	PROCEDURE Qualities* (IN output: ARRAY OF CHAR);
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Qualities*)
+			NEW(a);
+			a.what := qualA;
+			NEW(a.output, LEN(output$) + 1); a.output^ := output$;
+			B.AddAction(a);
+		END Qualities;
+	
+	END Duniter1Qualities.

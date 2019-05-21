@@ -1,0 +1,145 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1CentralitiesStressDPrint;
+	
+	(* Calculate the stress centrality with Ulrik Brandes's algorithm, slightly modified to deal with the fact that only paths between members have to be considered *)
+	
+	
+
+	IMPORT
+		
+		BA := Duniter1BasicPrint, GS := Duniter1GQLSender, Dialog, HermesAxes, HermesScat, HermesUtil, HermesViews, Ports, TextMappers, TextModels, TextViews, J := UtilJson, Views;
+	
+	CONST
+		
+		waitDelay = 100;
+		
+		centralitiesJson = "Centralities";
+	
+	TYPE
+		
+		Result* = PROCEDURE (res: REAL);
+		
+		 Action = POINTER TO RECORD (BA.WaitFor)
+		END;
+		
+		Central* = RECORD
+			id*: BA.String;
+			c*: REAL;
+		END;
+		
+		Centrals* = POINTER TO ARRAY OF Central;
+		
+		Centralities* = POINTER TO RECORD
+			centrals*,
+			centrals_byId*: Centrals;
+			block*: INTEGER;
+			now*: LONGINT;
+		END;
+	
+	VAR
+		
+		globalCentral*: Centralities;
+	
+	PROCEDURE DoPrint* (centers, centersId: Centrals; block: INTEGER; now: LONGINT);
+		
+		CONST
+			
+			scatColor = Ports.blue;
+			scatShape = HermesScat.point;
+		
+		VAR
+			
+			i, m: INTEGER;
+			s: Views.Title;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			p: HermesViews.View;
+			ts: POINTER TO ARRAY OF HermesUtil.Dot;
+			tr: HermesViews.Trace;
+			dt: BA.DateTime;
+		
+		BEGIN (*DoPrint*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			f.WriteMsg("#Duniter1:Block");
+			f.WriteString(" ");
+			f.WriteInt(block);
+			f.WriteTab;
+			BA.TimestampToString(now, dt);
+			f.WriteString(dt);
+			f.WriteString(" (UTC+0)");
+			f.WriteLn; f.WriteLn;
+			Dialog.MapString("#Duniter1:Centralities", s);
+			Views.OpenAux(TextViews.dir.New(t), s);
+			IF centers # NIL THEN
+				m := LEN(centers);
+				FOR i := 0 TO m - 1 DO
+					f.WriteTab;
+					f.WriteInt(i + 1);
+					f.WriteTab;
+					f.WriteRealForm(100. * centers[i].c, 16, 6, - 2, '');
+					f.WriteTab;
+					f.WriteString(centers[i].id);
+					f.WriteLn;
+				END;
+				f.WriteLn;
+				FOR i := 0 TO m - 1 DO
+					f.WriteTab;
+					f.WriteString(centersId[i].id);
+					f.WriteTab;
+					f.WriteRealForm(100. * centersId[i].c, 16, 6, - 2, '');
+					f.WriteLn;
+				END;
+				p := HermesViews.New();
+				NEW(ts, m);
+				FOR i := 0 TO m - 1 DO
+					ts[i].x := i;
+					ts[i].y := 100. * centers[i].c;
+				END;
+				tr := HermesScat.Insert(p, ts, scatShape, FALSE, FALSE, FALSE);
+				tr.ChangeColor(scatColor);
+				tr := HermesAxes.Insert(p, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 'n', '', 0, 3);
+				tr := HermesAxes.Insert(p, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 'c', '%', 0, 3);
+				Views.OpenAux(p, s);
+			END;
+		END DoPrint;
+	
+	PROCEDURE (a: Action) End (IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			j: J.Json;
+		
+		BEGIN (*End*)
+			j := J.ReadFile(BA.waitDir, name); ASSERT(j # NIL, 100);
+			NEW(globalCentral);
+			j.ApplyTo(globalCentral);
+			DoPrint(globalCentral.centrals, globalCentral.centrals_byId, globalCentral.block, globalCentral.now);
+			globalCentral := NIL;
+		END End;
+	
+	PROCEDURE Print*;
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Print*)
+			BA.SwitchOff(BA.waitDir, centralitiesJson + ".json");
+			GS.Send("Duniter1CentralitiesStressD", "Count", "", centralitiesJson);
+			NEW(a);
+			a.Do(BA.waitDir, centralitiesJson + ".json", waitDelay);
+		END Print;
+	
+	END Duniter1CentralitiesStressDPrint.

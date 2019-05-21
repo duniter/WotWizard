@@ -1,0 +1,362 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1MembersPrint;
+	
+	
+
+	IMPORT
+		
+		BA := Duniter1BasicPrint, GS := Duniter1GQLSender, Dialog, HermesAxes, HermesScat, HermesUtil, HermesViews, Strings, TextMappers, TextModels, TextViews, J := UtilJson, Views;
+	
+	CONST
+		
+		waitDelay = 100;
+		
+		countJson = "MembersCount";
+		countFJson = "MembersCountFlux";
+		countFPMJson = "MembersCountFluxPM";
+		firstEJson = "MembersFirstEntry";
+		fEFluxJson = "MembersFEFlux";
+		fEFluxPMJson = "MembersFEFluxPM";
+		
+		iA = 0;
+		rA = 1;
+		
+		day = 60 * 60 * 24;
+		month = (365 * 4 + 1) * day DIV 4 DIV 12;
+		
+		scatColor = 00BF00BFH;
+		scatShape = HermesScat.point;
+	
+	TYPE
+		
+		 Action = POINTER TO RECORD (BA.WaitFor)
+			what: INTEGER;
+			percent: BOOLEAN;
+			title,
+			label,
+			unit: Dialog.String;
+		END;
+		
+		Events* = POINTER TO ARRAY OF RECORD
+			date*: LONGINT;
+			number*: INTEGER;
+		END;
+		
+		BlockEvents* = POINTER TO RECORD
+			events*: Events;
+			block*: INTEGER;
+			now*: LONGINT;
+		END;
+		
+		EventsR* = POINTER TO ARRAY OF RECORD
+			date*: LONGINT;
+			number*: REAL;
+		END;
+		
+		BlockEventsR* = POINTER TO RECORD
+			eventsR*: EventsR;
+			time_unit*: LONGINT;
+			block*: INTEGER;
+			now*: LONGINT;
+		END;
+	
+	VAR
+		
+		globalEvents-: BlockEvents;
+		
+		globalEventsR-: BlockEventsR;
+		
+		tUnit: Dialog.String;
+		monthS: ARRAY 30 OF CHAR;
+	
+	PROCEDURE PrintBlock (VAR f: TextMappers.Formatter; block: INTEGER; now: LONGINT);
+		
+		VAR
+			
+			dt: BA.DateTime;
+		
+		BEGIN (*PrintBlock*)
+			f.WriteMsg("#Duniter1:Block");
+			f.WriteString(" ");
+			f.WriteInt(block);
+			f.WriteTab;
+			BA.TimestampToString(now, dt);
+			f.WriteString(dt);
+			f.WriteString(" (UTC+0)");
+			f.WriteLn; f.WriteLn;
+		END PrintBlock;
+
+	PROCEDURE Print (a: Events; block: INTEGER; now: LONGINT; IN title, label, unit: ARRAY OF CHAR);
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			i, m: INTEGER;
+			s: Views.Title;
+			p: HermesViews.View;
+			ts: POINTER TO ARRAY OF HermesUtil.Dot;
+			tr: HermesViews.Trace;
+			t0: LONGINT;
+			dt: BA.DateTime;
+		
+		BEGIN (*Print*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			PrintBlock(f, block, now);
+			IF a # NIL THEN
+				t0 := a[0].date;
+				m := LEN(a);
+				FOR i := 0 TO m - 1 DO
+					f.WriteTab;
+					f.WriteRealForm((a[i].date - t0) / month, 16, 21, - 16, '');
+					f.WriteTab;
+					f.WriteIntForm(a[i].number, 10, 7, '', FALSE);
+					f.WriteLn;
+				END;
+				f.WriteString("~");
+				f.WriteLn;
+				FOR i := 0 TO m - 1 DO
+					f.WriteTab;
+					BA.TimestampToString(a[i].date, dt);
+					f.WriteString(dt);
+					f.WriteTab;
+					f.WriteIntForm(a[i].number, 10, 7, '', FALSE);
+					f.WriteLn;
+				END;
+			END;
+			Dialog.MapString(title, s);
+			Views.OpenAux(TextViews.dir.New(t), s);
+			IF a # NIL THEN
+				p := HermesViews.New();
+				NEW(ts, m);
+				FOR i := 0 TO m - 1 DO
+					ts[i].x := (a[i].date - t0) / month;
+					ts[i].y := a[i].number;
+				END;
+				tr := HermesScat.Insert(p, ts, scatShape, FALSE, FALSE, FALSE);
+				tr.ChangeColor(scatColor);
+				tr := HermesAxes.Insert(p, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 't', tUnit, 0, 3);
+				tr := HermesAxes.Insert(p, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, label, unit, 0, 3);
+				Views.OpenAux(p, s);
+			END;
+		END Print;
+
+	PROCEDURE PrintR (a: EventsR; percent: BOOLEAN; block: INTEGER; now: LONGINT; IN title, label, unit: ARRAY OF CHAR);
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			i, m: INTEGER;
+			s: Views.Title;
+			p: HermesViews.View;
+			ts: POINTER TO ARRAY OF HermesUtil.Dot;
+			tr: HermesViews.Trace;
+			t0: LONGINT;
+			r: REAL;
+			dt: BA.DateTime;
+		
+		BEGIN (*PrintR*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			PrintBlock(f, block, now);
+			t0 := a[0].date;
+			m := LEN(a);
+			FOR i := 0 TO m - 1 DO
+				f.WriteTab;
+				f.WriteRealForm((a[i].date - t0) / month, 16, 21, - 16, '');
+				f.WriteTab;
+				r := a[i].number;
+				IF percent THEN
+					r := 100 * r;
+				END;
+				f.WriteReal(r);
+				f.WriteLn;
+			END;
+			f.WriteString("~");
+			f.WriteLn;
+			FOR i := 0 TO m - 1 DO
+				f.WriteTab;
+				BA.TimestampToString(a[i].date, dt);
+				f.WriteString(dt);
+				f.WriteTab;
+				f.WriteReal(a[i].number);
+				f.WriteLn;
+			END;
+			Dialog.MapString(title, s);
+			Dialog.MapString("#Duniter1:month", tUnit);
+			Views.OpenAux(TextViews.dir.New(t), s);
+			p := HermesViews.New();
+			NEW(ts, m);
+			FOR i := 0 TO m - 1 DO
+				ts[i].x := (a[i].date - t0) / month;
+				IF percent THEN
+					ts[i].y := 100 * a[i].number;
+				ELSE
+					ts[i].y := a[i].number;
+				END;
+			END;
+			tr := HermesScat.Insert(p, ts, scatShape, FALSE, FALSE, FALSE);
+			tr.ChangeColor(scatColor);
+			tr := HermesAxes.Insert(p, FALSE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, 't', tUnit, 0, 3);
+			tr := HermesAxes.Insert(p, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, label, unit, 0, 3);
+			Views.OpenAux(p, s);
+		END PrintR;
+	
+	PROCEDURE (a: Action) End (IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			j: J.Json;
+		
+		BEGIN (*End*)
+			j := J.ReadFile(BA.waitDir, name); ASSERT(j # NIL, 100);
+			CASE a.what OF
+				|iA:
+					NEW(globalEvents);
+					j.ApplyTo(globalEvents);
+					Print(globalEvents.events, globalEvents.block, globalEvents.now, a.title, a.label, a.unit);
+					globalEvents := NIL;
+				|rA:
+					NEW(globalEventsR);
+					j.ApplyTo(globalEventsR);
+					PrintR(globalEventsR.eventsR, a.percent, globalEventsR.block, globalEventsR.now, a.title, a.label, a.unit);
+					globalEventsR := NIL;
+			END;
+		END End;
+	
+	PROCEDURE PrintMembers*;
+		
+		(* Print and display the number of members, event by event *)
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*PrintMembers*)
+			BA.SwitchOff(BA.waitDir, countJson + ".json");
+			GS.Send("Duniter1Members", "Count", "", countJson);
+			NEW(a);
+			a.what := iA;
+			a.title := "#Duniter1:MembersNb";
+			a.label := "n";
+			a.unit := "";
+			a.Do(BA.waitDir, countJson + ".json", waitDelay);
+		END PrintMembers;
+	
+	PROCEDURE PrintMemFlux*;
+		
+		(* Print and display the number of members, event by event *)
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*PrintMemFlux*)
+			BA.SwitchOff(BA.waitDir, countFJson + ".json");
+			GS.Send("Duniter1Members", "CountFlux", monthS, countFJson);
+			NEW(a);
+			a.what := rA;
+			a.percent := FALSE;
+			a.title := "#Duniter1:MembersFlux";
+			a.label := "\frac{\d n}{\d t}";
+			a.unit := tUnit + "^{-1}";
+			a.Do(BA.waitDir, countFJson + ".json", waitDelay);
+		END PrintMemFlux;
+	
+	PROCEDURE PrintMemFluxPerMember*;
+		
+		(* Print and display the number of members, event by event *)
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*PrintMemFluxPerMember*)
+			BA.SwitchOff(BA.waitDir, countFPMJson + ".json");
+			GS.Send("Duniter1Members", "CountFluxPerMember", monthS, countFPMJson);
+			NEW(a);
+			a.what := rA;
+			a.percent := TRUE;
+			a.title := "#Duniter1:MembersFluxPM";
+			a.label := "\frac{\d n}{n\d t}";
+			a.unit := "% / " + tUnit;
+			a.Do(BA.waitDir, countFPMJson + ".json", waitDelay);
+		END PrintMemFluxPerMember;
+
+	PROCEDURE PrintFirstEntries*;
+		
+		(* Print and display the number of first entries, event by event *)
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*PrintFirstEntries*)
+			BA.SwitchOff(BA.waitDir, firstEJson + ".json");
+			GS.Send("Duniter1Members", "FirstEntries", "", firstEJson);
+			NEW(a);
+			a.what := iA;
+			a.title := "#Duniter1:FirstEntries";
+			a.label := "e";
+			a.unit := "";
+			a.Do(BA.waitDir, firstEJson + ".json", waitDelay);
+		END PrintFirstEntries;
+
+	PROCEDURE PrintFEFlux*;
+		
+		(* Print and display the flux of first entries, event by event *)
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*PrintFEFlux*)
+			BA.SwitchOff(BA.waitDir, fEFluxJson + ".json");
+			GS.Send("Duniter1Members", "FEFlux", monthS, fEFluxJson);
+			NEW(a);
+			a.what := rA;
+			a.percent := FALSE;
+			a.title := "#Duniter1:FirstEntriesFlux";
+			a.label := "\frac{\d e}{\d t}";
+			a.unit := tUnit + "^{-1}";
+			a.Do(BA.waitDir, fEFluxJson + ".json", waitDelay);
+		END PrintFEFlux;
+
+	PROCEDURE PrintFEFluxPerMember*;
+		
+		(* Print and display the flux of first entries per member, event by event *)
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*PrintFEFluxPerMember*)
+			BA.SwitchOff(BA.waitDir, fEFluxPMJson + ".json");
+			GS.Send("Duniter1Members", "FEFluxPerMember", monthS, fEFluxPMJson);
+			NEW(a);
+			a.what := rA;
+			a.percent := TRUE;
+			a.title := "#Duniter1:FirstEntriesFluxPM";
+			a.label := "\frac{\d e}{n\d t}";
+			a.unit := "% / " + tUnit;
+			a.Do(BA.waitDir, fEFluxPMJson + ".json", waitDelay);
+		END PrintFEFluxPerMember;
+	
+	BEGIN (*Duniter1MembersPrint*)
+		Dialog.MapString("#Duniter1:month", tUnit);
+		Strings.IntToString(month, monthS);
+		monthS := "timeUnit:" + monthS;
+	END Duniter1MembersPrint.

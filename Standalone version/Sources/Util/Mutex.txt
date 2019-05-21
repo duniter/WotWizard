@@ -1,0 +1,230 @@
+MODULE UtilMutex;
+	
+	IMPORT
+		
+		Files, Services;
+	
+	CONST
+		
+		mutDir = "Util/Mutex";
+		mutNameF = "MutexF.odc";
+		mutNameT = "MutexT.odc";
+		mutNameTurn = "MutexTurn.odc";
+		
+		delayF = 13;
+		delayT = 17;
+		
+		interestOff = 0;
+		interestOn = 1;
+		setTurn = 2;
+		locked = 3;
+		
+		ok = 0;
+		notFound = 2;
+	
+	TYPE
+		
+		Interest = ARRAY 2 OF Files.Name;
+		
+		Action = POINTER TO RECORD (Services.Action)
+			next: Action;
+			type: INTEGER;
+			m: Mutex;
+		END;
+		
+		FollowProc* = PROCEDURE (data: ANYPTR; done: BOOLEAN);
+		
+		Mutex* = POINTER TO LIMITED RECORD
+			user: BOOLEAN;
+			interested: Interest;
+			delay: LONGINT;
+			fProc: FollowProc;
+			fData: ANYPTR;
+		END;
+	
+	VAR
+		
+		loc: Files.Locator;
+	
+	PROCEDURE (m: Mutex) SetInterest (on: BOOLEAN): BOOLEAN, NEW;
+		
+		VAR
+			
+			f: Files.File;
+			res: INTEGER;
+		
+		BEGIN (*SetInterest*)
+			IF on THEN
+				f := Files.dir.New(loc, Files.dontAsk); ASSERT(f # NIL, 100);
+				f.Register(m.interested[0], "", Files.dontAsk, res);
+				f.Close;
+				RETURN res = ok;
+			ELSE
+				Files.dir.Delete(loc, m.interested[0]);
+				RETURN loc.res IN {ok, notFound};
+			END;
+		END SetInterest;
+	
+	PROCEDURE (m: Mutex) OtherInterested (): BOOLEAN, NEW;
+		
+		VAR
+			
+			f: Files.File;
+		
+		BEGIN (*OtherInterested*)
+			f := Files.dir.Old(loc, m.interested[1], Files.shared);
+			IF f # NIL THEN
+				f.Close;
+				RETURN TRUE;
+			END;
+			RETURN FALSE;
+		END OtherInterested;
+	
+	PROCEDURE (m: Mutex) SetOtherTurn (): BOOLEAN, NEW;
+		
+		VAR
+			
+			f: Files.File;
+			res: INTEGER;
+		
+		BEGIN (*SetOtherTurn*)
+			IF m.user THEN
+				Files.dir.Delete(loc, mutNameTurn);
+				RETURN loc.res IN {ok, notFound};
+			ELSE
+				f := Files.dir.New(loc, Files.dontAsk); ASSERT(f # NIL, 101);
+				f.Register(mutNameTurn, "", Files.dontAsk, res);
+				f.Close;
+				RETURN res = 0;
+			END;
+		END SetOtherTurn;
+	
+	PROCEDURE (m: Mutex) Turn (): BOOLEAN, NEW;
+		
+		VAR
+			
+			f: Files.File;
+		
+		BEGIN (*Turn*)
+			f := Files.dir.Old(loc, mutNameTurn, Files.shared);
+			IF f # NIL THEN
+				f.Close;
+				RETURN m.user
+			END;
+			RETURN ~m.user;
+		END Turn;
+	
+	PROCEDURE (m: Mutex) Call (done: BOOLEAN), NEW;
+		
+		BEGIN (*Call*)
+			IF m.fProc # NIL THEN
+				m.fProc(m.fData, done);
+			END;
+		END Call;
+	
+	PROCEDURE (a: Action) Do;
+		
+		VAR
+			
+			t: LONGINT;
+			done: BOOLEAN;
+		
+		BEGIN (*Do*)
+			t := Services.Ticks();
+			CASE a.type OF
+				|interestOff:
+					done := a.m.SetInterest(FALSE);
+				|interestOn:
+					done := a.m.SetInterest(TRUE);
+				|setTurn:
+					done := a.m.SetOtherTurn();
+				|locked:
+					done := ~a.m.OtherInterested() OR a.m.Turn();
+			END;
+			IF ~done THEN
+				a.m.Call(FALSE);
+				Services.DoLater(a, t + a.m.delay);
+			ELSIF a.next # NIL THEN
+				a.m.Call(FALSE);
+				Services.DoLater(a.next, Services.immediately);
+			ELSE
+				a.m.Call(TRUE);
+			END;
+		END Do;
+	
+	PROCEDURE Push (VAR actions: Action; type: INTEGER; m: Mutex);
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Push*)
+			NEW(a);
+			a.next := actions;
+			a.type := type;
+			a.m := m;
+			actions := a;
+		END Push;
+	
+	PROCEDURE (m: Mutex) Lock* (followProc: FollowProc; followData: ANYPTR), NEW;
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Lock*)
+			m.fProc := followProc;
+			m.fData := followData;
+			a := NIL;
+			Push(a, locked, m);
+			Push(a, setTurn, m);
+			Push(a, interestOn, m);
+			Services.DoLater(a, Services.immediately);
+		END Lock;
+	
+	PROCEDURE (m: Mutex) Unlock* (followProc: FollowProc; followData: ANYPTR), NEW;
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Unlock*)
+			m.fProc := followProc;
+			m.fData := followData;
+			a := NIL;
+			Push(a, interestOff, m);
+			Services.DoLater(a, Services.immediately);
+		END Unlock;
+	
+	PROCEDURE NewMutex* (user: BOOLEAN): Mutex;
+		
+		VAR
+			
+			m: Mutex;
+		
+		BEGIN (*NewMutex*)
+			NEW(m);
+			m.user := user;
+			IF user THEN
+				m.interested[0] := mutNameT;
+				m.interested[1] := mutNameF;
+				m.delay := delayT ;
+			ELSE
+				m.interested[0] := mutNameF;
+				m.interested[1] := mutNameT;
+				m.delay := delayF ;
+			END;
+			REPEAT
+			UNTIL m.SetInterest(FALSE);
+			RETURN m;
+		END NewMutex;
+	
+	PROCEDURE Init;
+		
+		BEGIN (*Init*)
+			loc := Files.dir.This(mutDir); ASSERT(loc.res = 0, 100);
+		END Init;
+	
+	BEGIN (*UtilMutex*)
+		Init;
+	END UtilMutex.

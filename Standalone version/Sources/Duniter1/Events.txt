@@ -1,0 +1,321 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1Events;
+	
+	
+
+	IMPORT
+		
+		A := UtilAvlTree, B := Duniter1Blockchain, BA := Duniter1Basic, J := UtilJson, S := UtilSort, TextMappers, TextModels, TextViews;
+	
+	CONST
+		
+		memA = 0;
+		missA = 1;
+		certA = 2;
+	
+	TYPE
+		
+		Action = POINTER TO RECORD (B.Action)
+			what: INTEGER;
+			output: BA.String;
+		END;
+		
+		DoProc = PROCEDURE (): Memberships;
+		
+		Membership* = POINTER TO EXTENSIBLE RECORD
+			id-: B.String;
+			exp-: LONGINT;
+		END;
+		
+		Memberships* = POINTER TO ARRAY OF Membership;
+		
+		MemSort = RECORD (S.T)
+			m: Memberships;
+		END;
+		
+		Certif = POINTER TO RECORD (A.Elem)
+			from: B.String;
+			exp: LONGINT;
+		END;
+	
+	PROCEDURE (VAR ms: MemSort) Less (m1, m2: INTEGER): BOOLEAN;
+		
+		BEGIN (*Less*)
+			RETURN (ABS(ms.m[m1].exp) < ABS(ms.m[m2].exp)) OR (ABS(ms.m[m1].exp) = ABS(ms.m[m2].exp)) & (BA.CompP(ms.m[m1].id, ms.m[m2].id) = BA.lt);
+		END Less;
+	
+	PROCEDURE (VAR ms: MemSort) Swap (m1, m2: INTEGER);
+		
+		VAR
+			
+			m: Membership;
+		
+		BEGIN (*Swap*)
+			m := ms.m[m1]; ms.m[m1] := ms.m[m2]; ms.m[m2] := m;
+		END Swap;
+	
+	PROCEDURE (c1: Certif) Compare (c2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH c2: Certif DO
+				IF c1.exp < c2.exp THEN
+					RETURN A.lt;
+				END;
+				IF c1.exp > c2.exp THEN
+					RETURN A.gt;
+				END;
+				IF c1.from$ < c2.from$ THEN
+					RETURN A.lt;
+				END;
+				IF c1.from$ > c2.from$ THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	PROCEDURE DoMembershipsEnds* (): Memberships;
+		
+		VAR
+			
+			ms: MemSort;
+			ok, mem, b: BOOLEAN;
+			id: B.String;
+			p: B.Pubkey;
+			h: B.Hash;
+			bnb, i: INTEGER;
+			exp, app: LONGINT;
+		
+		BEGIN (*DoMembershipsEnds*)
+			i := B.IdLenM();
+			IF i = 0 THEN
+				ms.m := NIL;
+			ELSE
+				NEW(ms.m, i);
+				i := 0;
+				ok := B.IdNextUidM(TRUE, id);
+				WHILE ok DO
+					b := B.IdUidComplete(id, p, mem, h, bnb, app, exp); ASSERT(b & mem, 100);
+					NEW(ms.m[i]);
+					ms.m[i].id := id; ms.m[i].exp := exp;
+					INC(i);
+					ok := B.IdNextUidM(FALSE, id);
+				END;
+				ms.QuickSort(0, LEN(ms.m) - 1);
+			END;
+			RETURN ms.m;
+		END DoMembershipsEnds;
+	
+	PROCEDURE DoMissingEnds (): Memberships;
+		
+		VAR
+			
+			ms: MemSort;
+			ok, mem, b: BOOLEAN;
+			id: B.String;
+			p: B.Pubkey;
+			h: B.Hash;
+			bnb, i: INTEGER;
+			exp, app: LONGINT;
+		
+		BEGIN (*DoMissingEnds*)
+			i := 0;
+			ok := B.IdNextUid(TRUE, id);
+			WHILE ok DO
+				b := B.IdUidComplete(id, p, mem, h, bnb, app, exp); ASSERT(b, 100);
+				IF ~mem & (exp # BA.revoked) THEN
+					INC(i);
+				END;
+				ok := B.IdNextUid(FALSE, id);
+			END;
+			IF i = 0 THEN
+				ms.m := NIL;
+			ELSE
+				NEW(ms.m, i);
+				i := 0;
+				ok := B.IdNextUid(TRUE, id);
+				WHILE ok DO
+					b := B.IdUidComplete(id, p, mem, h, bnb, app, exp); ASSERT(b, 101);
+					IF ~mem & (exp # BA.revoked) THEN
+						NEW(ms.m[i]);
+						ms.m[i].id := id; ms.m[i].exp := exp;
+						INC(i);
+					END;
+					ok := B.IdNextUid(FALSE, id);
+				END;
+				ms.QuickSort(0, LEN(ms.m) - 1);
+			END;
+			RETURN ms.m;
+		END DoMissingEnds;
+	
+	PROCEDURE DoCertifsEnds* (): Memberships;
+		
+		VAR
+			
+			ms: MemSort;
+			ok, b: BOOLEAN;
+			id: B.String;
+			p, from, to: B.Pubkey;
+			bnb, i, n: INTEGER;
+			pos: B.CertPos;
+			cT: A.Tree;
+			c: Certif;
+			e: A.Elem;
+			m: Membership;
+		
+		BEGIN (*DoCertifsEnds*)
+			i := B.IdLenM();
+			IF i = 0 THEN
+				ms.m := NIL;
+			ELSE
+				NEW(ms.m, i);
+				i := 0;
+				ok := B.IdNextUidM(TRUE, id);
+				WHILE ok DO
+					b := B.IdUid(id, p); ASSERT(b, 100);
+					A.New(cT);
+					ok := B.CertTo(p, pos) & pos.CertNextPos(from, to);
+					WHILE ok DO
+						NEW(c);
+						b := B.IdPub(from, c.from); ASSERT(b, 101);
+						b := B.Cert(from, to, bnb, c.exp); ASSERT(b, 102);
+						e := c;
+						b := cT.SearchIns(e, n); ASSERT(~b, 103);
+						ok := pos.CertNextPos(from, to);
+					END;
+					NEW(m);
+					ms.m[i] := m;
+					cT.Find(cT.NumberOfElems() - B.pars.sigQty + 1, e); ASSERT(e # NIL, 104);
+					WITH e: Certif DO
+						m.exp := e.exp;
+					END;
+					m.id := id;
+					INC(i);
+					ok := B.IdNextUidM(FALSE, id);
+				END;
+				ms.QuickSort(0, LEN(ms.m) - 1);
+			END;
+			RETURN ms.m;
+		END DoCertifsEnds;
+	
+	PROCEDURE JsonCommon;
+		
+		VAR
+			
+			mt: LONGINT;
+		
+		BEGIN (*JsonCommon*)
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			mt := B.Now();
+			J.PushInteger(mt);
+			J.BuildField("now");
+		END JsonCommon;
+	
+	PROCEDURE List (do: DoProc): J.Json;
+		
+		VAR
+			
+			ms: Memberships;
+			i, m: INTEGER;
+		
+		BEGIN (*List*)
+			J.StartObject;
+			J.StartArray;
+			ms := do();
+			IF ms # NIL THEN
+				m := LEN(ms);
+				FOR i := 0 TO m - 1 DO
+					J.StartObject;
+					J.PushString(ms[i].id);
+					J.BuildField("id");
+					J.PushInteger(ms[i].exp);
+					J.BuildField("limit");
+					J.BuildObject;
+				END;
+			END;
+			J.BuildArray;
+			J.BuildField("limits");
+			JsonCommon;
+			J.BuildObject;
+			RETURN J.GetJson();
+		END List;
+	
+	PROCEDURE Json (j: J.Json; IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*Json*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			j.Write(f);
+			BA.VRegister(TextViews.dir.New(t), BA.waitLoc, name$, 100, "Events.Json");
+		END Json;
+	
+	PROCEDURE (a: Action) Activate;
+		
+		BEGIN (*Activate*)
+			CASE a.what OF
+				|memA:
+					Json(List(DoMembershipsEnds), a.output);
+				|missA:
+					Json(List(DoMissingEnds), a.output);
+				|certA:
+					Json(List(DoCertifsEnds), a.output);
+			END;
+		END Activate;
+	
+	PROCEDURE MembershipsEnds* (IN output: ARRAY OF CHAR);
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*MembershipsEnds*)
+			NEW(a);
+			a.what := memA;
+			NEW(a.output, LEN(output$) + 1); a.output^ := output$;
+			B.AddAction(a);
+		END MembershipsEnds;
+	
+	PROCEDURE MissingEnds* (IN output: ARRAY OF CHAR);
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*MissingEnds*)
+			NEW(a);
+			a.what := missA;
+			NEW(a.output, LEN(output$) + 1); a.output^ := output$;
+			B.AddAction(a);
+		END MissingEnds;
+	
+	PROCEDURE CertifsEnds* (IN output: ARRAY OF CHAR);
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*CertifsEnds*)
+			NEW(a);
+			a.what := certA;
+			NEW(a.output, LEN(output$) + 1); a.output^ := output$;
+			B.AddAction(a);
+		END CertifsEnds;
+	
+	END Duniter1Events.

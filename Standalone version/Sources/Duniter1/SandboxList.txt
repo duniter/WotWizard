@@ -1,0 +1,206 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1SandboxList;
+	
+	
+
+	IMPORT
+		
+		B := Duniter1Blockchain, BA := Duniter1Basic, S := Duniter1Sandbox, TextMappers, TextModels, TextViews, J := UtilJson;
+	
+	TYPE
+		
+		Action = POINTER TO RECORD (B.Action)
+			output: BA.String;
+		END;
+	
+	VAR
+		
+		globalId-: S.Identity;
+	
+	PROCEDURE List (): J.Json;
+		
+		VAR
+			
+			hash, toHash: S.Hash;
+			uid: S.String;
+			pubkey, from, to: S.Pubkey;
+			exp: LONGINT;
+			ok, okP, b, inBC: BOOLEAN;
+			pos: S.CertPos;
+			mt: LONGINT;
+		
+		BEGIN (*List*)
+			J.StartObject;
+			
+			J.StartObject;
+			J.StartArray;
+			ok := S.IdNextHash(TRUE, hash);
+			WHILE ok DO
+				b := S.IdHash(hash, inBC, pubkey, uid, exp); ASSERT(b, 100);
+				J.StartObject;
+				J.PushString(hash);
+				J.BuildField("hash");
+				J.PushString(pubkey);
+				J.BuildField("pubkey");
+				J.PushString(uid);
+				J.BuildField("uid");
+				J.PushBoolean(inBC);
+				J.BuildField("inBC");
+				J.PushInteger(exp);
+				J.BuildField("expired_on");
+				J.BuildObject;
+				ok := S.IdNextHash(FALSE, hash);
+			END;
+			J.BuildArray;
+			J.BuildField("id_byHash");
+			J.StartArray;
+			ok := S.IdNextPubkey(TRUE, pubkey, hash);
+			WHILE ok DO
+				J.StartObject;
+				J.PushString(pubkey);
+				J.BuildField("pubkey");
+				J.PushString(hash);
+				J.BuildField("hash");
+				J.BuildObject;
+				ok := S.IdNextPubkey(FALSE, pubkey, hash);
+			END;
+			J.BuildArray;
+			J.BuildField("id_byPubkey");
+			J.StartArray;
+			ok := S.IdNextUid(TRUE, uid, hash);
+			WHILE ok DO
+				J.StartObject;
+				J.PushString(uid);
+				J.BuildField("uid");
+				J.PushString(hash);
+				J.BuildField("hash");
+				J.BuildObject;
+				ok := S.IdNextUid(FALSE, uid, hash);
+			END;
+			J.BuildArray;
+			J.BuildField("id_byUid");
+			J.BuildObject;
+			J.BuildField("identities");
+			
+			J.StartObject;
+			J.StartArray;
+			ok := S.CertNextFrom(TRUE, pos);
+			WHILE ok DO
+				okP := pos.CertNextPos(from, toHash);
+				WHILE okP DO
+					J.StartObject;
+					J.PushString(from);
+					J.BuildField("from_pubkey");
+					IF B.IdPub(from, uid) THEN
+						J.PushString(uid);
+					ELSE
+						J.PushNull;
+					END;
+					J.BuildField("from_uid");
+					J.PushString(toHash);
+					J.BuildField("to_hash");
+					IF S.IdHash(toHash, inBC, pubkey, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
+						J.PushString(uid);
+					ELSE
+						J.PushNull;
+					END;
+					J.BuildField("to_uid");
+					b := S.Cert(from, toHash, to, exp); ASSERT(b, 101);
+					J.PushInteger(exp);
+					J.BuildField("expired_on");
+					J.BuildObject;
+					okP := pos.CertNextPos(from, toHash);
+				END;
+				ok := S.CertNextFrom(FALSE, pos);
+			END;
+			J.BuildArray;
+			J.BuildField("certFrom");
+			J.StartArray;
+			ok := S.CertNextTo(TRUE, pos);
+			WHILE ok DO
+				okP := pos.CertNextPos(from, toHash);
+				WHILE okP DO
+					J.StartObject;
+					J.PushString(from);
+					J.BuildField("from_pubkey");
+					IF B.IdPub(from, uid) THEN
+						J.PushString(uid);
+					ELSE
+						J.PushNull;
+					END;
+					J.BuildField("from_uid");
+					J.PushString(toHash);
+					J.BuildField("to_hash");
+					IF S.IdHash(toHash, inBC, to, uid, exp) OR S.Cert(from, toHash, to, exp) & B.IdPub(to, uid) THEN
+						J.PushString(uid);
+					ELSE
+						J.PushNull;
+					END;
+					J.BuildField("to_uid");
+					b := S.Cert(from, toHash, to, exp); ASSERT(b, 102);
+					J.PushInteger(exp);
+					J.BuildField("expired_on");
+					J.BuildObject;
+					okP := pos.CertNextPos(from, toHash);
+				END;
+				ok := S.CertNextTo(FALSE, pos);
+			END;
+			J.BuildArray;
+			J.BuildField("certTo");
+			J.BuildObject;
+			J.BuildField("certifications");
+			
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			mt := B.Now();
+			J.PushInteger(mt);
+			J.BuildField("now");
+			
+			J.BuildObject;
+			RETURN J.GetJson();
+		END List;
+	
+	PROCEDURE Json (j: J.Json; IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*Json*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			j.Write(f);
+			BA.VRegister(TextViews.dir.New(t), BA.waitLoc, name$, 100, "SandboxList.Json");
+		END Json;
+	
+	PROCEDURE (a: Action) Activate;
+		
+		BEGIN (*Activate*)
+			Json(List(), a.output);
+		END Activate;
+	
+	PROCEDURE Do* (IN output: ARRAY OF CHAR);
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Do*)
+			NEW(a);
+			NEW(a.output, LEN(output$) + 1); a.output^ := output$;
+			B.AddAction(a);
+		END Do;
+	
+	END Duniter1SandboxList.

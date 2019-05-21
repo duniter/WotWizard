@@ -226,7 +226,11 @@ MODULE UtilNetStressD;
 		BEGIN (*Update*)
 			net.nbNodes := net.Number();
 			NEW(net.nodes.t, net.nbNodes + 1);
-			NEW(net.nodes.ex, net.nbNodes);
+			IF net.nbNodes = 0 THEN
+				net.nodes.ex := NIL;
+			ELSE
+				NEW(net.nodes.ex, net.nbNodes);
+			END;
 			i := 0;
 			ok := net.Enumerate(TRUE, node, extremity);
 			WHILE ok DO
@@ -245,7 +249,11 @@ MODULE UtilNetStressD;
 			END;
 			net.nodes.ex := NIL;
 			
-			NEW(net.links, net.nbNodes);
+			IF net.nbNodes = 0 THEN
+				net.links := NIL;
+			ELSE
+				NEW(net.links, net.nbNodes);
+			END;
 			FOR i := 0 TO net.nbNodes - 1 DO
 				net.links[i] := S.NewSet();
 			END;
@@ -266,7 +274,11 @@ MODULE UtilNetStressD;
 			i: INTEGER;
 		
 		BEGIN (*NewC*)
-			NEW(set, net.nbNodes);
+			IF net.nbNodes = 0 THEN
+				set := NIL;
+			ELSE
+				NEW(set, net.nbNodes);
+			END;
 			FOR i := 0 TO net.nbNodes - 1 DO
 				set[i] := 0;
 			END;
@@ -355,7 +367,9 @@ MODULE UtilNetStressD;
 		
 		BEGIN (*Centralities*)
 			net.NewC(setC);
-			net.StressD(maxStep, setC);
+			IF setC # NIL THEN
+				net.StressD(maxStep, setC);
+			END;
 			NEW(ct);
 			ct.nbNodes := net.nbNodes;
 			ct.nodes := net.nodes.t;

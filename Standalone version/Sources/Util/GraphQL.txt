@@ -1,0 +1,460 @@
+(* 
+UtilGrapQL: a compiler.
+
+Copyright (C) 2001-2015 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*)
+
+MODULE UtilGraphQL;
+	
+	(* The module BabelTestgram is part of the Babel subsystem, a compiler compiler. BabelTestgram tests whether a given text satisfies a given grammar. *)
+	
+	IMPORT
+		
+		A := UtilAvlTree, B := BabelCompil, Converters, DevMarkers, Dialog, Files, Stores, Strings, TextControllers, TextModels, TextViews, Views;
+	
+	CONST
+		
+		textImpConv = "CpcUtf8Conv.ImportUtf8";
+		
+		compDir = "Util/Rsrc";
+		compName = "GraphQLPartial.tbl";
+	
+		backspace* = 1CX;
+		formfeed* = 17X;
+		newline* = 0EX;
+		carriageReturn* = 0DX;
+		horizontalTab* = 09X;
+		
+	TYPE
+		
+		Directory = POINTER TO RECORD (B. Directory)
+			r: Stores.Reader;
+		END;
+		
+		Compilation = POINTER TO RECORD (B.Compilation)
+			r: TextModels.Reader;
+			sel: Selection;
+		END;
+		
+		ErrElem* = POINTER TO RECORD (A.Elem)
+			pos-: INTEGER;
+			mark-: DevMarkers.View;
+		END;
+		
+		StrPtr* = POINTER TO ARRAY OF CHAR;
+		
+		Value* = POINTER TO ABSTRACT RECORD
+		END;
+		
+		IntValue* = POINTER TO RECORD (Value)
+			int-: LONGINT;
+		END;
+		
+		FloatValue* = POINTER TO RECORD (Value)
+			float-: REAL;
+		END;
+		
+		StringValue* = POINTER TO RECORD (Value)
+			string-: StrPtr;
+		END;
+		
+		BooleanValue* = POINTER TO RECORD (Value)
+			boolean-: BOOLEAN;
+		END;
+		
+		NullValue* = POINTER TO RECORD (Value)
+		END;
+		
+		EnumValue* = POINTER TO RECORD (Value)
+			enum-: StrPtr;
+		END;
+		
+		ListValue* = POINTER TO RECORD (Value)
+			list-: ValueList;
+		END;
+		
+		ValueList* = POINTER TO RECORD
+			next-: ValueList;
+			value-: Value;
+		END;
+		
+		ObjectValue* = POINTER TO RECORD (Value)
+			object-: FieldList;
+		END;
+		
+		FieldList* = POINTER TO RECORD
+			next-: FieldList;
+			name-: StrPtr;
+			value-: Value;
+		END;
+		
+		Selection* = POINTER TO RECORD
+			next-,
+			selSet-: Selection;
+			alias-,
+			name-: StrPtr;
+			arguments-: FieldList;
+		END;
+	
+	VAR
+		
+		comp: B.Compiler;
+		err-: A.Tree;
+		utf8Conv: Converters.Converter;
+	
+	PROCEDURE (d: Directory) ReadInt (OUT i: INTEGER);
+		
+		BEGIN (*ReadInt*)
+			d.r.ReadInt(i);
+		END ReadInt;
+	
+	PROCEDURE (c: Compilation) Read (OUT ch: CHAR);
+		
+		BEGIN (*Read*)
+			c.r.Read;
+			IF c.r.eot THEN
+				ch := B.eOF1;
+			ELSE
+				ch := c.r.char;
+			END;
+		END Read;
+	
+	PROCEDURE (c: Compilation) Pos (): INTEGER;
+		
+		BEGIN (*Pos*)
+			RETURN c.r.Pos();
+		END Pos;
+	
+	PROCEDURE (c: Compilation) SetPos (pos: INTEGER);
+		
+		BEGIN (*SetPos*)
+			IF pos <= c.r.Base().Length() THEN
+				c.r.SetPos(pos);
+			END;
+		END SetPos;
+	
+	PROCEDURE (e1: ErrElem) Compare- (e2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH e2: ErrElem DO
+				IF e1.pos < e2.pos THEN
+					RETURN A.lt;
+				ELSIF e1.pos > e2.pos THEN
+					RETURN A.gt;
+				ELSIF e1.mark.msg$ < e2.mark.msg$ THEN
+					RETURN A.lt;
+				ELSIF e1.mark.msg$ > e2.mark.msg$ THEN
+					RETURN A.gt;
+				ELSE
+					RETURN A.eq;
+				END;
+			END;
+		END Compare;
+	
+	PROCEDURE (c: Compilation) Execution (fNum, parsNb: INTEGER; pars: B.ObjectsList; OUT o: B.Object; OUT res: ANYPTR): BOOLEAN;
+		
+		CONST
+			
+			cons = 1;
+			nil = 2;
+			makeSel = 3;
+			makeField = 4;
+
+			interpret = 1;
+			integer = 2;
+			float = 3;
+			string = 4;
+			boolean = 5;
+			null = 6;
+			enum = 7;
+			list = 8;
+			object = 9;
+		
+		VAR
+			
+			oo, ooo: B.Object;
+			i: IntValue;
+			f: FloatValue;
+			s: StringValue;
+			b: BooleanValue;
+			n: NullValue;
+			e: EnumValue;
+			l: ListValue;
+			vl, vll: ValueList;
+			ov: ObjectValue;
+			fl: FieldList;
+			ss: StrPtr;
+			r: INTEGER;
+			sel: Selection;
+		
+		PROCEDURE MakeString (s: StrPtr): StrPtr;
+			
+			VAR
+				
+				sp: StrPtr;
+				pos, i, j, l, m, n, x: INTEGER;
+			
+			BEGIN (*MakeString*)
+				m := LEN(s$); l := m;
+				Strings.Find(s, "\", 0, pos);
+				WHILE pos >= 0 DO
+					ASSERT(pos < m - 1, 100);
+					i := pos + 1;
+					CASE s[i] OF
+						|'"', "\", "/", "b", "f", "n", "r", "t":
+							DEC(l);
+							IF s[i] = "\" THEN
+								INC(pos);
+							END;
+						|"u":
+							ASSERT(i + 4 < m, 101);
+							DEC(l, 5);
+					END;
+					Strings.Find(s, "\", pos + 1, pos);
+				END;
+				IF l = m THEN
+					sp := s;
+				ELSE
+					NEW(sp, l + 1);
+					pos := 0; i := 0;
+					WHILE pos < m DO
+						IF s[pos] = "\" THEN
+							INC(pos);
+							CASE s[pos] OF
+								|'"', "\", "/":
+									sp[i] := s[pos];
+								|"b":
+									sp[i] := backspace;
+								|"f":
+									sp[i] := formfeed;
+								|"n":
+									sp[i] := newline;
+								|"r":
+									sp[i] := carriageReturn;
+								|"t":
+									sp[i] := horizontalTab;
+								|"u":
+									n := 0;
+									FOR j := 1 TO 4 DO
+										INC(pos);
+										CASE s[pos] OF
+											|"0".."9":
+												x := ORD(s[pos]) - ORD("0");
+											|"A".."F":
+												x := ORD(s[pos]) - ORD("A") + 0AH;
+											|"a".."f":
+												x := ORD(s[pos]) - ORD("a") + 0AH;
+										END;
+										n := n * 10H + x;
+									END;
+									sp[i] := CHR(n);
+							END;
+						ELSE
+							sp[i] := s[pos];
+						END;
+						INC(pos); INC(i);
+					END;
+					sp[i] := 0X;
+				END;
+				RETURN sp;
+			END MakeString;
+		
+		PROCEDURE MakeFieldList (o: B.Object): FieldList;
+			
+			VAR
+				
+				fl, fll: FieldList;
+				oo: B.Object;
+			
+			BEGIN (*MakeFieldList*)
+				NEW(fll); fl := fll;
+				WHILE o.ObjFunc() = cons DO
+					NEW(fl.next); fl := fl.next;
+					oo := o.ObjTermSon(1);
+					ASSERT(oo.ObjFunc() = makeField, 100);
+					fl.value := oo.ObjTermSon(2).ObjUser()(Value);
+					oo := oo.ObjTermSon(1);
+					NEW(fl.name, oo.ObjStringLen() + 1); oo.ObjString(fl.name);
+					o := o.ObjTermSon(2);
+				END;
+				fl.next := NIL;
+				RETURN fll.next;
+			END MakeFieldList;
+		
+		PROCEDURE MakeSelectionList (o: B.Object): Selection;
+			
+			VAR
+				
+				sel, s: Selection;
+				oo, ooo: B.Object;
+			
+			BEGIN (*MakeSelectionList*)
+				NEW(sel); s := sel;
+				WHILE o.ObjFunc() = cons DO
+					NEW(s.next); s := s.next;
+					oo := o.ObjTermSon(1);
+					ASSERT(oo.ObjFunc() = makeSel, 100);
+					ooo := oo.ObjTermSon(1);
+					NEW(s.alias, ooo.ObjStringLen() + 1); ooo.ObjString(s.alias);
+					ooo := oo.ObjTermSon(2);
+					NEW(s.name, ooo.ObjStringLen() + 1); ooo.ObjString(s.name);
+					s.arguments := MakeFieldList(oo.ObjTermSon(3));
+					s.selSet :=MakeSelectionList(oo.ObjTermSon(4));
+					o := o.ObjTermSon(2);
+				END;
+				s.next := NIL;
+				RETURN sel.next;
+			END MakeSelectionList;
+		
+		BEGIN (*Execution*)
+			IF pars # NIL THEN
+				o := B.Parameter(pars, 1);
+			END;
+			CASE fNum OF
+				|interpret:
+					c.sel := MakeSelectionList(o);
+				|integer:
+					NEW(ss, o.ObjStringLen() + 1); o.ObjString(ss);
+					NEW(i);
+					Strings.StringToLInt(ss, i.int, r); ASSERT(r = 0, 100);
+					res := i;
+				|float:
+					NEW(ss, o.ObjStringLen() + 1); o.ObjString(ss);
+					NEW(f);
+					Strings.StringToReal(ss, f.float, r); ASSERT(r = 0, 101);
+					res := f;
+				|string:
+					NEW(s);
+					NEW(ss, o.ObjStringLen() + 1); o.ObjString(ss);
+					NEW(s.string, LEN(ss) - 2);
+					Strings.Extract(ss, 1, LEN(ss$) - 2, s.string);
+					s.string := MakeString(s.string);
+					res := s;
+				|boolean:
+					NEW(ss, o.ObjStringLen() + 1); o.ObjString(ss);
+					NEW(b);
+					b.boolean := ss$ = "true";
+					res := b;
+				|null:
+					NEW(n);
+					res := n;
+				|enum:
+					NEW(ss, o.ObjStringLen() + 1); o.ObjString(ss);
+					NEW(e);
+					e.enum := ss;
+					res := e;
+				|list:
+					NEW(vll); vl := vll;
+					WHILE o.ObjFunc() = cons DO
+						NEW(vl.next); vl := vl.next;
+						vl.value := o.ObjTermSon(1).ObjUser()(Value);
+						o := o.ObjTermSon(2);
+					END;
+					vl.next := NIL;
+					NEW(l);
+					l.list := vll.next;
+					res := l;
+				|object:
+					NEW(ov);
+					ov.object := MakeFieldList(o);
+					res := ov;
+			END;
+			RETURN TRUE;
+		END Execution;
+	
+	PROCEDURE (comp: Compilation) Error (p, li, co: INTEGER; IN mes: ARRAY OF CHAR);
+		
+		VAR
+			
+			e: ErrElem;
+			el: A.Elem;
+			b: BOOLEAN;
+			n: INTEGER;
+		
+		BEGIN (*Error*)
+			IF err # NIL THEN
+				NEW(e);
+				e.pos := p - 1;
+				e.mark := DevMarkers.dir.NewMsg(mes);
+				el := e;
+				b := err.SearchIns(el, n);
+				ASSERT(~b, 100);
+			END;
+		END Error;
+	
+	PROCEDURE (c: Compilation) Map (IN index: ARRAY OF CHAR): B.String;
+		
+		VAR
+			
+			s: Dialog.String;
+			ch: B.String;
+		
+		BEGIN (*Map*)
+			Dialog.MapString("#Babel:" + index, s);
+			NEW(ch, LEN(s$) + 1);
+			ch^ := s$;
+			RETURN ch;
+		END Map;
+	
+	PROCEDURE CompileText* (t: TextModels.Model): Selection;
+		
+		VAR
+			
+			co: Compilation;
+		
+		BEGIN (*CompileText*)
+			NEW(co);
+			A.New(err);
+			co.sel := NIL;
+			co.r := t.NewReader(NIL);
+			IF co.Compile(comp, FALSE) THEN
+				RETURN co.sel;
+			END;
+			RETURN NIL;
+		END CompileText;
+	
+	PROCEDURE ReadGraphQL* (IN dir, name: ARRAY OF CHAR): Selection;
+		
+		VAR
+			
+			l: Files.Locator;
+			v: Views.View;
+			n: Files.Name;
+		
+		BEGIN (*ReadGraphQL*)
+			l := Files.dir.This(dir); ASSERT(l.res = 0, 100);
+			n := name$;
+			v := Views.Old(Views.dontAsk, l, n, utf8Conv);
+			ASSERT((v # NIL) & (v IS TextViews.View), 101);
+			RETURN CompileText(v(TextViews.View).ThisModel());
+		END ReadGraphQL;
+	
+	PROCEDURE Init;
+		
+		VAR
+			
+			l: Files.Locator;
+			f: Files.File;
+			d: Directory;
+		
+		BEGIN (*Init*)
+			utf8Conv := Converters.list;
+			WHILE (utf8Conv # NIL) & ((utf8Conv.imp # textImpConv) OR (utf8Conv.fileType # "txt")) DO
+				utf8Conv := utf8Conv.next;
+			END;
+			l := Files.dir.This(compDir); ASSERT(l.res = 0, 100);
+			f := Files.dir.Old(l, compName, Files.shared); ASSERT(f # NIL, 101);
+			NEW(d);
+			d.r.ConnectTo(f);
+			comp := d.ReadCompiler();
+		END Init;
+	
+	BEGIN (*UtilGraphQL*)
+		Init;
+	END UtilGraphQL.

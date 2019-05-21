@@ -1,0 +1,320 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1Certifications;
+	
+	
+
+	IMPORT
+		
+		B := Duniter1Blockchain, BA := Duniter1Basic, S := UtilSort, Math, TextMappers, TextModels, TextViews, J := UtilJson;
+	
+	CONST
+		
+		fromAction = 0;
+		toAction = 1;
+	
+	TYPE
+		
+		Action = POINTER TO RECORD (B.Action)
+			what: INTEGER;
+			output: BA.String;
+		END;
+		
+		Dist = POINTER TO ARRAY OF INTEGER;
+		
+		Certif = POINTER TO RECORD
+			id: B.String;
+			created,
+			exp: LONGINT;
+		END;
+		
+		Certifs = POINTER TO ARRAY OF Certif;
+		
+		CertSort = RECORD (S.T)
+			c: Certifs;
+		END;
+	
+	PROCEDURE (VAR cs: CertSort) Less (c1, c2: INTEGER): BOOLEAN;
+		
+		BEGIN (*Less*)
+			RETURN (ABS(cs.c[c1].exp) < ABS(cs.c[c2].exp)) OR (ABS(cs.c[c1].exp) = ABS(cs.c[c2].exp)) & (BA.CompP(cs.c[c1].id, cs.c[c2].id) = BA.lt);
+		END Less;
+	
+	PROCEDURE (VAR cs: CertSort) Swap (c1, c2: INTEGER);
+		
+		VAR
+			
+			c: Certif;
+		
+		BEGIN (*Swap*)
+			c := cs.c[c1]; cs.c[c1] := cs.c[c2]; cs.c[c2] := c;
+		END Swap;
+	
+	PROCEDURE Moments (d: Dist; OUT mean, sDev: REAL; OUT nb, median: INTEGER);
+		
+		VAR
+			
+			m, n, i, q: INTEGER;
+			nb2: LONGINT;
+		
+		BEGIN (*Moments*)
+			m := LEN(d) - 1;
+			n := 0; nb := 0; nb2 := 0;
+			FOR i := 0 TO m DO
+				INC(n, d[i]);
+				INC(nb, i * d[i]);
+				INC(nb2, i * i * d[i]);
+			END;
+			IF n = 0 THEN
+				mean := 0;
+				sDev := 0;
+				nb := 0;
+				median := 0;
+			ELSE
+				mean := nb / n;
+				sDev := Math.Sqrt(nb2 / n - mean * mean);
+				median := - 1; q := 0;
+				REPEAT
+					INC(median);
+					INC(q, d[median]);
+				UNTIL 2 * q >= n;
+			END;
+		END Moments;
+	
+	PROCEDURE ListMoments (d: Dist);
+		
+		VAR
+			
+			mean, sDev: REAL;
+			nb, median, i: INTEGER;
+		
+		BEGIN (*ListMoments*)
+			Moments(d, mean, sDev, nb, median);
+			J.StartObject;
+			J.PushInteger(nb);
+			J.BuildField("number");
+			J.PushReal(mean);
+			J.BuildField("mean");
+			J.PushInteger(median);
+			J.BuildField("median");
+			J.PushReal(sDev);
+			J.BuildField("standard_deviation");
+			J.StartArray;
+			FOR i := 0 TO LEN(d) - 1 DO
+				J.PushInteger(d[i]);
+			END;
+			J.BuildArray;
+			J.BuildField("distribution");
+			J.BuildObject;
+			J.BuildField("statistics");
+		END ListMoments;
+	
+	PROCEDURE ListFrom (): J.Json;
+		
+		VAR
+			
+			uid: B.String;
+			from, to: B.Pubkey;
+			block, m, q: INTEGER;
+			ok, okP, b: BOOLEAN;
+			pos: B.CertPos;
+			mt, t: LONGINT;
+			dist: POINTER TO ARRAY OF INTEGER;
+			cs: CertSort;
+		
+		BEGIN (*ListFrom*)
+			m := 0;
+			ok := B.CertNextFrom(TRUE, pos);
+			WHILE ok DO
+				m := MAX(m, pos.CertPosLen());
+				ok := B.CertNextFrom(FALSE, pos);
+			END;
+			NEW(dist, m + 1);
+			J.StartObject;
+			J.StartArray;
+			ok := B.IdNextUid(TRUE, uid);
+			WHILE ok DO
+				b := B.IdUid(uid, from); ASSERT(b, 100);
+				q := 0;
+				J.StartObject;
+				J.PushString(uid);
+				J.BuildField("from");
+				IF B.CertFrom(from, pos) THEN
+					NEW(cs.c, pos.CertPosLen());
+					okP := pos.CertNextPos(from, to);
+					WHILE okP DO
+						NEW(cs.c[q]);
+						b := B.Cert(from, to, block, cs.c[q].exp); ASSERT(b, 101);
+						b := B.IdPub(to, cs.c[q].id); ASSERT(b, 102);
+						b := B.TimeOf(block, cs.c[q].created, t);
+						INC(q);
+						okP := pos.CertNextPos(from, to);
+					END;
+				END;
+				INC(dist[q]);
+				J.StartArray;
+				IF q > 0 THEN
+					cs.QuickSort(0, q - 1);
+					FOR q := 0 TO LEN(cs.c) - 1 DO
+						J.StartObject;
+						J.PushString(cs.c[q].id);
+						J.BuildField("uid");
+						J.PushInteger(cs.c[q].created);
+						J.BuildField("created");
+						J.PushInteger(cs.c[q].exp);
+						J.BuildField("expired");
+						J.BuildObject;
+					END;
+				END;
+				J.BuildArray;
+				J.BuildField("to");
+				J.BuildObject;
+				ok := B.IdNextUid(FALSE, uid);
+			END;
+			J.BuildArray;
+			J.BuildField("data");
+			ListMoments(dist);
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			mt := B.Now();
+			J.PushInteger(mt);
+			J.BuildField("now");
+			J.BuildObject;
+			RETURN J.GetJson();
+		END ListFrom;
+	
+	PROCEDURE ListTo (): J.Json;
+		
+		VAR
+			
+			uid: B.String;
+			from, to: B.Pubkey;
+			block, m, q: INTEGER;
+			ok, okP, b: BOOLEAN;
+			pos: B.CertPos;
+			mt, t: LONGINT;
+			dist: POINTER TO ARRAY OF INTEGER;
+			cs: CertSort;
+		
+		BEGIN (*ListTo*)
+			m := 0;
+			ok := B.CertNextTo(TRUE, pos);
+			WHILE ok DO
+				m := MAX(m, pos.CertPosLen());
+				ok := B.CertNextTo(FALSE, pos);
+			END;
+			NEW(dist, m + 1);
+			J.StartObject;
+			J.StartArray;
+			ok := B.IdNextUid(TRUE, uid);
+			WHILE ok DO
+				b := B.IdUid(uid, to); ASSERT(b, 100);
+				q := 0;
+				J.StartObject;
+				J.PushString(uid);
+				J.BuildField("to");
+				IF B.CertTo(to, pos) THEN
+					NEW(cs.c, pos.CertPosLen());
+					okP := pos.CertNextPos(from, to);
+					WHILE okP DO
+						NEW(cs.c[q]);
+						b := B.Cert(from, to, block, cs.c[q].exp); ASSERT(b, 101);
+						b := B.IdPub(from, cs.c[q].id); ASSERT(b, 102);
+						b := B.TimeOf(block, cs.c[q].created, t);
+						INC(q);
+						okP := pos.CertNextPos(from, to);
+					END;
+				END;
+				INC(dist[q]);
+				J.StartArray;
+				IF q > 0 THEN
+					cs.QuickSort(0, q - 1);
+					FOR q := 0 TO LEN(cs.c) - 1 DO
+						J.StartObject;
+						J.PushString(cs.c[q].id);
+						J.BuildField("uid");
+						J.PushInteger(cs.c[q].created);
+						J.BuildField("created");
+						J.PushInteger(cs.c[q].exp);
+						J.BuildField("expired");
+						J.BuildObject;
+					END;
+				END;
+				J.BuildArray;
+				J.BuildField("from");
+				J.BuildObject;
+				ok := B.IdNextUid(FALSE, uid);
+			END;
+			J.BuildArray;
+			J.BuildField("data");
+			ListMoments(dist);
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			mt := B.Now();
+			J.PushInteger(mt);
+			J.BuildField("now");
+			J.BuildObject;
+			RETURN J.GetJson();
+		END ListTo;
+	
+	PROCEDURE Json (j: J.Json; IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*Json*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			j.Write(f);
+			BA.VRegister(TextViews.dir.New(t), BA.waitLoc, name$, 100, "Certifications.Json");
+		END Json;
+	
+	PROCEDURE (a: Action) Activate;
+		
+		BEGIN (*Activate*)
+			CASE a.what OF
+			|fromAction:
+				Json(ListFrom(), a.output);
+			|toAction:
+				Json(ListTo(), a.output);
+			END;
+		END Activate;
+	
+	PROCEDURE Ask (IN output: ARRAY OF CHAR; what: INTEGER);
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Ask*)
+			NEW(a);
+			a.what := what;
+			NEW(a.output, LEN(output$) + 1); a.output^ := output$;
+			B.AddAction(a);
+		END Ask;
+	
+	PROCEDURE From* (IN output: ARRAY OF CHAR);
+		
+		BEGIN (*From*)
+			Ask(output, fromAction);
+		END From;
+	
+	PROCEDURE To* (IN output: ARRAY OF CHAR);
+		
+		BEGIN (*To*)
+			Ask(output, toAction);
+		END To;
+	
+	END Duniter1Certifications.

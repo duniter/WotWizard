@@ -1,0 +1,169 @@
+BABEL UtilGraphQLPartial;
+
+DEFINITION
+
+NegativeSign = "-" ;
+NonZeroDigit = ["1"-"9"] ;
+Digit = ["0"-"9"] ;
+IntegerPart = NegativeSign? ("0" | NonZeroDigit Digit*) ;
+FractionalPart = "." Digit+ ;
+ExponentIndicator = ["e", "E"] ;
+Sign = ["+", "-"] ;
+ExponentPart = ExponentIndicator Sign? Digit+ ;
+EscapedUnicode = ["0"-"9", "A"-"F", "a"-"f"]<4, 4> ;
+EscapedCharacter = ['"', "\", "/", "b", "f", "n", "r", "t"] ;
+StringCharacter = [#9H, #20H-#0FFFFH ^ '"', "\"] | "\u" EscapedUnicode |  "\" EscapedCharacter ;
+UnicodeBOM = #0FEFFH ;
+WhiteSpace = [#9H, #20H] ;
+LineTerminator = [#0AH, #0DH] | #0DH #0AH ;
+CommentChar = . ;
+Comment = "#" CommentChar* ;
+Comma = "," ;
+Ignored = UnicodeBOM | WhiteSpace | LineTerminator | Comment | Comma ;
+
+LEXICON
+
+spaces = Ignored+ ;
+
+false = 'false' ;
+null = 'null' ;
+true = 'true' ;
+
+leftpar = "(" ;
+rightpar = ")" ;
+colon = ":" ;
+leftbracket = "[" ;
+rightbracket = "]" ;
+leftbrace = "{" ;
+rightbrace = "}" ;
+
+Name = ["_", "A"-"Z", "a"-"z"] ["_", "0"-"9", "A"-"Z", "a"-"z"]* ;
+IntValue = IntegerPart ;
+FloatValue = IntegerPart (FractionalPart | ExponentPart | FractionalPart ExponentPart) ;
+StringValue = '"' StringCharacter* '"' ;
+
+DECLARATION
+
+*_Argument(field) ;
+*_ArgumentList(fields, aux) ;
+  _Arguments(fields) ;
+  _ArgumentsE(fields) ;
+*_BooleanValue(val) ;
+*_EnumValue(val) ;
+*_ListValue(val) ;
+*_NullValue(val) ;
+*_ObjectField(field) ;
+  _ObjectValue(val) ;
+*_ObjectValueList(list) ;
+*_Query(void) ;
+  _Selection(selection) ;
+*_SelectionList(selections, aux) ;
+  _SelectionSet(selections) ;
+  _SelectionSetE(selections) ;
+*_Value(val) ;
+*_ValueList(list) ;
+
+cons = #1;
+nil = #2;
+makeSel = #3;
+makeField = #4;
+
+interpret = ^1;
+integer = ^2;
+float = ^3;
+string = ^4;
+boolean = ^5;
+null = ^6;
+enum = ^7;
+list = ^8;
+object = ^9;
+
+GRAMMAR
+
+_Query = _SelectionSet :
+	$0.void = interpret($1.selections) ;
+
+_SelectionSet = leftbrace _SelectionList rightbrace :
+	$0.selections = $2.selections ;
+
+_SelectionList = _Selection :
+	$0.selections = cons($1.selection, $0.aux), $0.aux = nil ;
+_SelectionList = _Selection _SelectionList :
+	$0.selections = cons($1.selection, $2.selections) ;
+
+_Selection = Name _ArgumentsE _SelectionSetE :
+	$0.selection = makeSel($1, $1, $2.fields, $3.selections) ;
+_Selection = Name colon Name _ArgumentsE _SelectionSetE :
+	$0.selection = makeSel($1, $3, $4.fields, $5.selections) ;
+
+_ArgumentsE = :
+	$0.fields = nil ;
+_ArgumentsE = _Arguments :
+	$0.fields = $1.fields ;
+
+_Arguments = leftpar _ArgumentList rightpar :
+	$0.fields = $2.fields ;
+
+_ArgumentList = _Argument :
+	$0.fields = cons($1.field, $0.aux), $0.aux = nil ;
+_ArgumentList = _Argument _ArgumentList :
+	$0.fields = cons($1.field, $2.fields);
+
+_Argument = Name colon _Value :
+	$0.field = makeField($1, $3.val) ;
+
+_Value = IntValue :
+	$0.val = integer($1) ;
+_Value = FloatValue :
+	$0.val = float($1) ;
+_Value = StringValue :
+	$0.val = string($1) ;
+_Value = _BooleanValue :
+	$0.val = $1.val ;
+_Value = _NullValue :
+	$0.val = $1.val ;
+_Value = _EnumValue :
+	$0.val = $1.val ;
+_Value = _ListValue :
+	$0.val = $1.val ;
+_Value = _ObjectValue :
+	$0.val = $1.val ;
+
+_BooleanValue = true :
+	$0.val = boolean($1) ;
+_BooleanValue = false :
+	$0.val = boolean($1) ;
+
+_NullValue = null :
+	$0.val = null ;
+
+_EnumValue = Name :
+	$0.val = enum($1) ;
+
+_ListValue = leftbracket _ValueList rightbracket :
+	$0.val = list($2.list) ;
+
+_ValueList = :
+	$0.list = nil ;
+_ValueList = _Value _ValueList :
+	$0.list = cons($1.val, $2.list) ;
+
+_ObjectValue = leftbrace _ObjectValueList rightbrace :
+	$0.val = object($2.list) ;
+
+_ObjectValueList = :
+	$0.list = nil ;
+_ObjectValueList = _ObjectField _ObjectValueList :
+	$0.list = cons($1.field, $2.list) ;
+
+_ObjectField = Name colon _Value :
+	$0.field = makeField($1, $3.val) ;
+
+_SelectionSetE = :
+	$0.selections = nil ;
+_SelectionSetE = _SelectionSet :
+	$0.selections = $1.selections ;
+
+AXIOM
+
+_Query.

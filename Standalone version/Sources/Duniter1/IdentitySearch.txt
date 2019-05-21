@@ -1,0 +1,1109 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1IdentitySearch;
+	
+	
+
+	IMPORT
+		
+		(**
+		L := StdLog,
+		**)
+		
+		B := Duniter1BlockchainPrint, Dialog, BA := Duniter1BasicPrint, GS := Duniter1GQLSender, Fonts, Ports, Services, Strings, TextMappers, TextModels, TextViews, J := UtilJson, UtilSort, Views;
+	
+	CONST
+		
+		waitDelay = 200;
+		actionDelay = 99;
+		
+		findJson = "IdSearchFind";
+		fixJson = "IdSearchFix";
+		
+		findA = 0;
+		doFindA = 1;
+		fixA = 2;
+		
+		maxWAction = 7;
+		
+		maxItems = 100;
+		
+		nonEditableNb = 12;
+		
+		oldIcon = '×';
+		futureIcon = 'º';
+	
+	TYPE
+		
+		Action = POINTER TO RECORD (BA.WaitFor)
+			what: INTEGER;
+		END;
+		
+		WAction = POINTER TO RECORD
+			next: WAction;
+			what: INTEGER;
+			hint: Dialog.String;
+			hash: B.Hash;
+			b1, b2, b3: BOOLEAN;
+		END;
+		
+		WActionQueue = RECORD
+			end: WAction;
+			nb: INTEGER;
+		END;
+		
+		ActionDispatcher = POINTER TO RECORD (Services.Action)
+		END;
+		
+		NonEditable* = ARRAY 2 * nonEditableNb OF Dialog.String;
+		
+		Ring = POINTER TO ABSTRACT RECORD
+			next, prev: Ring;
+			item: BA.String;
+		END;
+		
+		RingHd = POINTER TO RECORD (Ring)
+			pos: Ring;
+		END;
+		
+		RingEl = POINTER TO RECORD (Ring)
+		END;
+		
+		ExpSort = RECORD (UtilSort.T)
+			ids: POINTER TO ARRAY OF Dialog.String;
+			dates: POINTER TO ARRAY OF BA.DateTime;
+			exps: POINTER TO ARRAY OF LONGINT;
+		END;
+		
+		Id* = RECORD
+			uid*: BA.String;
+			hash*: B.Hash;
+			future*,
+			active*: BOOLEAN;
+		END;
+		
+		Ids* = POINTER TO ARRAY OF Id;
+		
+		FindRes* = POINTER TO RECORD
+			nb_old*,
+			nb_member*,
+			nb_future*: INTEGER;
+			ids*: Ids;
+		END;
+		
+		AllPartner* = RECORD
+			cert*: BA.String;
+		END;
+		
+		AllPartners* = POINTER TO ARRAY OF AllPartner;
+		
+		Partner = RECORD
+			uid*: BA.String;
+			limit*: LONGINT;
+			future*: BOOLEAN;
+		END;
+		
+		Partners* = POINTER TO ARRAY OF Partner;
+		
+		Certifications* = POINTER TO RECORD
+			nb_member*,
+			nb_future*: INTEGER;
+			partners*: Partners;
+			all_partners*: AllPartners;
+		END;
+		
+		TwoWaysCertifications* = POINTER TO RECORD
+			sent_certs*,
+			received_certs*: Certifications;
+			received_certs_limit*: LONGINT;
+		END;
+		
+		FRes* = POINTER TO RECORD
+			hash*: B.Hash;
+			uid*: BA.String;
+			pubkey*: B.Pubkey;
+			block*: INTEGER;
+			blockDate*,
+			limitDate*: LONGINT;
+			member*,
+			sentry*: BOOLEAN;
+			availability*: LONGINT;
+			passed*: BOOLEAN;
+			certifications*: TwoWaysCertifications;
+			distance*: REAL;
+			distance_ok*: BOOLEAN;
+			quality*,
+			centrality*: REAL;
+		END;
+		
+		FixRes* = POINTER TO RECORD
+			res*: FRes;
+		END;
+	
+	VAR
+		
+		globalFind*: FindRes;
+		globalFix*: FixRes;
+		
+		inAction: BOOLEAN;
+		
+		hint*: Dialog.Combo;
+		
+		ring: RingHd;
+		
+		actionQ: WActionQueue;
+		
+		identityOldNb-,
+		identityNb-,
+		identityFutNb-: INTEGER;
+		identityDispOld*,
+		identityDispMem*,
+		identityDispFut*: BOOLEAN;
+		identityList*: Dialog.List;
+		identityHash: POINTER TO ARRAY OF B.Hash;
+		
+		identity*: RECORD
+			member-,
+			sentry-,
+			calcDist*,
+			distanceOK-,
+			calcQual*,
+			calcCentr*: BOOLEAN;
+			fields*: NonEditable; (* uid (0), pubkey (1), limit date (2), limit date of received cert (3), limit date of sent cert (4), hash (5), proportionOfSentries (6), availability (7), inscriptionBlock (8), inscriptionDate (9), quality (10), centrality (11) *)
+		END;
+		
+		receivedCertsNb-,
+		receivedCertsFutNb-,
+		sentCertsNb-,
+		sentCertsFutNb-: INTEGER;
+		receivedCerts*,
+		sentCerts*: Dialog.List;
+		receivedLimits,
+		sentLimits: POINTER TO ARRAY OF LONGINT;
+		rCertsLimit: LONGINT;
+		receivedAllCerts,
+		sentAllCerts: AllPartners;
+	
+	PROCEDURE (VAR q: WActionQueue) Init, NEW;
+		
+		BEGIN (*Init*)
+			q.end := NIL;
+			q.nb := 0;
+		END Init;
+	
+	PROCEDURE (IN q: WActionQueue) IsEmpty (): BOOLEAN, NEW;
+		
+		BEGIN (*IsEmpty*)
+			RETURN q.end = NIL;
+		END IsEmpty;
+	
+	PROCEDURE (VAR q: WActionQueue) Put (a: WAction), NEW;
+		
+		BEGIN (*Put*)
+			IF q.end = NIL THEN
+				q.end := a;
+				a.next := a;
+			ELSE
+				a.next := q.end.next;
+				q.end.next := a;
+				q.end := a;
+			END;
+			INC(q.nb);
+		END Put;
+	
+	PROCEDURE (VAR q: WActionQueue) Get (OUT a: WAction), NEW;
+		
+		BEGIN (*Get*)
+			ASSERT(q.end # NIL, 100);
+			a := q.end.next;
+			q.end.next := a.next;
+			IF q.end = a THEN
+				q.end := NIL;
+			END;
+			DEC(q.nb);
+		END Get;
+	
+	PROCEDURE InitRing (OUT ring: RingHd);
+		
+		BEGIN (*InitRing*)
+			NEW(ring);
+			ring.next := ring; ring.prev := ring;
+			ring.pos := ring;
+			NEW(ring.item, 1); ring.item^ := "";
+		END InitRing;
+	
+	PROCEDURE (ring: RingHd) First (OUT item: POINTER TO ARRAY OF CHAR), NEW;
+		
+		BEGIN (*First*)
+			ring.pos := ring;
+			item := ring.item;
+		END First;
+	
+	PROCEDURE (ring: RingHd) BackEmpty (): BOOLEAN, NEW;
+		
+		BEGIN (*BackEmpty*)
+			RETURN ring.pos = ring;
+		END BackEmpty;
+	
+	PROCEDURE (ring: RingHd) ForthEmpty (): BOOLEAN, NEW;
+		
+		BEGIN (*ForthEmpty*)
+			RETURN ring.pos.next = ring;
+		END ForthEmpty;
+	
+	PROCEDURE (ring: RingHd) Push (IN item: ARRAY OF CHAR), NEW;
+		
+		VAR
+			
+			r: Ring;
+			re: RingEl;
+		
+		BEGIN (*Push*)
+			IF ring.pos # ring THEN
+				r := ring.next;
+				WHILE (r # ring.pos) & (r.item$ # item$) DO
+					r := r.next;
+				END;
+				IF r # ring.pos THEN
+					r.next.prev := r.prev; r.prev.next := r.next;
+				END;
+			END;
+			IF (ring.pos = ring) OR (ring.pos.item$ # item$) THEN
+				NEW(re);
+				re.next := ring; re.prev := ring.pos;
+				ring.prev := re; ring.pos.next := re;
+				ring.pos := re;
+				NEW(re.item, LEN(item$) + 1); re.item^ := item$;
+			END;
+		END Push;
+	
+	PROCEDURE (ring: RingHd) Back (OUT item: POINTER TO ARRAY OF CHAR): BOOLEAN, NEW;
+		
+		BEGIN (*Back*)
+			IF ring.pos = ring THEN
+				RETURN FALSE;
+			END;
+			ring.pos := ring.pos.prev;
+			item := ring.pos.item;
+			RETURN TRUE;
+		END Back;
+	
+	PROCEDURE (ring: RingHd) Forth (OUT item: POINTER TO ARRAY OF CHAR): BOOLEAN, NEW;
+		
+		BEGIN (*Forth*)
+			IF ring.pos.next = ring THEN
+				RETURN FALSE;
+			END;
+			ring.pos := ring.pos.next;
+			item := ring.pos.item;
+			RETURN TRUE;
+		END Forth;
+	
+	PROCEDURE UpdateCombo (VAR c: Dialog.Combo; maxItems: INTEGER);
+		
+		VAR
+			
+			s: Dialog.String;
+			i, j: INTEGER;
+			found: BOOLEAN;
+		
+		BEGIN (*UpdateCombo*)
+			IF c.item # "" THEN
+				j := - 1; found := FALSE;
+				WHILE (j < c.len - 1) & ~found DO
+					INC(j);
+					c.GetItem(j, s);
+					found := s = c.item;
+				END;
+				IF ~found THEN
+					j := MIN(c.len, maxItems - 1);
+				END;
+				FOR i := j - 1 TO 0 BY - 1 DO
+					c.GetItem(i, s);
+					c.SetItem(i + 1, s);
+				END;
+				c.SetItem(0, c.item);
+				Dialog.UpdateList(c);
+			END;
+		END UpdateCombo;
+	
+	PROCEDURE FilterItem (VAR item: ARRAY OF CHAR);
+		
+		BEGIN (*FilterItem*)
+			IF (item[0] = oldIcon) OR (item[0] = futureIcon) THEN
+				Strings.Replace(item, 0, 2, '');
+			END;
+		END FilterItem;
+	
+	PROCEDURE Certs (res: FRes);
+		
+		VAR
+			
+			i: INTEGER;
+			certifs: Certifications;
+			partners: Partners;
+			dt: BA.DateTime;
+		
+		BEGIN (*Certs*)
+			certifs := res.certifications.sent_certs;
+			sentCertsNb := certifs.nb_member;
+			sentCertsFutNb := certifs.nb_future;
+			sentCerts.SetLen(sentCertsNb + sentCertsFutNb);
+			IF sentCerts.len = 0 THEN
+				sentLimits := NIL;
+			ELSE
+				NEW(sentLimits, sentCerts.len);
+			END;
+			partners := certifs.partners;
+			IF partners # NIL THEN
+				FOR i := 0 TO LEN(partners) - 1 DO
+					IF partners[i].future THEN
+						sentCerts.SetItem(i, futureIcon + ' ' + partners[i].uid$);
+					ELSE
+						sentCerts.SetItem(i, partners[i].uid$);
+					END;
+					sentLimits[i] := partners[i].limit;
+				END;
+			END;
+			sentCerts.index := 0;
+			Dialog.UpdateInt(sentCertsNb);
+			Dialog.UpdateInt(sentCertsFutNb);
+			Dialog.UpdateList(sentCerts);
+			IF sentCerts.len = 0 THEN
+				identity.fields[8] := "";
+			ELSE
+				BA.TimestampToString(sentLimits[sentCerts.index], dt);
+				identity.fields[8] := dt$;
+			END;
+			sentAllCerts := certifs.all_partners;
+			
+			certifs := res.certifications.received_certs;
+			receivedCertsNb := certifs.nb_member;
+			receivedCertsFutNb := certifs.nb_future;
+			receivedCerts.SetLen(receivedCertsNb + receivedCertsFutNb);
+			IF receivedCerts.len = 0 THEN
+				receivedLimits := NIL;
+			ELSE
+				NEW(receivedLimits, receivedCerts.len);
+			END;
+			partners := certifs.partners;
+			IF partners # NIL THEN
+				FOR i := 0 TO LEN(partners) - 1 DO
+					IF partners[i].future THEN
+						receivedCerts.SetItem(i, futureIcon + ' ' + partners[i].uid$);
+					ELSE
+						receivedCerts.SetItem(i, partners[i].uid$);
+					END;
+					receivedLimits[i] := partners[i].limit;
+				END;
+			END;
+			receivedCerts.index := 0;
+			Dialog.UpdateInt(receivedCertsNb);
+			Dialog.UpdateInt(receivedCertsFutNb);
+			Dialog.UpdateList(receivedCerts);
+			IF receivedCerts.len = 0 THEN
+				identity.fields[6] := "";
+			ELSE
+				BA.TimestampToString(receivedLimits[receivedCerts.index], dt);
+				identity.fields[6] := dt$;
+			END;
+			receivedAllCerts := certifs.all_partners;
+			rCertsLimit := res.certifications.received_certs_limit;
+		END Certs;
+	
+	PROCEDURE Get (res: FRes; OUT hash, uid, block, blockDate, pubkey, limitDate, availability: ARRAY OF CHAR; OUT member, sentry: BOOLEAN);
+		
+		VAR
+			
+			dt: BA.DateTime;
+		
+		BEGIN (*Get*)
+			hash := res.hash$;
+			uid := res.uid$;
+			IF res.block < 0 THEN
+				block := "";
+				blockDate := "";
+			ELSE
+				Strings.IntToString(res.block, block);
+				BA.TimestampToString(res.blockDate, dt);
+				blockDate := dt$;
+			END;
+			pubkey := res.pubkey$;
+			IF res.limitDate < 0 THEN
+				limitDate := "";
+			ELSE
+				BA.TimestampToString(res.limitDate, dt);
+				limitDate := dt$;
+			END;
+			member := res.member;
+			sentry := res.sentry;
+			IF res.availability < 0 THEN
+				availability := "";
+			ELSE
+				BA.TimestampToString(res.availability, dt);
+				IF res.passed THEN
+					availability := "! " + dt$;
+				ELSE
+					availability := dt$;
+				END;
+			END;
+		END Get;
+	
+	PROCEDURE NotTooFar (res: FRes; OUT proportionOfSentries: ARRAY OF CHAR): BOOLEAN;
+		
+		BEGIN (*NotTooFar*)
+			Strings.RealToStringForm(100. * res.distance, 16, 6, - 2, '', proportionOfSentries);
+			proportionOfSentries := proportionOfSentries + "%";
+			RETURN res.distance_ok;
+		END NotTooFar;
+	
+	PROCEDURE CalcQuality (res: FRes; OUT quality: ARRAY OF CHAR);
+		
+		BEGIN (*CalcQuality*)
+			Strings.RealToStringForm(100. * res.quality, 16, 6, - 2, '', quality);
+			quality := quality + "%";
+		END CalcQuality;
+	
+	PROCEDURE CalcCentrality (res: FRes; OUT centrality: ARRAY OF CHAR);
+		
+		BEGIN (*CalcCentrality*)
+			Strings.RealToStringForm(100. * res.centrality, 16, 6, - 2, '', centrality);
+			centrality := centrality + "%";
+		END CalcCentrality;
+	
+	PROCEDURE SetNoResult;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*SetNoResult*)
+			receivedCertsNb := 0;
+			receivedCertsFutNb := 0;
+			receivedCerts.SetLen(0);
+			sentCertsNb := 0;
+			sentCertsFutNb := 0;
+			sentCerts.SetLen(0);
+			identity.member := FALSE;
+			identity.sentry := FALSE;
+			identity.distanceOK := FALSE;
+			FOR i := 0 TO 2 * nonEditableNb - 1 DO
+				identity.fields[i] := "";
+			END;
+			Dialog.UpdateInt(identityOldNb);
+			Dialog.UpdateInt(identityNb);
+			Dialog.UpdateInt(identityFutNb);
+			Dialog.UpdateInt(receivedCertsNb);
+			Dialog.UpdateInt(receivedCertsFutNb);
+			Dialog.UpdateList(receivedCerts);
+			Dialog.UpdateInt(sentCertsNb);
+			Dialog.UpdateInt(sentCertsFutNb);
+			Dialog.UpdateList(sentCerts);
+			Dialog.Update(identity);
+		END SetNoResult;
+	
+	PROCEDURE DoFix;
+		
+		VAR
+			
+			i: INTEGER;
+			res: FRes;
+		
+		BEGIN (*DoFix*)
+			res := globalFix.res;
+			IF (identityList.len > 0) & (res # NIL) THEN
+				Get(res, identity.fields[10], identity.fields[0], identity.fields[16], identity.fields[18], identity.fields[2], identity.fields[4], identity.fields[14], identity.member, identity.sentry);
+				Certs(res);
+				IF identity.calcDist THEN
+					identity.distanceOK := NotTooFar(res, identity.fields[12]);
+				END;
+				IF identity.calcQual THEN
+					CalcQuality(res, identity.fields[20]);
+				END;
+				IF identity.calcCentr THEN
+					CalcCentrality(res, identity.fields[22]);
+				END;
+				FOR i := 0 TO nonEditableNb - 1 DO
+					identity.fields[2 * i + 1] := identity.fields[2 * i];
+				END;
+				Dialog.Update(identity);
+			ELSE
+				SetNoResult;
+			END;
+		END DoFix;
+	
+	PROCEDURE AddAction (wa: WAction);
+		
+		VAR
+			
+			oldA: WAction;
+		
+		BEGIN (*AddAction*)
+			IF actionQ.nb >= maxWAction THEN
+				actionQ.Get(oldA);
+			END;
+			actionQ.Put(wa);
+		END AddAction;
+	
+	PROCEDURE Fix;
+		
+		VAR
+			
+			wa: WAction;
+		
+		BEGIN (*Fix*)
+			NEW(wa);
+			wa.what := fixA;
+			wa.hash := identityHash[identityList.index]$;
+			wa.b1 := identity.calcDist;
+			wa.b2 := identity.calcQual;
+			wa.b3 := identity.calcCentr;
+			AddAction(wa);
+		END Fix;
+	
+	PROCEDURE DoSearch;
+		
+		VAR
+			
+			i: INTEGER;
+			ids: Ids;
+		
+		BEGIN (*DoSearch*)
+			IF ring.BackEmpty() THEN
+				globalFind.ids := NIL;
+				identityOldNb := 0; identityNb := 0; identityFutNb := 0;
+			ELSE
+				UpdateCombo(hint, maxItems);
+				identityOldNb := globalFind.nb_old;
+				identityNb := globalFind.nb_member;
+				identityFutNb := globalFind.nb_future;
+			END;
+			Dialog.UpdateInt(identityOldNb);
+			Dialog.UpdateInt(identityNb);
+			Dialog.UpdateInt(identityFutNb);
+			ids := globalFind.ids;
+			IF ids = NIL THEN
+				identityList.SetLen(0);
+				identityHash := NIL;
+			ELSE
+				identityList.SetLen(LEN(ids));
+				NEW(identityHash, identityList.len);
+				FOR i := 0 TO LEN(ids) - 1 DO
+					identityHash[i] := ids[i].hash$;
+					IF ids[i].future THEN
+						identityList.SetItem(i, futureIcon + ' ' + ids[i].uid$);
+					ELSIF ids[i].active THEN
+						identityList.SetItem(i, ids[i].uid$);
+					ELSE
+						identityList.SetItem(i, oldIcon + ' ' + ids[i].uid$);
+					END;
+				END;
+			END;
+			identityList.index := 0;
+			Dialog.UpdateList(identityList);
+			IF identityList.len = 0 THEN
+				SetNoResult;
+			ELSE
+				Fix;
+			END;
+		END DoSearch;
+	
+	PROCEDURE Search;
+		
+		BEGIN (*Search*)
+			ring.Push(hint.item);
+			DoSearch;
+		END Search;
+	
+	PROCEDURE (a: Action) End (IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			j: J.Json;
+		
+		BEGIN (*End*)
+			j := J.ReadFile(BA.waitDir, name); ASSERT(j # NIL, 100);
+			CASE a.what OF
+				|findA,
+				 doFindA:
+					NEW(globalFind);
+					j.ApplyTo(globalFind);
+					IF a.what = findA THEN
+						Search;
+					ELSE
+						DoSearch;
+					END;
+					globalFind := NIL;
+				|fixA:
+					NEW(globalFix);
+					j.ApplyTo(globalFix);
+					DoFix;
+					globalFix := NIL;
+			END;
+			inAction := FALSE;
+		END End;
+	
+	PROCEDURE (ad: ActionDispatcher) Do;
+		
+		VAR
+			
+			wa: WAction;
+			a: Action;
+		
+		PROCEDURE MkPar (IN s: ARRAY OF CHAR; b1, b2, b3: BOOLEAN): B.String;
+			
+			VAR
+				
+				p: B.String;
+			
+			BEGIN (*MkPar*)
+				NEW(p, LEN(s$) + 3 * (LEN("FALSE") + 4) + 5 + 2 + 1);
+				p^ := '"' + s$;
+				IF b1 THEN p^ := p$ + "', 'TRUE" ELSE p^ := p$ + "', 'FALSE" END;
+				IF b2 THEN p^ := p$ + "', 'TRUE" ELSE p^ := p$ + "', 'FALSE" END;
+				IF b3 THEN p^ := p$ + "', 'TRUE" ELSE p^ := p$ + "', 'FALSE" END;
+				p^ := "pars:" + p$ + '"';
+				RETURN p;
+			END MkPar;
+		
+		BEGIN (*Do*)
+			IF ~inAction & ~actionQ.IsEmpty() THEN
+				inAction := TRUE;
+				actionQ.Get(wa);
+				NEW(a);
+				a.what := wa.what;
+				CASE wa.what OF
+					|findA,
+					 doFindA:
+						IF (wa.what = doFindA) & ring.BackEmpty() THEN
+							NEW(globalFind);
+							DoSearch;
+							globalFind := NIL;
+							inAction := FALSE;
+						ELSE
+							BA.SwitchOff(BA.waitDir, findJson + ".json");
+							GS.Send("Duniter1IdentitySearchList", "Find", MkPar(wa.hint, wa.b1, wa.b2, wa.b3), findJson);
+							a.Do(BA.waitDir, findJson + ".json", waitDelay);
+						END;
+					|fixA:
+						BA.SwitchOff(BA.waitDir, fixJson + ".json");
+						GS.Send("Duniter1IdentitySearchList", "Fix", MkPar(wa.hash, wa.b1, wa.b2, wa.b3), fixJson);
+						a.Do(BA.waitDir, fixJson + ".json", waitDelay);
+				END;
+			END;
+			Services.DoLater(ad, Services.Ticks() + actionDelay);
+		END Do;
+	
+	PROCEDURE DoFind;
+		
+		VAR
+			
+			wa: WAction;
+		
+		BEGIN (*DoFind*)
+			NEW(wa);
+			wa.what := doFindA;
+			wa.hint := hint.item;
+			wa.b1 := identityDispOld;
+			wa.b2 := identityDispMem;
+			wa.b3 := identityDispFut;
+			AddAction(wa);
+		END DoFind;
+	
+	PROCEDURE Find*;
+		
+		VAR
+			
+			wa: WAction;
+		
+		BEGIN (*Find*)
+			NEW(wa);
+			wa.what := findA;
+			wa.hint := hint.item;
+			wa.b1 := identityDispOld;
+			wa.b2 := identityDispMem;
+			wa.b3 := identityDispFut;
+			AddAction(wa);
+		END Find;
+	
+	PROCEDURE First*;
+		
+		VAR
+			
+			item: POINTER TO ARRAY OF CHAR;
+		
+		BEGIN (*First*)
+			IF ~ring.BackEmpty() THEN
+				ring.First(item);
+				hint.item := item$;
+				Dialog.Update(hint);
+				DoFind;
+			END;
+		END First;
+	
+	PROCEDURE Backward*;
+		
+		VAR
+			
+			item: POINTER TO ARRAY OF CHAR;
+		
+		BEGIN (*Backward*)
+			IF ring.Back(item) THEN
+				hint.item := item$;
+				Dialog.Update(hint);
+				DoFind;
+			END;
+		END Backward;
+	
+	PROCEDURE Forward*;
+		
+		VAR
+			
+			item: POINTER TO ARRAY OF CHAR;
+		
+		BEGIN (*Forward*)
+			IF ring.Forth(item) THEN
+				hint.item := item$;
+				Dialog.Update(hint);
+				DoFind;
+			END;
+		END Forward;
+	
+	PROCEDURE BackwardGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*BackwardGuard*)
+			par.disabled := ring.BackEmpty();
+		END BackwardGuard;
+	
+	PROCEDURE ForwardGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*ForwardGuard*)
+			par.disabled := ring.ForthEmpty();
+		END ForwardGuard;
+	
+	PROCEDURE DistanceGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*DistanceGuard*)
+			par.disabled := ~identity.calcDist;
+		END DistanceGuard;
+	
+	PROCEDURE QualityGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*QualityGuard*)
+			par.disabled := ~identity.calcQual;
+		END QualityGuard;
+	
+	PROCEDURE CentralityGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*CentralityGuard*)
+			par.disabled := ~identity.calcCentr;
+		END CentralityGuard;
+	
+	PROCEDURE DistanceNotifier* (op, from, to: INTEGER);
+		
+		BEGIN (*DistanceNotifier*)
+			IF (op = Dialog.changed) & identity.calcDist THEN
+				Fix;
+			END;
+		END DistanceNotifier;
+	
+	PROCEDURE QualityNotifier* (op, from, to: INTEGER);
+		
+		BEGIN (*QualityNotifier*)
+			IF (op = Dialog.changed) & identity.calcQual THEN
+				Fix;
+			END;
+		END QualityNotifier;
+	
+	PROCEDURE CentralityNotifier* (op, from, to: INTEGER);
+		
+		BEGIN (*CentralityNotifier*)
+			IF (op = Dialog.changed) & identity.calcCentr THEN
+				Fix;
+			END;
+		END CentralityNotifier;
+	
+	PROCEDURE CopyReceived*;
+		
+		BEGIN (*CopyReceived*)
+			IF receivedCerts.len > 0 THEN
+				receivedCerts.GetItem(receivedCerts.index, hint.item);
+				FilterItem(hint.item);
+				Dialog.UpdateList(hint);
+				Find;
+			END;
+		END CopyReceived;
+	
+	PROCEDURE CopySent*;
+		
+		BEGIN (*CopySent*)
+			IF sentCerts.len > 0 THEN
+				sentCerts.GetItem(sentCerts.index, hint.item);
+				FilterItem(hint.item);
+				Dialog.UpdateList(hint);
+				Find;
+			END;
+		END CopySent;
+	
+	PROCEDURE (VAR e: ExpSort) Less (i, j: INTEGER): BOOLEAN;
+		
+		BEGIN (*Less*)
+			RETURN (e.exps[i] < e.exps[j]) OR (e.exps[i] = e.exps[j]) & (BA.CompP(e.ids[i], e.ids[j]) = BA.lt);
+		END Less;
+	
+	PROCEDURE (VAR e: ExpSort) Swap (i, j: INTEGER);
+		
+		VAR
+			
+			id: Dialog.String;
+			date: BA.DateTime;
+			exp: LONGINT;
+		
+		BEGIN (*Swap*)
+			id := e.ids[i]; e.ids[i] := e.ids[j]; e.ids[j] := id;
+			date := e.dates[i]; e.dates[i] := e.dates[j]; e.dates[j] := date;
+			exp := e.exps[i]; e.exps[i] := e.exps[j]; e.exps[j] := exp;
+		END Swap;
+	
+	PROCEDURE PrintCertifiers*;
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			i: INTEGER;
+			item: Dialog.String;
+			title: Views.Title;
+			a: TextModels.Attributes;
+			es: ExpSort;
+		
+		BEGIN (*PrintCertifiers*)
+			IF identity.fields[0] # "" THEN
+				t := TextModels.dir.New();
+				f.ConnectTo(t);
+				f.WriteString(identity.fields[0]);
+				f.WriteLn; f.WriteLn;
+				IF receivedCerts.len > 0 THEN
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter1:PresentCertifiers");
+					f.rider.SetAttr(a);
+					f.WriteString(" ("); f.WriteInt(receivedCertsNb);
+					f.WriteString(" + "); f.WriteInt(receivedCertsFutNb); f.WriteString(")");
+					f.WriteLn; f.WriteLn;
+					NEW(es.ids, receivedCerts.len);
+					NEW(es.dates, receivedCerts.len);
+					NEW(es.exps, receivedCerts.len);
+					FOR i := 0 TO receivedCerts.len - 1 DO
+						receivedCerts.GetItem(i, item);
+						f.WriteString(item); f.WriteLn;
+						es.ids[i] := item;
+						es.exps[i] := receivedLimits[i];
+						BA.TimestampToString(es.exps[i], es.dates[i]);
+					END;
+					f.WriteLn;
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter1:SortedByCExpDates");
+					f.rider.SetAttr(a);
+					f.WriteLn; f.WriteLn;
+					es.QuickSort(0, receivedCerts.len - 1);
+					FOR i := 0 TO receivedCerts.len - 1 DO
+						IF (es.exps[i] = rCertsLimit) & (es.ids[i][0] # futureIcon) THEN
+							a := f.rider.attr;
+							f.rider.SetAttr(
+								TextModels.NewWeight(
+									TextModels.NewColor(f.rider.attr, Ports.red),
+								Fonts.bold)
+							);
+							f.WriteString(es.dates[i]); f.WriteTab;
+							f.WriteString(es.ids[i]);
+							f.rider.SetAttr(a);
+						ELSE
+							f.WriteString(es.dates[i]); f.WriteTab;
+							f.WriteString(es.ids[i]);
+						END;
+						f.WriteLn;
+					END;
+					f.WriteLn;
+				END;
+				IF receivedAllCerts # NIL THEN
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter1:AllCertifiers");
+					f.rider.SetAttr(a);
+					f.WriteString(" ("); f.WriteInt(LEN(receivedAllCerts)); f.WriteString(")");
+					f.WriteLn; f.WriteLn;
+					FOR i := 0 TO LEN(receivedAllCerts) - 1 DO
+						f.WriteString(receivedAllCerts[i].cert); f.WriteLn;
+					END;
+				END;
+				Dialog.MapString("#Duniter1:Certifiers", title);
+				Views.OpenAux(TextViews.dir.New(t), title);
+			END;
+		END PrintCertifiers;
+	
+	PROCEDURE PrintCertified*;
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			i: INTEGER;
+			item: Dialog.String;
+			title: Views.Title;
+			a: TextModels.Attributes;
+			es: ExpSort;
+		
+		BEGIN (*PrintCertified*)
+			IF identity.fields[0] # "" THEN
+				t := TextModels.dir.New();
+				f.ConnectTo(t);
+				f.WriteString(identity.fields[0]);
+				f.WriteLn; f.WriteLn;
+				IF sentCerts.len > 0 THEN
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter1:PresentCertified");
+					f.rider.SetAttr(a);
+					f.WriteString(" ("); f.WriteInt(sentCertsNb);
+					f.WriteString(" + "); f.WriteInt(sentCertsFutNb); f.WriteString(")");
+					f.WriteLn; f.WriteLn;
+					NEW(es.ids, sentCerts.len);
+					NEW(es.dates, sentCerts.len);
+					NEW(es.exps, sentCerts.len);
+					FOR i := 0 TO sentCerts.len - 1 DO
+						sentCerts.GetItem(i, item);
+						f.WriteString(item); f.WriteLn;
+						es.ids[i] := item;
+						es.exps[i] := sentLimits[i];
+						BA.TimestampToString(es.exps[i], es.dates[i]);
+					END;
+					f.WriteLn;
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter1:SortedByCExpDates");
+					f.rider.SetAttr(a);
+					f.WriteLn; f.WriteLn;
+					es.QuickSort(0, sentCerts.len - 1);
+					FOR i := 0 TO sentCerts.len - 1 DO
+						f.WriteString(es.dates[i]); f.WriteTab;
+						f.WriteString(es.ids[i]);
+						f.WriteLn;
+					END;
+					f.WriteLn;
+				END;
+				IF sentAllCerts # NIL THEN
+					a := f.rider.attr; f.rider.SetAttr(TextModels.NewWeight(f.rider.attr, Fonts.bold));
+					f.WriteMsg("#Duniter1:AllCertified");
+					f.rider.SetAttr(a);
+					f.WriteString(" ("); f.WriteInt(LEN(sentAllCerts)); f.WriteString(")");
+					f.WriteLn; f.WriteLn;
+					FOR i := 0 TO LEN(sentAllCerts) - 1 DO
+						f.WriteString(sentAllCerts[i].cert); f.WriteLn;
+					END;
+				END;
+				Dialog.MapString("#Duniter1:Certified", title);
+				Views.OpenAux(TextViews.dir.New(t), title);
+			END;
+		END PrintCertified;
+	
+	PROCEDURE CopyReceivedGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*CopyReceivedGuard*)
+			par.disabled := receivedCerts.len = 0;
+		END CopyReceivedGuard;
+	
+	PROCEDURE CopySentGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*CopySentGuard*)
+			par.disabled := sentCerts.len = 0;
+		END CopySentGuard;
+	
+	PROCEDURE PrintCertGuard* (VAR par: Dialog.Par);
+		
+		BEGIN (*PrintCertGuard*)
+			par.disabled := identity.fields[0] = "";
+		END PrintCertGuard;
+	
+	PROCEDURE IdentityListNotifier* (op, from, to: INTEGER);
+		
+		BEGIN (*IdentityListNotifier*)
+			IF (op = Dialog.changed) & (identityList.index >= 0) & (identityList.index < identityList.len) THEN
+				Fix;
+			END;
+		END IdentityListNotifier;
+	
+	PROCEDURE NonEditableNotifier* (n, op, from, to: INTEGER);
+		
+		BEGIN (*NonEditableNotifier*)
+			IF op = Dialog.changed THEN
+				ASSERT(n IN {0 .. nonEditableNb - 1}, 100);
+				identity.fields[2 * n] := identity.fields[2 * n + 1];
+			END;
+		END NonEditableNotifier;
+	
+	PROCEDURE CertsNotifier* (n, op, from, to: INTEGER);
+		
+		VAR
+			
+			index: INTEGER;
+			dt: BA.DateTime;
+		
+		BEGIN (*CertsNotifier*)
+			IF op = Dialog.changed THEN
+				CASE n OF
+					|3:
+						IF receivedCerts.len > 0 THEN
+							index := MIN(MAX(receivedCerts.index, 0), receivedCerts.len - 1);
+							BA.TimestampToString(receivedLimits[index], dt);
+							identity.fields[2 * n] := dt$;
+						ELSE
+							identity.fields[2 * n] := ""
+						END;
+					|4:
+						IF sentCerts.len > 0 THEN
+							index := MIN(MAX(sentCerts.index, 0), sentCerts.len - 1);
+							BA.TimestampToString(sentLimits[index], dt);
+							identity.fields[2 * n] := dt$;
+						ELSE
+							identity.fields[2 * n] := ""
+						END;
+				END;
+				identity.fields[2 * n + 1] := identity.fields[2 * n];
+				Dialog.Update(identity);
+			END;
+		END CertsNotifier;
+	
+	PROCEDURE NbNotifier* (op, from, to: INTEGER);
+		
+		BEGIN (*NbNotifier*)
+			IF op = Dialog.changed THEN
+				DoFind;
+			END;
+		END NbNotifier;
+	
+	PROCEDURE Init;
+		
+		VAR
+			
+			ad: ActionDispatcher;
+		
+		BEGIN (*Init*)
+			identity.calcDist := TRUE; identity.calcQual := FALSE; identity.calcCentr := FALSE;
+			identityDispOld := FALSE; identityDispMem := TRUE; identityDispFut := TRUE;
+			InitRing(ring);
+			actionQ.Init;
+			inAction := FALSE;
+			NEW(ad);
+			Services.DoLater(ad, Services.now);
+		END Init;
+	
+	BEGIN (*Duniter1IdentitySearch*)
+		Init;
+	END Duniter1IdentitySearch.

@@ -1,0 +1,120 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1SentriesPrint;
+	
+	
+
+	IMPORT
+		
+		B := Duniter1BlockchainPrint, BA := Duniter1BasicPrint, GS := Duniter1GQLSender, Dialog, TextMappers, TextModels, TextViews, J := UtilJson, Views;
+	
+	CONST
+		
+		waitDelay = 100;
+		
+		sentriesJson = "Sentries";
+	
+	TYPE
+		
+		 Action = POINTER TO RECORD (BA.WaitFor)
+		END;
+		
+		Uid* = RECORD
+			name*: B.String;
+		END;
+		
+		Uids* = POINTER TO ARRAY OF Uid;
+		
+		Distance* = POINTER TO RECORD
+			threshold*: INTEGER;
+			sentries*: Uids;
+			block*: INTEGER;
+			now*: LONGINT;
+		END;
+	
+	VAR
+		
+		globalDist*: Distance;
+	
+	PROCEDURE Print;
+		
+		VAR
+			
+			i: INTEGER;
+			s: Views.Title;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			l: Uids;
+			dt: BA.DateTime;
+		
+		BEGIN (*Print*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			f.WriteMsg("#Duniter1:Block");
+			f.WriteString(" ");
+			f.WriteInt(globalDist.block);
+			f.WriteTab;
+			BA.TimestampToString(globalDist.now, dt);
+			f.WriteString(dt);
+			f.WriteString(" (UTC+0)");
+			f.WriteLn; f.WriteLn;
+			f.WriteMsg("#Duniter1:Threshold");
+			f.WriteString(" = ");
+			f.WriteInt(globalDist.threshold);
+			f.WriteLn;
+			f.WriteMsg("#Duniter1:SentriesNb");
+			f.WriteString(" = ");
+			l := globalDist.sentries;
+			IF l = NIL THEN
+				f.WriteInt(0);
+			ELSE
+				f.WriteInt(LEN(l));
+			END;
+			f.WriteLn; f.WriteLn;
+			IF l # NIL THEN
+				FOR i := 0 TO LEN(l) - 1 DO
+					f.WriteString(l[i].name); f.WriteLn;
+				END;
+			END;
+			Dialog.MapString("#Duniter1:Sentries", s);
+			Views.OpenAux(TextViews.dir.New(t), s);
+		END Print;
+	
+	PROCEDURE (a: Action) End (IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			j: J.Json;
+		
+		BEGIN (*End*)
+			j := J.ReadFile(BA.waitDir, name); ASSERT(j # NIL, 100);
+			NEW(globalDist);
+			j.ApplyTo(globalDist);
+			Print;
+			globalDist := NIL;
+		END End;
+	
+	PROCEDURE Do*;
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Do*)
+			BA.SwitchOff(BA.waitDir, sentriesJson + ".json");
+			GS.Send("Duniter1Sentries", "Do", "", sentriesJson);
+			NEW(a);
+			a.Do(BA.waitDir, sentriesJson + ".json", waitDelay);
+		END Do;
+	
+	END Duniter1SentriesPrint.

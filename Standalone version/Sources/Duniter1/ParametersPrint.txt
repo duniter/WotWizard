@@ -1,0 +1,349 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1ParametersPrint;
+	
+	
+
+	IMPORT
+		
+		BA := Duniter1BasicPrint, Dialog, GS := Duniter1GQLSender, J := UtilJson, TextMappers, TextModels, TextViews, Views;
+	
+	CONST
+		
+		waitDelay = 100;
+		
+		parametersJson = "Parameters";
+		
+		min = 60;
+		hour = 60 * min;
+		day = 24 * hour;
+		year = 365 * day + day DIV 4;
+		month = year DIV 12;
+	
+	TYPE
+		
+		 Action = POINTER TO RECORD (BA.WaitFor)
+		END;
+		
+		TName = ARRAY 20 OF CHAR;
+		
+		(* Duniter Parameters *)
+		Parameters* = POINTER TO RECORD
+			
+			(* The %growth of the UD every [dtReeval] period = 0.0488 /  (6 months) = 4.88% / (6 months) *)
+			c*: REAL;
+			
+			(* Time period between two UD = 86400 s = 1 day *)
+			dt*,
+			
+			(* UD(0), i.e. initial Universal Dividend = 1000 cents = 10 Ğ1 *)
+			ud0*,
+			
+			(* Minimum delay between 2 certifications of a same issuer = 432000 s = 5 days *)
+			sigPeriod*,
+			
+			(* Maximum quantity of active certifications made by member = 100 *)
+			sigStock*,
+			
+			(* Maximum delay a certification can wait before being expired for non-writing = 5259600 s = 2 months *)
+			sigWindow*,
+			
+			(* Maximum age of an active certification = 63115200 s = 2 years *)
+			sigValidity*,
+			
+			(* Minimum delay before replaying a certification = 5259600 s = 2 months *)
+			sigReplay*,
+			
+			(* Minimum quantity of signatures to be part of the WoT = 5 *)
+			sigQty*,
+			
+			(* Maximum delay an identity can wait before being expired for non-writing = 5259600 s = 2 months *)
+			idtyWindow*,
+			
+			(* Maximum delay a membership can wait before being expired for non-writing = 5259600 s = 2 months *)
+			msWindow*,
+			
+			(* Minimum delay between 2 memberships of a same issuer = 5259600 s = 2 months *)
+			msPeriod*: INTEGER;
+			
+			(* Minimum percent of sentries to reach to match the distance rule = 0.8 = 80% *)
+			xpercent*: REAL;
+			
+			(* Maximum age of an active membership = 31557600 s = 1 year *)
+			msValidity*,
+			
+			(* Maximum distance between a newcomer and [xpercent] of sentries = 5 *)
+			stepMax*,
+			
+			(* Number of blocks used for calculating median time = 24 *)
+			medianTimeBlocks*,
+			
+			(* The average time for writing 1 block (wished time) = 300 s = 5 min *)
+			avgGenTime*,
+			
+			(* The number of blocks required to evaluate again PoWMin value = 12 *)
+			dtDiffEval*: INTEGER;
+			
+			(* The percent of previous issuers to reach for personalized difficulty = 0.67 = 67% *)
+			percentRot*: REAL;
+			
+			(* Time of first UD = 1488970800 s = 2017/03/08 11:00:00 UTC+0 *)
+			udTime0*,
+			
+			(* Time of first reevaluation of the UD = 1490094000 s = 2017/03/21 11:00:00 UTC+0 *)
+			udReevalTime0*: LONGINT;
+			
+			(* Time period between two re-evaluation of the UD = 15778800 s = 6 months *)
+			dtReeval*,
+			
+			(* Maximum delay a transaction can wait before being expired for non-writing = 604800 s = 7 days *)
+			txWindow*: INTEGER;
+			
+		END;
+	
+	VAR
+		
+		pars*: Parameters;
+		
+		times : ARRAY 5 OF INTEGER;
+		tNames : ARRAY 6 OF TName;
+	
+	PROCEDURE Norm (t: INTEGER; OUT tN: INTEGER; OUT tName: ARRAY OF CHAR);
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*Norm*)
+			i := 4;
+			WHILE t < times[i] DO
+				DEC(i);
+			END;
+			IF i >= 0 THEN
+				tN := t DIV times[i];
+			END;
+			tName := tNames[i + 1]$;
+		END Norm;
+	
+	PROCEDURE Print*;
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			s: Views.Title;
+			tN: INTEGER;
+			tName: TName;
+			dt: BA.DateTime;
+		
+		BEGIN (*Print*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			
+			f.WriteMsg("#Duniter1:c"); f.WriteLn;
+			f.WriteString("c = "); f.WriteReal(pars.c);
+			Norm(pars.dtReeval, tN, tName);
+			f.WriteString(" ("); f.WriteReal(100 * pars.c); f.WriteString("% / ("); f.WriteInt(tN); f.WriteString(" " + tName + "))");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:dt"); f.WriteLn;
+			f.WriteString("dt = "); f.WriteInt(pars.dt);
+			Norm(pars.dt, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:ud0"); f.WriteLn;
+			f.WriteString("ud0 = "); f.WriteInt(pars.ud0);
+			f.WriteString(" ("); f.WriteReal(pars.ud0 / 100); f.WriteString(" Ğ1)");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:sigPeriod"); f.WriteLn;
+			f.WriteString("sigPeriod = "); f.WriteInt(pars.sigPeriod);
+			Norm(pars.sigPeriod, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:sigStock"); f.WriteLn;
+			f.WriteString("sigStock = "); f.WriteInt(pars.sigStock);
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:sigWindow"); f.WriteLn;
+			f.WriteString("sigWindow = "); f.WriteInt(pars.sigWindow);
+			Norm(pars.sigWindow, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:sigValidity"); f.WriteLn;
+			f.WriteString("sigValidity = "); f.WriteInt(pars.sigValidity);
+			Norm(pars.sigValidity, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:sigReplay"); f.WriteLn;
+			f.WriteString("sigReplay = "); f.WriteInt(pars.sigReplay);
+			Norm(pars.sigReplay, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:sigQty"); f.WriteLn;
+			f.WriteString("sigQty = "); f.WriteInt(pars.sigQty);
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:idtyWindow"); f.WriteLn;
+			f.WriteString("idtyWindow = "); f.WriteInt(pars.idtyWindow);
+			Norm(pars.idtyWindow, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:msWindow"); f.WriteLn;
+			f.WriteString("msWindow = "); f.WriteInt(pars.msWindow);
+			Norm(pars.msWindow, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:msPeriod"); f.WriteLn;
+			f.WriteString("msPeriod = "); f.WriteInt(pars.msPeriod);
+			Norm(pars.msPeriod, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:xpercent"); f.WriteLn;
+			f.WriteString("xpercent = "); f.WriteReal(pars.xpercent);
+			f.WriteString(" ("); f.WriteReal(100 * pars.xpercent); f.WriteString("%)");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:msValidity"); f.WriteLn;
+			f.WriteString("msValidity = "); f.WriteInt(pars.msValidity);
+			Norm(pars.msValidity, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:stepMax"); f.WriteLn;
+			f.WriteString("stepMax = "); f.WriteInt(pars.stepMax);
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:medianTimeBlocks"); f.WriteLn;
+			f.WriteString("medianTimeBlocks = "); f.WriteInt(pars.medianTimeBlocks);
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:avgGenTime"); f.WriteLn;
+			f.WriteString("avgGenTime = "); f.WriteInt(pars.avgGenTime);
+			Norm(pars.avgGenTime, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:dtDiffEval"); f.WriteLn;
+			f.WriteString("dtDiffEval = "); f.WriteInt(pars.dtDiffEval);
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:percentRot"); f.WriteLn;
+			f.WriteString("percentRot = "); f.WriteReal(pars.percentRot);
+			f.WriteString(" ("); f.WriteReal(100 * pars.percentRot); f.WriteString("%)");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:udTime0"); f.WriteLn;
+			f.WriteString("udTime0 = "); f.WriteInt(pars.udTime0);
+			BA.TimestampToString(pars.udTime0, dt);
+			f.WriteString(" (" + dt + " UTC+0)");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:udReevalTime0"); f.WriteLn;
+			f.WriteString("udReevalTime0 = "); f.WriteInt(pars.udReevalTime0);
+			BA.TimestampToString(pars.udReevalTime0, dt);
+			f.WriteString(" (" + dt + " UTC+0)");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:dtReeval"); f.WriteLn;
+			f.WriteString("dtReeval = "); f.WriteInt(pars.dtReeval);
+			Norm(pars.dtReeval, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			f.WriteLn; f.WriteLn;
+			
+			f.WriteMsg("#Duniter1:txWindow"); f.WriteLn;
+			f.WriteString("txWindow = "); f.WriteInt(pars.txWindow);
+			Norm(pars.txWindow, tN, tName);
+			f.WriteString(" ("); f.WriteInt(tN); f.WriteString(" " + tName + ")");
+			
+			Dialog.MapString("#Duniter1:Parameters", s);
+			Views.OpenAux(TextViews.dir.New(t), s);
+		END Print;
+	
+	PROCEDURE (a: Action) End (IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			j: J.Json;
+		
+		BEGIN (*End*)
+			j := J.ReadFile(BA.waitDir, name); ASSERT(j # NIL, 100);
+			NEW(pars);
+			j.ApplyTo(pars);
+			Print;
+			pars := NIL;
+		END End;
+	
+	PROCEDURE Do*;
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Do*)
+			BA.SwitchOff(BA.waitDir, parametersJson + ".json");
+			GS.Send("Duniter1Parameters", "Do", "", parametersJson);
+			NEW(a);
+			a.Do(BA.waitDir, parametersJson + ".json", waitDelay);
+		END Do;
+	
+	PROCEDURE Init;
+		
+		BEGIN (*Init*)
+			times[0] := min;
+			times[1] := hour;
+			times[2] := day;
+			times[3] := month;
+			times[4] := year;
+			Dialog.MapString("#Duniter1:second", tNames[0]);
+			Dialog.MapString("#Duniter1:minute", tNames[1]);
+			Dialog.MapString("#Duniter1:hour", tNames[2]);
+			Dialog.MapString("#Duniter1:day", tNames[3]);
+			Dialog.MapString("#Duniter1:month", tNames[4]);
+			Dialog.MapString("#Duniter1:year", tNames[5]);
+		END Init;
+	
+	BEGIN (*Duniter1ParametersPrint*)
+		Init;
+	END Duniter1ParametersPrint.
+
