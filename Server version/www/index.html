@@ -94,6 +94,17 @@
         $('#contentName').hide()
       }
 
+      function ts2datetime(timestamp) {
+        if (timestamp > 9000000000) {
+          return 'Jamais'
+        }
+        return new Date(timestamp * 1000).toLocaleDateString() + ' ' + new Date(timestamp * 1000).toLocaleTimeString()
+      }
+
+      function proba2percent(proba) {
+        return (proba * 100).toFixed(0)
+      }
+
       $( document ).ready(function() {
 
         $('#radioByDate').change(function (e) {
@@ -120,15 +131,10 @@
             var jsonByName = toJsonByName(jsonByDate)
             console.log('Données WotWizard : ', jsonByDate)
             $('#nbFolders').text(jsonMeta.dossNb)
-            $('#timeBCT').text(jsonMeta.now + ' BCT¹')
+            $('#timeBCT').text(ts2datetime(jsonMeta.now) + ' BCT¹')
             $('#currentBlock').text(jsonMeta.block)
-            $('#computationDuration').text(jsonMeta.computation_duration)
-            var dateMMDDYYYY = jsonMeta.now
-            var DD = dateMMDDYYYY.substr(0, 2)
-            var MM = dateMMDDYYYY.substr(3, 2)
-            var YYYY = dateMMDDYYYY.substr(6, 4)
-            var HHMMSS = dateMMDDYYYY.substr(11, 8)
-            var dateISO = new Date(MM + '/' + DD + '/' + YYYY + ' ' + HHMMSS)
+            $('#computationDuration').text((jsonMeta.computation_duration/1000).toFixed(0) + 's')
+	          var dateISO = new Date(jsonMeta.now * 1000)
             var diffToNow = (Date.now() - dateISO.getTime()) / 1000
             var hoursOffset = diffToNow / 3600
             if (hoursOffset > 4) {
@@ -138,12 +144,12 @@
             for (var i = 0; i < jsonByDate.dates.length; i++) {
               var entry = jsonByDate.dates[i]
               var html = '<blockquote>'
-              html += '<h2 class="' + (entry.after ? 'not_before_or_never' : 'at') + '">' + entry.date + '</h2>'
+              html += '<h2 class="' + (entry.after ? 'not_before_or_never' : 'at') + '">' + ts2datetime(entry.date) + '</h2>'
               for (var j = 0; j < entry.names.length; j++) {
                 var name = entry.names[j]
                 var proba = name.proba
-                var probaClass = proba == 100 ? 'sure' : (isNaN(proba) ? 'never' : 'possible')
-                html += '<p>' + name.name + ' (<span class="' + probaClass + '">' + proba + '%</span>)</p>'
+                var probaClass = proba >= 1 ? 'sure' : (isNaN(proba) ? 'never' : 'possible')
+                html += '<p>' + name.name + ' (<span class="' + probaClass + '">' + proba2percent(proba) + '%</span>)</p>'
               }
               html += '</blockquote>'
               $('#contentDate').append(html)
@@ -156,8 +162,8 @@
               for (var j = 0; j < entry.dates.length; j++) {
                 var date = entry.dates[j]
                 var proba = date.proba
-                var probaClass = proba == 100 ? 'sure' : (isNaN(proba) ? 'never' : 'possible')
-                html += '<p class="' + date.precision + '">' + date.date + ' (<span class="' + probaClass + '">' + proba + '%</span>)</p>'
+                var probaClass = proba >= 1 ? 'sure' : (isNaN(proba) ? 'never' : 'possible')
+                html += '<p class="' + date.precision + '">' + ts2datetime(date.date) + ' (<span class="' + probaClass + '">' + proba2percent(proba) + '%</span>)</p>'
               }
               html += '</blockquote>'
               $('#contentName').append(html)
