@@ -1,0 +1,27 @@
+BabelBabel
+
+DEFINITION BabelBabel;
+
+	PROCEDURE Compile;
+	PROCEDURE CompileList;
+	PROCEDURE CompileThis;
+
+END BabelBabel.
+
+Babel Compiler. The compiler has no compiler options. Errors are reported in the log window. Markers inserted in the text show the positions of local errors. The binary .tbl files produced are written in the "Rsrc" sub-directory of the subsystem defined by the name of the Babel definition text (as found after the BABEL keyword at the beginning of the text), following the same rules than for BlackBox modules.
+
+Suggestion of menu items:
+
+	"#Babel:MCompile"	""	"BabelBabel.Compile"	"TextCmds.FocusGuard"
+	"#Babel:MCompile_list"	""	"BabelBabel.CompileList"	"TextCmds.SelectionGuard"
+
+PROCEDURE Compile
+Guard: TextCmds.FocusGuard
+Compile the Babel definition text which is in the focus view.
+
+PROCEDURE CompileList
+Guard: TextCmds.SelectionGuard
+Compile the list of Babel definition texts whose names are selected in the focus text view. The compilation stops after the first error. When list texts, containing remarks, warnings, and/or errors are produced, their names are written on the log as hypertexts links: clicking on one of them open the corresponding list text.
+
+PROCEDURE CompileThis
+Used in a text with a DevCommanders.View. This command takes the text following it and interprets it as a list of Babel definition texts that should be compiled. Similar to CompileList except that no selection is necessary.

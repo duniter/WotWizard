@@ -1,0 +1,162 @@
+(* 
+Util: Utility tools.
+
+Copyright (C) 2001…2006 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE UtilAlea;
+	
+	
+	
+	(* Pseudo-random number generator. *)
+
+	IMPORT
+		
+		Math, Services;
+	
+	CONST
+		
+		rLong = 32;
+		m1 = 2147483563; ia1 = 40014;
+		m2 = 2147483399; ia2 = 40692;
+		
+		rm1 = 1 / m1;
+		nDiv = 1 + (m1 - 1) DIV rLong;
+	
+	TYPE
+		
+		R = ARRAY rLong OF INTEGER;
+		
+		Generator* = POINTER TO LIMITED RECORD
+			ix1, ix2, iy: INTEGER;
+			r: R;
+			gSet: BOOLEAN;
+			g: REAL;
+		END;
+	
+	VAR
+		
+		gen: Generator;
+	
+	(* Generates a new pseudo-random real number x such that  (0 <= x < 1), with uniforme deviates.  (Period > 2 × 10^18). Ref.: Generator rand2, W. H. Press, S. A. Teukolsky, W. T. Vetterling, B. P. Flannery, Numerical Recipes, The Art of Scientific Computing, second edition, 1997. *)
+	PROCEDURE (g: Generator) Random* (): REAL, NEW;
+		
+		VAR
+			
+			res: REAL;
+			j: INTEGER;
+		
+		BEGIN (*Random*)
+			g.ix1 := SHORT(LONG(g.ix1) * ia1 MOD m1);
+			g.ix2 := SHORT(LONG(g.ix2) * ia2 MOD m2);
+			j := g.iy DIV nDiv;
+			g.iy := g.r[j] - g.ix2;
+			IF g.iy <= 0 THEN
+				INC(g.iy, m1 - 1);
+			END;
+			g.r[j] := g.ix1;
+			res := rm1 * g.iy;
+			ASSERT((res >= 0.) & (res < 1.), 60);
+			RETURN res;
+		END Random;
+	
+	(* Generates a new integer number between min (included) and max (excluded) *)
+	PROCEDURE (g: Generator) IntRand* (min, max: LONGINT): LONGINT, NEW;
+		
+		BEGIN (*IntRand*)
+			RETURN min + ENTIER((max - min) * g.Random());
+		END IntRand;
+	
+	(* Generates a new pseudo-random real number x with gaussian (normal) deviates. Probability distribution p(x) = 1 / sqrt(2 * pi) * exp(-x^2 / 2). Box-Muller method. *)
+	PROCEDURE (g: Generator) GaussRand* (): REAL, NEW;
+		
+		VAR
+			
+			v1, v2, r: REAL;
+		
+		BEGIN (*GaussRand*)
+			g.gSet := ~g.gSet;
+			IF g.gSet THEN
+				REPEAT
+					v1 := 2. * g.Random() - 1.;
+					v2 := 2. * g.Random() - 1.;
+					r := v1 * v1 + v2 * v2;
+				UNTIL (r < 1.) & (r > 0.);
+				r := Math.Sqrt(  - 2. * Math.Ln(r) / r);
+				g.g := v1 * r;
+				RETURN v2 * r;
+			END;
+			RETURN g.g;
+		END GaussRand;
+	
+	(* Initializes the pseudo-random number generator with seed. *)
+	PROCEDURE (g: Generator) Randomize* (seed: LONGINT), NEW;
+		
+		CONST
+			
+			warmUp = 8;
+		
+		VAR
+			
+			i: INTEGER;
+		
+		BEGIN (*Randomize*)
+			g.ix1 := SHORT(MAX(seed MOD m1, 1));
+			g.ix2 := g.ix1;
+			FOR i := 1 TO warmUp DO
+				g.ix1 := SHORT(LONG(g.ix1) * ia1 MOD m1);
+			END;
+			FOR i := 0 TO rLong - 1 DO
+				g.ix1 := SHORT(LONG(g.ix1) * ia1 MOD m1);
+				g.r[i] := g.ix1;
+			END;
+			g.iy := g.r[rLong - 1];
+		END Randomize;
+	
+	(* Initializes the generator with a random seed. *)
+	PROCEDURE New* (): Generator;
+		
+		VAR
+			
+			g: Generator;
+		
+		BEGIN (*New*)
+			NEW(g);
+			g.Randomize(Services.Ticks());
+			g.gSet := FALSE;
+			RETURN g;
+		END New;
+	
+	PROCEDURE Random* (): REAL;
+		
+		BEGIN (*Random*)
+			RETURN gen.Random();
+		END Random;
+	
+	PROCEDURE IntRand* (min, max: LONGINT): LONGINT;
+		
+		BEGIN (*IntRand*)
+			RETURN gen.IntRand(min, max);
+		END IntRand;
+	
+	PROCEDURE GaussRand* (): REAL;
+		
+		BEGIN (*GaussRand*)
+			RETURN gen.GaussRand();
+		END GaussRand;
+	
+	PROCEDURE Randomize* (seed: LONGINT);
+		
+		BEGIN (*GaussRand*)
+			gen.Randomize(seed);
+		END Randomize;
+	
+	BEGIN (*UtilAlea*)
+		gen := New();
+	END UtilAlea.

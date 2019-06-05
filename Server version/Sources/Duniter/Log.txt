@@ -1,0 +1,135 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE DuniterLog;
+	
+	
+	
+	(* Simple Log *)
+	
+	IMPORT
+		
+		F := BasicsFiles, Dialog, Strings;
+	
+	CONST
+		
+		logDir = "Duniter/Rsrc";
+		logName = "Log.txt";
+	
+	TYPE
+		
+		Log* = LIMITED RECORD
+			f: F.File;
+		END;
+	
+	VAR
+		
+		log*: Log;
+	
+	PROCEDURE (VAR log: Log) Msg* (IN m: ARRAY OF CHAR), NEW;
+		
+		BEGIN (*Msg*)
+			log.f.WriteString(SHORT(m), 0, LEN(m$));
+			log.f.WriteLn;
+			log.f.Flush;
+		END Msg;
+	
+	PROCEDURE (VAR log: Log) Int* (n: LONGINT), NEW;
+		
+		VAR
+			
+			s: ARRAY 21 OF CHAR;
+		
+		BEGIN (*Int*)
+			Strings.IntToString(n, s);
+			log.Msg(s);
+		END Int;
+	
+	PROCEDURE (VAR log: Log) MMsg* (IN m, p1, p2: ARRAY OF CHAR), NEW;
+		
+		VAR
+			
+			s: Dialog.String;
+		
+		BEGIN (*MMsg*)
+			Dialog.MapParamString(m, p1, p2, '', s);
+			log.Msg(s);
+		END MMsg;
+	
+	PROCEDURE (VAR log: Log) Err* (res: INTEGER; IN p: ARRAY OF CHAR), NEW;
+		
+		CONST
+			
+			noErr = 0;
+			invalidName = 1;
+			notFound = 2;
+			existsAlready = 3;
+			writeProtected = 4;
+			ioError = 5;
+			accessDenied = 6;
+			notEnoughMem = 80;
+			notEnoughDisk = 81;
+		
+		VAR
+			
+			s, ss: Dialog.String;
+		
+		BEGIN (*Err*)
+			CASE res OF
+				|noErr:
+				|invalidName: log.MMsg("#Duniter:invalidName", p, "");
+				|notFound: log.MMsg("#Duniter:notFound", p, "");
+				|existsAlready: log.MMsg("#Duniter:existsAlready", p, "");
+				|writeProtected: log.MMsg("#Duniter:writeProtected", p, "");
+				|ioError: log.MMsg("#Duniter:ioError", p, "");
+				|accessDenied: log.MMsg("#Duniter:accessDenied", p, "");
+				|notEnoughMem: log.MMsg("#Duniter:notEnoughMem", p, "");
+				|notEnoughDisk: log.MMsg("#Duniter:notEnoughDisk", p, "");
+				ELSE
+					Strings.IntToString(res, s);
+					Dialog.MapParamString("#Duniter:unknownError", p, s, '', ss);
+					log.Msg(s);
+			END;
+			ASSERT(res = 0, 100);
+		END Err;
+	
+	PROCEDURE (VAR log: Log) Assert* (res: BOOLEAN; n: INTEGER; IN in: ARRAY OF CHAR), NEW;
+		
+		VAR
+			
+			s: Dialog.String;
+		
+		BEGIN (*Assert*)
+			IF ~res THEN
+				Strings.IntToString(n, s);
+				log.MMsg("#Duniter:Error", s, in);
+			END;
+		END Assert;
+	
+	PROCEDURE Init;
+		
+		VAR
+			
+			res: INTEGER;
+		
+		BEGIN (*Init*)
+			IF F.Exists(logDir, logName) THEN
+				F.Delete(logDir, logName, res); ASSERT(res = 0, 100);
+			END;
+			F.OpenNew(logDir, logName, log.f, res); ASSERT(res = 0, 101);
+		END Init;
+	
+	BEGIN (*DuniterLog*)
+		Init;
+	CLOSE
+		log.f.Close;
+	END DuniterLog.

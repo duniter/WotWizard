@@ -1,0 +1,308 @@
+(* 
+Duniter: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE DuniterBasic;
+	
+	
+	
+	(* Basic functions *)
+
+	IMPORT
+		
+		A := UtilAvlTree, Converters, Dates, Dialog, Files, Kernel, Services, Strings, TextMappers, TextModels, TextViews, UC := UnicodeCase_Mapping, UL := UnicodeLetter_Mapping, Views;
+	
+	CONST
+		
+		(* Directory & name of the file where the path to the Duniter database is written *)
+		initDir = "Duniter/Rsrc";
+		initName = "Init.txt";
+		
+		(* Default path to the Duniter database *)
+		duniBaseDef = "D:\.config\duniter\duniter_default\wotwizard-export.db";
+		
+		syncName* = "updating.txt";
+		syncDelay* = 15 * Services.resolution; (* ms *)
+		verifyPeriod* = 2 * Services.resolution; (* ms; Minimum delay between two verifications of the presence of syncName *)
+		firstDelay* = verifyPeriod + 1 * Services.resolution; (* ms *)
+		secureDelay* = 2 * Services.resolution; (* ms *)
+		addDelay* = 5 * Services.resolution; (* ms *)
+		
+		year0 = 1970; month0 = 1; day0 = 1; (* Start date of computing history *)
+		
+		textImpConv = "CpcUtf8Conv.ImportUtf8";
+		textExpConv = "CpcUtf8Conv.ExportUtf8";
+		
+		oldIcon = '×'; (* Icon for old items (old or leaving members) *)
+		
+		never* = MAX(LONGINT); (* In WotWizard window *)
+		revoked* = MIN(LONGINT); (* Limit date for revoked members *)
+		already* = MIN(LONGINT) + 1; (* Already available certification date *)
+		
+		lt* = A.lt;
+		eq* = A.eq;
+		gt* = A.gt;
+	
+	TYPE
+		
+		TimeString* = ARRAY 9 OF CHAR;
+		
+		DateTime* = ARRAY 21 OF CHAR;
+	
+	VAR
+	
+		duniDir-,
+		duniBase-: Files.Name; (* Path to the Duniter database *)
+		
+		utf8Conv*: Converters.Converter;
+		t0: INTEGER; (* Origin of dates *)
+	
+	(* Convert the time t to the string ts *)
+	PROCEDURE TimeToString* (t: LONGINT; OUT ts: TimeString);
+		
+		VAR
+			
+			time: Dates.Time;
+		
+		BEGIN (*TimeToString*)
+			t := (t + Services.resolution DIV 2) DIV Services.resolution;
+			time.second := SHORT(t MOD 60); t := t DIV 60;
+			time.minute := SHORT(t MOD 60); t := t DIV 60;
+			time.hour := SHORT(t MOD 24);
+			ASSERT(t DIV 24 = 0, 20);
+			Dates.TimeToString(time, ts);
+		END TimeToString;
+	
+	(* Convert the time t to the strings date and time *)
+	PROCEDURE TimestampToDate (t: LONGINT; OUT date: Dates.Date; OUT time: Dates.Time);
+		
+		BEGIN (*TimestampToDate*)
+			time.second := SHORT(t MOD 60); t := t DIV 60;
+			time.minute := SHORT(t MOD 60); t := t DIV 60;
+			time.hour := SHORT(t MOD 24);
+			Dates.DayToDate(SHORT(t DIV 24 + t0), date);
+		END TimestampToDate;
+	
+	(* Convert the date t to the string dt *)
+	PROCEDURE TimestampToString* (t: LONGINT; OUT dt: DateTime);
+		
+		VAR
+			
+			ti, da: ARRAY 11 OF CHAR;
+			date: Dates.Date;
+			time: Dates.Time;
+		
+		BEGIN (*TimestampToString*)
+			IF t = never THEN
+				Dialog.MapString("#Duniter:Never", dt);
+			ELSIF t = revoked THEN
+				Dialog.MapString("#Duniter0:Revoked", dt);
+			ELSIF t = already THEN
+				dt := "**/**/******:**:**";
+			ELSE
+				TimestampToDate(ABS(t), date, time);
+				Dates.DateToString(date, Dates.short, da);
+				Dates.TimeToString(time, ti);
+				dt := da + " " + ti;
+				IF t < 0 THEN (* leaving member *)
+					dt := oldIcon + dt;
+				END;
+			END;
+		END TimestampToString;
+	
+	(* Convert the string dt to a date *)
+	PROCEDURE StringToTimestamp* (dt: DateTime): LONGINT;
+		
+		VAR
+			
+			d: Dates.Date;
+			n, m: LONGINT;
+			res: INTEGER;
+			s: ARRAY 5 OF CHAR;
+		
+		BEGIN (*StringToTimestamp*)
+			Strings.Extract(dt, 6, 4, s); Strings.StringToInt(s, d.year, res);
+			IF res # 0 THEN
+				RETURN never;
+			END;
+			Strings.Extract(dt, 3, 2, s); Strings.StringToInt(s, d.month, res); ASSERT(res = 0, 101);
+			Strings.Extract(dt, 0, 2, s); Strings.StringToInt(s, d.day, res); ASSERT(res = 0, 102);
+			n := Dates.Day(d) - t0;
+			Strings.Extract(dt, 11, 2, s); Strings.StringToLInt(s, m, res); ASSERT(res = 0, 103);
+			n := n * 24 + m;
+			Strings.Extract(dt, 14, 2, s); Strings.StringToLInt(s, m, res); ASSERT(res = 0, 104);
+			n := n * 60 + m;
+			Strings.Extract(dt, 17, 2, s); Strings.StringToLInt(s, m, res); ASSERT(res = 0, 105);
+			n := n * 60 + m;
+			RETURN n;
+		END StringToTimestamp;
+	
+	(* Extract the significant character at the position i in s, or further; only alphanumeric characters are significant, and their case of lowest rank is returned *)
+	PROCEDURE DownC (IN s: ARRAY OF CHAR; VAR i: INTEGER): CHAR;
+		
+		VAR
+			
+			c: CHAR;
+		
+		PROCEDURE LetterOrDigit (c: CHAR): BOOLEAN;
+			
+			BEGIN (*LetterOrDigit*)
+				RETURN (c >= '0') & (c <= '9') OR UL.IsLetter(ORD(c));
+			END LetterOrDigit;
+		
+		BEGIN (*DownC*)
+			LOOP
+				c := s[i];
+				IF c = 0X THEN
+					EXIT;
+				END;
+				INC(i);
+				IF LetterOrDigit(c) THEN
+					c := MIN(UC.Lower(c), UC.Upper(c));
+					EXIT;
+				END;
+			END;
+			RETURN c;
+		END DownC;
+	
+	(* Standard comparison procedure for identifiers; they are first compared with only significant characters and case ignored, and if still equal, with all characters and case taken into account *)
+	PROCEDURE CompP* (IN s1, s2: ARRAY OF CHAR): BYTE;
+		
+		VAR
+			
+			i1, i2: INTEGER;
+			c1, c2: CHAR;
+		
+		BEGIN (*CompP*)
+			i1 := 0; i2 := 0;
+			REPEAT
+				c1 := DownC(s1, i1);
+				c2 := DownC(s2, i2);
+			UNTIL (c1 # c2) OR (c1 = 0X);
+			IF c1 < c2 THEN
+				RETURN lt;
+			END;
+			IF c1 > c2 THEN
+				RETURN gt;
+			END;
+			i1 := 0;
+			WHILE (s1[i1] = s2[i1]) & (s1[i1] # 0X) DO
+				INC(i1);
+			END;
+			IF s1[i1] < s2[i1] THEN
+				RETURN lt;
+			END;
+			IF s1[i1] > s2[i1] THEN
+				RETURN gt;
+			END;
+			RETURN eq;
+		END CompP;
+	
+	(* Help emptying the memory by calling the garbage collector *)
+	PROCEDURE Collect*;
+		
+		BEGIN (*Collect*)
+			IF Kernel.WouldFinalize() THEN
+				Kernel.Collect;
+			ELSE
+				Kernel.FastCollect;
+			END;
+		END Collect;
+	
+	PROCEDURE SplitFullName (full: ARRAY OF CHAR; OUT path, name: ARRAY OF CHAR): BOOLEAN;
+		
+		VAR
+			
+			res, drive, p: INTEGER;
+			ok: BOOLEAN;
+		
+		BEGIN (*SplitFullName*)
+			res := 0;
+			LOOP
+				Strings.Find(full, '\', res, res);
+				IF res = - 1 THEN
+					EXIT;
+				END;
+				full[res] := '/';
+			END;
+			Strings.Find(full, ':', 0, res);
+			ok := (res = - 1) OR (res = 1);
+			IF ok THEN
+				drive := res;
+				Strings.Find(full, '/', res + 1, p);
+				WHILE p >= 0 DO
+					res := p;
+					Strings.Find(full, '/', res + 1, p);
+				END;
+				IF res < 0 THEN
+					path := "";
+					name := full$;
+				ELSE
+					IF res <= drive + 1 THEN
+						Strings.Extract(full, 0, res + 1, path);
+					ELSE
+						Strings.Extract(full, 0, res, path);
+					END;
+					Strings.Extract(full, res + 1, LEN(full), name);
+				END;
+				ok := LEN(name$) > 0;
+			END;
+			RETURN ok;
+		END SplitFullName;
+	
+	PROCEDURE Init;
+		
+		VAR
+			
+			l: Files.Locator;
+			v: Views.View;
+			s: TextMappers.Scanner;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			name: Files.Name;
+			res: INTEGER;
+			date: Dates.Date;
+		
+		BEGIN (*Init*)
+			duniBase := '';
+			l := Files.dir.This(initDir); ASSERT(l.res = 0, 100);
+			v := Views.OldView(l, initName);
+			IF v = NIL THEN
+				duniBase := duniBaseDef;
+				t := TextModels.dir.New();
+				f.ConnectTo(t);
+				f.WriteString('"' + duniBase + '"');
+				name := initName;
+				Views.Register(TextViews.dir.New(t), Views.dontAsk, l, name, utf8Conv, res);
+				ASSERT(res = 0, 101);
+			ELSE
+				ASSERT(v IS TextViews.View, 102);
+				s.ConnectTo(v(TextViews.View).ThisModel());
+				s.Scan;
+				IF s.type = TextMappers.string THEN
+					duniBase := s.string$;
+				END;
+			END;
+			IF ~SplitFullName(duniBase, duniDir, name) THEN
+				duniDir := '';
+			END;
+			date.year := year0; date.month := month0; date.day := day0;
+			t0 := Dates.Day(date);
+			utf8Conv := Converters.list;
+			WHILE (utf8Conv # NIL) & ((utf8Conv.imp # textImpConv) OR (utf8Conv.exp # textExpConv) OR (utf8Conv.fileType # "txt")) DO
+				utf8Conv := utf8Conv.next;
+			END;
+			ASSERT(utf8Conv # NIL, 103);
+		END Init;
+	
+	BEGIN (*DuniterBasic*)
+		Init;
+	END DuniterBasic.

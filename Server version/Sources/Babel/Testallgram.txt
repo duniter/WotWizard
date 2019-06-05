@@ -1,0 +1,239 @@
+(* 
+Babel: a compiler compiler.
+
+Copyright (C) 2015 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*)
+
+MODULE BabelTestallgram;
+	
+	
+	
+	(* The module BabelTestallgram is part of the Babel subsystem, a compiler compiler. BabelTestallgram tests a given grammar on all  text files in a directory and its sub-directories. *)
+	
+	IMPORT
+		
+		A := BabelAvl, B := BabelCompil, Converters, Dialog, Documents, Files, Fonts, Ports, StdLinks, Stores, Strings, TextMappers, TextModels, TextViews, TG := BabelTestgram, UtilDirChoose, Views;
+	
+	TYPE
+		
+		Directory = POINTER TO RECORD (B. Directory)
+			r: Stores.Reader;
+		END;
+		
+		Compilation = POINTER TO RECORD (B.Compilation)
+			r: TextModels.Reader;
+		END;
+		
+		Path = POINTER TO RECORD (A.Elem)
+			s: B.String;
+			loc: Files.Locator;
+			name: Files.Name;
+			modOrSym: BOOLEAN;
+		END;
+	
+	VAR
+		
+		dial*: RECORD
+			root*,
+			folder1*,
+			folder2*: Files.Name;
+		END;
+	
+	PROCEDURE (d: Directory) ReadInt (OUT i: INTEGER);
+		
+		BEGIN (*ReadInt*)
+			d.r.ReadInt(i);
+		END ReadInt;
+	
+	PROCEDURE (c: Compilation) Read (OUT ch: CHAR);
+		
+		BEGIN (*Read*)
+			c.r.Read;
+			IF c.r.eot THEN
+				ch := B.eOF1;
+			ELSE
+				ch := c.r.char;
+			END;
+		END Read;
+	
+	PROCEDURE (c: Compilation) Pos (): INTEGER;
+		
+		BEGIN (*Pos*)
+			RETURN c.r.Pos();
+		END Pos;
+	
+	PROCEDURE (c: Compilation) SetPos (pos: INTEGER);
+		
+		BEGIN (*SetPos*)
+			IF pos <= c.r.Base().Length() THEN
+				c.r.SetPos(pos);
+			END;
+		END SetPos;
+	
+	PROCEDURE (s1: Path) Compare (s2: A.Elem): BYTE;
+		
+		VAR
+			
+			i: INTEGER;
+			c1, c2: CHAR;
+		
+		BEGIN (*Compare*)
+			ASSERT(s2 # NIL);
+			WITH s2: Path DO
+				i := 0;
+				REPEAT
+					c1 := Strings.Upper(s1.s[i]); c2 := Strings.Upper(s2.s[i]);
+					INC(i);
+				UNTIL (c1 # c2) OR (c1 = 0X);
+				IF c1 < c2 THEN
+					RETURN A.inf;
+				ELSIF c1 > c2 THEN
+					RETURN A.sup;
+				END;
+				i := 0;
+				WHILE (s1.s[i] = s2.s[i]) & (s1.s[i] # 0X) DO
+					INC(i);
+				END;
+				IF s1.s[i] < s2.s[i] THEN
+					RETURN A.inf;
+				ELSIF s1.s[i] > s2.s[i] THEN
+					RETURN A.sup;
+				ELSE
+					RETURN A.ega;
+				END;
+			END;
+		END Compare;
+	
+	PROCEDURE (c: Compilation) Execution (fNum, parsNb: INTEGER; pars: B.ObjectsList; OUT o: B.Object; OUT res: ANYPTR): BOOLEAN;
+		
+		BEGIN (*Execution*)
+			RETURN TRUE;
+		END Execution;
+	
+	PROCEDURE Do*;
+		
+		VAR
+			
+			tr: A.Tree;
+			e: A.Elem;
+			c: Compilation;
+			text: TextModels.Model;
+			f: TextMappers.Formatter;
+			a1, a2: TextModels.Attributes;
+			v: Views.View;
+			s: Stores.Store;
+			conv: Converters.Converter;
+			folder1, folder2, name: Files.Name;
+			b: BOOLEAN;
+			p: Path;
+			n, len: INTEGER;
+			fL: Files.FileInfo;
+			title: Views.Title;
+		
+		PROCEDURE Walk (loc: Files.Locator; level: INTEGER; IN path: ARRAY OF CHAR);
+			
+			VAR
+				
+				lL: Files.LocInfo;
+			
+			BEGIN (*Walk*)
+				ASSERT(loc.res = 0);
+				lL := Files.dir.LocList(loc);
+				WHILE lL # NIL DO
+					Strings.ToUpper(lL.name, name);
+					IF (level > 2) OR (level = 1) & ((folder1 = "") OR (name = folder1)) OR (level = 2) & ((folder2 = "") OR (name = folder2)) THEN
+						Walk(loc.This(lL.name), level + 1, path + lL.name + "/");
+					END;
+					lL := lL.next;
+				END;
+				IF (level > 2) OR ((level = 2) OR (level = 1) & (folder1 = "")) & (folder2 = "") THEN (* Scan level 1 or level 2 folders only if no directive has been given to scan further *)
+					fL := Files.dir.FileList(loc);
+					WHILE fL # NIL DO
+						IF (fL.type = "odc") OR (fL.type = "osf") THEN
+							len := LEN(path$) + LEN(fL.name$) + 1;
+							NEW(p); NEW(p.s, len);
+							p.s^ := path$ + fL.name$;
+							p.loc := loc; p.name := fL.name;
+							p.modOrSym := fL.type = "odc";
+							e := p;
+							b := tr.SearchIns(e, n); ASSERT(~b);
+						END;
+						fL := fL.next;
+					END;
+				END;
+			END Walk;
+		
+		BEGIN (*Do*)
+			IF TG.comp # NIL THEN
+				conv := Converters.list;
+				WHILE (conv # NIL) & (conv.imp # "DevBrowser.ImportSymFile") DO
+					conv := conv.next;
+				END;
+				text := TextModels.dir.New();
+				Dialog.MapString("#Babel:WFilesInError", title);
+				Views.OpenAux(TextViews.dir.New(text), title);
+				f.ConnectTo(text);
+				A.New(tr);
+				Strings.ToUpper(dial.folder1, folder1);
+				Strings.ToUpper(dial.folder2, folder2);
+				Walk(Files.dir.This(dial.root), 1, dial.root);
+				a1 := f.rider.attr;
+				a2 := TextModels.NewColor(TextModels.NewStyle(a1, {Fonts.underline}), Ports.blue);
+				e := tr.Next(NIL);
+				WHILE e # NIL DO
+					WITH e: Path DO
+						Dialog.ShowStatus(e.s);
+						NEW(c);
+						IF e.modOrSym THEN
+							v := Views.OldView(e.loc, e.name);
+						ELSE
+							Converters.Import(e.loc, e.name, conv, s);
+							v := s(Documents.Document).ThisView();
+						END;
+						IF v IS TextViews.View THEN
+							c.r := v(TextViews.View).ThisModel().NewReader(NIL);
+							IF ~c.Compile(TG.comp, TRUE) THEN
+								f.WriteView(StdLinks.dir.NewLink("StdCmds.OpenDoc('" + e.s$ + "');BabelTestgram.Do"));
+								f.rider.SetAttr(a2);
+								f.WriteString(e.s);
+								f.rider.SetAttr(a1);
+								f.WriteView(StdLinks.dir.NewLink(""));
+								f.WriteLn;
+							END;
+						END;
+					END;
+					e := tr.Next(e);
+				END;
+			END;
+		END Do;
+	
+	PROCEDURE DoGuard* (VAR p: Dialog.Par);
+		
+		BEGIN (*DoGuard*)
+			p.disabled := TG.comp = NIL;
+		END DoGuard;
+
+	PROCEDURE FixRoot (IN root: Files.Name);
+
+		BEGIN (*FixRoot*)
+			dial.root := root$;
+			Dialog.Update(dial);
+		END FixRoot;
+
+	PROCEDURE Browse*;
+
+		BEGIN (*Browse*)
+			UtilDirChoose.Choose(FixRoot);
+		END Browse;
+	
+	BEGIN (*BabelTestallgram*)
+		dial.root := "";
+		dial.folder1 := "";
+		dial.folder2 := "Mod";
+	END BabelTestallgram.

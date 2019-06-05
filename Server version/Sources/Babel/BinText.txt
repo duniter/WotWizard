@@ -1,0 +1,619 @@
+(* 
+Babel: a compiler compiler.
+
+Copyright (C) 2001 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*)
+
+MODULE BabelBinText;
+	
+	
+	
+	(* The module BabelBinText is part of the Babel subsystem, a compiler compiler. BabelBinText is an auxiliary module used in writing module BabelInit from the definition document Babel.odc *)
+	
+	IMPORT
+		
+		Dialog, Files, Stores, TextMappers, TextModels, TextViews, Views;
+
+	TYPE
+		
+		String = POINTER TO ARRAY OF CHAR;
+		
+		(* Definitions for the lexical analyzer *)
+		
+		TokLex = RECORD (* A token *)
+			nom: String;
+			utile,
+			valUt: BOOLEAN;
+		END;
+		
+		ToksLex = POINTER TO ARRAY OF TokLex;
+		
+		GotoLex = POINTER TO ABSTRACT RECORD
+			goto: INTEGER;
+		END;
+		
+		GotoLexC = POINTER TO RECORD (GotoLex)
+			premCar,
+			derCar: CHAR;
+		END;
+		
+		GotoLexT = POINTER TO RECORD (GotoLex)
+			transit: INTEGER;
+		END;
+		
+		TransLex = POINTER TO ARRAY OF GotoLex;
+		
+		Card = POINTER TO ARRAY OF INTEGER;
+		
+		EtatLex = RECORD
+			recon,
+			nbTrans,
+			nbEps: INTEGER;
+			transL: TransLex;
+		END;
+		
+		EtatsLex = POINTER TO ARRAY OF EtatLex;
+		
+	(* Definitions for the parser *)
+	
+	CONST
+		
+		deplaceS = 0;
+		reduitS = 1;
+		accepteS = 2;
+		erreurS = 3;
+	
+	TYPE
+		
+		ActionS = RECORD
+			quoi: BYTE;
+			premTerm,
+			derTerm,
+			aux: INTEGER;
+		END;
+		
+		ActSynt = POINTER TO ARRAY OF ActionS;
+		
+		ActionSynt = RECORD
+			nbT: INTEGER;
+			actions: ActSynt;
+		END;
+		
+		ActionsSynt = POINTER TO ARRAY OF ActionSynt;
+		
+		GtS = RECORD
+			depart,
+			arrivee: INTEGER;
+		END;
+		
+		GotoS = POINTER TO ARRAY OF GtS;
+		
+		GotoSynt = RECORD
+			nbAtts: INTEGER;
+			typsAt: Card;
+			nbE: INTEGER;
+			gotos: GotoS;
+		END;
+		
+		GotosSynt = POINTER TO ARRAY OF GotoSynt;
+		
+		(* Definitions for the semantic analyser *)
+		
+		Param = RECORD
+			profD,
+			attD: INTEGER;
+		END;
+		
+		Params = POINTER TO ARRAY OF Param;
+		
+		ActionSem = RECORD
+			sOrH: BOOLEAN;
+			profG,
+			attG,
+			fonc,
+			nbPars: INTEGER;
+			pars: Params;
+		END;
+		
+		ActionsSem = POINTER TO ARRAY OF ActionSem;
+		
+		RegleSynt = RECORD
+			longueur,
+			nonTerm,
+			nbAct: INTEGER;
+			act: ActionsSem;
+		END;
+		
+		ReglesSynt = POINTER TO ARRAY OF RegleSynt;
+		
+		RecEtat = RECORD
+			etatDep,
+			nTGoto: INTEGER;
+		END;
+		
+		RecEtats = POINTER TO ARRAY OF RecEtat;
+		
+		RecTerm = RECORD
+			numTerm,
+			nbEtats: INTEGER;
+			recEtat: RecEtats;
+		END;
+		
+		RecTerms = POINTER TO ARRAY OF RecTerm;
+		
+		Compilateur = POINTER TO RECORD (* A compiler *)
+			nbToksLex: INTEGER;
+			toksLex: ToksLex;
+			nbEtatsLex,
+			profEtatsL: INTEGER;
+			etatsLex: EtatsLex;
+			nbEtatsCom,
+			profEtatsC: INTEGER;
+			etatsCom: EtatsLex;
+			nbEtatsSynt: INTEGER;
+			actionSynt: ActionsSynt;
+			nbNonTSynt: INTEGER;
+			gotoSynt: GotosSynt;
+			nbRegleSynt: INTEGER;
+			regleSynt: ReglesSynt;
+			nbRecTerms: INTEGER;
+			recTerms: RecTerms;
+		END;
+	
+	PROCEDURE LisCompilateur (f: Files.File): Compilateur;
+		
+		(* Reading of compiler tables in the f '.tbl' file *)
+		
+		CONST
+			
+			eOS = 0X;
+		
+		VAR
+			
+			rd: Stores.Reader;
+			c: Compilateur;
+			t: ToksLex;
+			a: ActSynt;
+			ca: Card;
+			g: GotoS;
+			aS: ActionsSem;
+			p: Params;
+			r: RecEtats;
+			i, j, m, k: INTEGER;
+		
+		PROCEDURE ReadInt (OUT i: INTEGER);
+			
+			BEGIN (*ReadInt*)
+				rd.ReadInt(i);
+			END ReadInt;
+		
+		PROCEDURE ReadByte (OUT b: BYTE);
+			
+			VAR
+				
+				i: INTEGER;
+			
+			BEGIN (*ReadByte*)
+				ReadInt(i);
+				b := SHORT(SHORT(i));
+			END ReadByte;
+		
+		PROCEDURE ReadBool (OUT b: BOOLEAN);
+			
+			VAR
+				
+				i: INTEGER;
+			
+			BEGIN (*ReadBool*)
+				ReadInt(i);
+				ASSERT((i = 0) OR (i = 1));
+				b := i = 1;
+			END ReadBool;
+		
+		PROCEDURE ReadChar (OUT c: CHAR);
+			
+			VAR
+				
+				i: INTEGER;
+			
+			BEGIN (*ReadChar*)
+				ReadInt(i);
+				c := CHR(i);
+			END ReadChar;
+	
+	PROCEDURE ReadString (OUT s: ARRAY OF CHAR);
+		
+		VAR
+			
+			n: INTEGER;
+			c: CHAR;
+		
+		BEGIN (*ReadString*)
+			n := 0;
+			ReadChar(c);
+			WHILE c # eOS DO
+				s[n] := c;
+				INC(n);
+				ReadChar(c);
+			END;
+		END ReadString;
+	
+		PROCEDURE LisEtatsRedLex (nE: INTEGER; OUT eL: EtatsLex);
+			
+			VAR
+				
+				i, j: INTEGER;
+				t: TransLex;
+				gC: GotoLexC;
+				gT: GotoLexT;
+			
+			BEGIN (*LisEtatsRedLex*)
+				NEW(eL, nE);
+				FOR i := 0 TO nE-1 DO
+					ReadInt(eL[i].recon);
+					ReadInt(eL[i].nbTrans);
+					ReadInt(eL[i].nbEps);
+				END;
+				FOR i := 0 TO nE-1 DO
+					IF eL[i].nbTrans > 0 THEN
+						NEW(t, eL[i].nbTrans);
+						FOR j := 0 TO eL[i].nbEps - 1 DO
+							NEW(gT);
+							ReadInt(gT.goto);
+							ReadInt(gT.transit);
+							t[j] := gT;
+						END;
+						FOR j := eL[i].nbEps TO eL[i].nbTrans - 1 DO
+							NEW(gC);
+							ReadInt(gC.goto);
+							ReadChar(gC.premCar);
+							ReadChar(gC.derCar);
+							t[j] := gC;
+						END;
+						eL[i].transL := t;
+					END;
+				END;
+			END LisEtatsRedLex;
+		
+		BEGIN (*LisCompilateur*)
+			ASSERT(f # NIL);
+			rd.ConnectTo(f);
+			NEW(c);
+			ReadInt(c.nbToksLex);
+			ReadInt(c.nbEtatsLex);
+			ReadInt(c.profEtatsL);
+			ReadInt(c.nbEtatsCom);
+			ReadInt(c.profEtatsC);
+			ReadInt(c.nbEtatsSynt);
+			ReadInt(c.nbNonTSynt);
+			ReadInt(c.nbRegleSynt);
+			ReadInt(c.nbRecTerms);
+			NEW(t, c.nbToksLex);
+			FOR i := 0 TO c.nbToksLex - 1 DO
+				ReadBool(t[i].utile);
+				ReadBool(t[i].valUt);
+			END;
+			FOR i := 0 TO c.nbToksLex - 1 DO
+				ReadInt(k);
+				IF k # 0 THEN
+					NEW(t[i].nom, k);
+					ReadString(t[i].nom);
+				END;
+			END;
+			c.toksLex := t;
+			LisEtatsRedLex(c.nbEtatsLex, c.etatsLex);
+			LisEtatsRedLex(c.nbEtatsCom, c.etatsCom);
+			NEW(c.actionSynt, c.nbEtatsSynt);
+			FOR i := 0 TO c.nbEtatsSynt - 1 DO
+				ReadInt(c.actionSynt[i].nbT);
+			END;
+			FOR i := 0 TO c.nbEtatsSynt - 1 DO
+				NEW(a, c.actionSynt[i].nbT);
+				FOR j := 0 TO c.actionSynt[i].nbT - 1 DO
+					ReadByte(a[j].quoi);
+					ReadInt(a[j].premTerm);
+					ReadInt(a[j].derTerm);
+					ReadInt(a[j].aux);
+				END;
+				c.actionSynt[i].actions := a;
+			END;
+			NEW(c.gotoSynt, c.nbNonTSynt);
+			FOR i := 0 TO c.nbNonTSynt - 1 DO
+				ReadInt(c.gotoSynt[i].nbAtts);
+				ReadInt(c.gotoSynt[i].nbE);
+			END;
+			FOR i := 0 TO c.nbNonTSynt - 1 DO
+				IF c.gotoSynt[i].nbAtts > 0 THEN
+					NEW(ca, c.gotoSynt[i].nbAtts);
+					FOR j := 0 TO c.gotoSynt[i].nbAtts - 1 DO
+						ReadInt(ca[j]);
+					END;
+					c.gotoSynt[i].typsAt := ca;
+				END;
+				IF c.gotoSynt[i].nbE > 0 THEN
+					NEW(g, c.gotoSynt[i].nbE);
+					FOR j := 0 TO c.gotoSynt[i].nbE-1 DO
+						ReadInt(g[j].depart);
+						ReadInt(g[j].arrivee);
+					END;
+					c.gotoSynt[i].gotos := g;
+				END;
+			END;
+			NEW(c.regleSynt, c.nbRegleSynt);
+			FOR i := 0 TO c.nbRegleSynt - 1 DO
+				ReadInt(c.regleSynt[i].longueur);
+				ReadInt(c.regleSynt[i].nonTerm);
+				ReadInt(c.regleSynt[i].nbAct);
+			END;
+			FOR i := 0 TO c.nbRegleSynt - 1 DO
+				IF c.regleSynt[i].nbAct > 0 THEN
+					NEW(aS, c.regleSynt[i].nbAct);
+					FOR j := 0 TO c.regleSynt[i].nbAct - 1 DO
+						ReadBool(aS[j].sOrH);
+						ReadInt(aS[j].profG);
+						ReadInt(aS[j].attG);
+						ReadInt(aS[j].fonc);
+						ReadInt(aS[j].nbPars);
+					END;
+					FOR j := 0 TO c.regleSynt[i].nbAct - 1 DO
+						IF aS[j].nbPars > 0 THEN
+							NEW(p, aS[j].nbPars);
+							FOR m := 0 TO aS[j].nbPars - 1 DO
+								ReadInt(p[m].profD);
+								ReadInt(p[m].attD);
+							END;
+							aS[j].pars := p;
+						END;
+					END;
+					c.regleSynt[i].act := aS;
+				END;
+			END;
+			IF c.nbRecTerms > 0 THEN
+				NEW(c.recTerms, c.nbRecTerms);
+				FOR i := 0 TO c.nbRecTerms - 1 DO
+					ReadInt(c.recTerms[i].numTerm);
+					ReadInt(c.recTerms[i].nbEtats);
+				END;
+				FOR i := 0 TO c.nbRecTerms - 1 DO
+					NEW(r, c.recTerms[i].nbEtats);
+					FOR j := 0 TO c.recTerms[i].nbEtats - 1 DO
+						ReadInt(r[j].etatDep);
+						ReadInt(r[j].nTGoto);
+					END;
+					c.recTerms[i].recEtat := r;
+				END;
+			END;
+			RETURN c;
+		END LisCompilateur;
+	
+	PROCEDURE Sortie (c: Compilateur; VAR f: TextMappers.Formatter);
+		
+		CONST
+			
+			taLigne = 5;
+			taIndex = 4;
+			taVal = 5;
+		
+		VAR
+			
+			t: ToksLex;
+			a: ActSynt;
+			ca: Card;
+			g: GotoS;
+			aS: ActionsSem;
+			p: Params;
+			r: RecEtats;
+			i, j, k: INTEGER;
+			
+			pos: INTEGER;
+		
+		PROCEDURE BinInt (i: INTEGER);
+			
+			BEGIN (*BinInt*)
+				f.WriteString('a['); f.WriteIntForm(pos, 10, taIndex, ' ', FALSE); f.WriteString(']:= ');
+				f.WriteIntForm(i, 10, taVal, ' ', FALSE); f.WriteString('; ');
+				INC(pos);
+				IF pos MOD taLigne = 0 THEN
+					f.WriteLn;
+				END;
+			END BinInt;
+		
+		PROCEDURE BinByte (b: BYTE);
+			
+			BEGIN (*BinByte*)
+				BinInt(b);
+			END BinByte;
+		
+		PROCEDURE BinBool (b: BOOLEAN);
+			
+			BEGIN (*BinBool*)
+				IF b THEN
+					BinInt(1);
+				ELSE
+					BinInt(0);
+				END;
+			END BinBool;
+		
+		PROCEDURE BinChar (c: CHAR);
+			
+			BEGIN (*BinChar*)
+				BinInt(ORD(c));
+			END BinChar;
+		
+		PROCEDURE BinStr (IN s: ARRAY OF CHAR);
+			
+			VAR
+				
+				i: INTEGER;
+			
+			BEGIN (*BinStr*)
+				FOR i := 0 TO LEN(s$) DO
+					BinChar(s[i]);
+				END;
+			END BinStr;
+		
+		PROCEDURE EcrisEtatsRedLex (nE: INTEGER; eL: EtatsLex);
+			
+			VAR
+				
+				i, j: INTEGER;
+				t: TransLex;
+			
+			BEGIN (*EcrisEtatsRedLex*)
+				FOR i := 0 TO nE-1 DO
+					BinInt(eL[i].recon);
+					BinInt(eL[i].nbTrans);
+					BinInt(eL[i].nbEps);
+				END;
+				FOR i := 0 TO nE-1 DO
+					t := eL[i].transL;
+					FOR j := 0 TO eL[i].nbEps - 1 DO
+						BinInt(t[j].goto);
+						BinInt(t[j](GotoLexT).transit);
+					END;
+					FOR j := eL[i].nbEps TO eL[i].nbTrans - 1 DO
+						BinInt(t[j].goto);
+						BinChar(t[j](GotoLexC).premCar);
+						BinChar(t[j](GotoLexC).derCar);
+					END;
+				END;
+			END EcrisEtatsRedLex;
+		
+		BEGIN (*Sortie*)
+			pos := 0;
+			BinInt(c.nbToksLex);
+			BinInt(c.nbEtatsLex);
+			BinInt(c.profEtatsL);
+			BinInt(c.nbEtatsCom);
+			BinInt(c.profEtatsC);
+			BinInt(c.nbEtatsSynt);
+			BinInt(c.nbNonTSynt);
+			BinInt(c.nbRegleSynt);
+			BinInt(c.nbRecTerms);
+			t := c.toksLex;
+			FOR i := 0 TO c.nbToksLex - 1 DO
+				BinBool(t[i].utile);
+				BinBool(t[i].valUt);
+			END;
+			FOR i := 0 TO c.nbToksLex - 1 DO
+				IF t[i].nom = NIL THEN
+					k := 0;
+				ELSE
+					k := LEN(t[i].nom);
+				END;
+				BinInt(k);
+				IF k # 0 THEN
+					BinStr(t[i].nom);
+				END;
+			END;
+			EcrisEtatsRedLex(c.nbEtatsLex, c.etatsLex);
+			EcrisEtatsRedLex(c.nbEtatsCom, c.etatsCom);
+			FOR i := 0 TO c.nbEtatsSynt - 1 DO
+				BinInt(c.actionSynt[i].nbT);
+			END;
+			FOR i := 0 TO c.nbEtatsSynt - 1 DO
+				a := c.actionSynt[i].actions;
+				FOR j := 0 TO c.actionSynt[i].nbT - 1 DO
+					BinByte(a[j].quoi);
+					BinInt(a[j].premTerm);
+					BinInt(a[j].derTerm);
+					BinInt(a[j].aux);
+				END;
+			END;
+			FOR i := 0 TO c.nbNonTSynt - 1 DO
+				BinInt(c.gotoSynt[i].nbAtts);
+				BinInt(c.gotoSynt[i].nbE);
+			END;
+			FOR i := 0 TO c.nbNonTSynt - 1 DO
+				IF c.gotoSynt[i].nbAtts > 0 THEN
+					ca := c.gotoSynt[i].typsAt;
+					FOR j := 0 TO c.gotoSynt[i].nbAtts - 1 DO
+						BinInt(ca[j]);
+					END;
+				END;
+				IF c.gotoSynt[i].nbE > 0 THEN
+					g := c.gotoSynt[i].gotos;
+					FOR j := 0 TO c.gotoSynt[i].nbE- 1 DO
+						BinInt(g[j].depart);
+						BinInt(g[j].arrivee);
+					END;
+				END;
+			END;
+			FOR i := 0 TO c.nbRegleSynt - 1 DO
+				BinInt(c.regleSynt[i].longueur);
+				BinInt(c.regleSynt[i].nonTerm);
+				BinInt(c.regleSynt[i].nbAct);
+			END;
+			FOR i := 0 TO c.nbRegleSynt - 1 DO
+				IF c.regleSynt[i].nbAct > 0 THEN
+					aS := c.regleSynt[i].act;
+					FOR j := 0 TO c.regleSynt[i].nbAct - 1 DO
+						BinBool(aS[j].sOrH);
+						BinInt(aS[j].profG);
+						BinInt(aS[j].attG);
+						BinInt(aS[j].fonc);
+						BinInt(aS[j].nbPars);
+					END;
+					FOR j := 0 TO c.regleSynt[i].nbAct - 1 DO
+						IF aS[j].nbPars > 0 THEN
+							p := aS[j].pars;
+							FOR k := 0 TO aS[j].nbPars - 1 DO
+								BinInt(p[k].profD);
+								BinInt(p[k].attD);
+							END;
+						END;
+					END;
+				END;
+			END;
+			FOR i := 0 TO c.nbRecTerms - 1 DO
+				BinInt(c.recTerms[i].numTerm);
+				BinInt(c.recTerms[i].nbEtats);
+			END;
+			FOR i := 0 TO c.nbRecTerms - 1 DO
+				r := c.recTerms[i].recEtat;
+				FOR j := 0 TO c.recTerms[i].nbEtats - 1 DO
+					BinInt(r[j].etatDep);
+					BinInt(r[j].nTGoto);
+				END;
+			END;
+			f.WriteLn; f.WriteLn;
+			f.WriteInt(pos);
+			f.WriteLn;
+		END Sortie;
+	
+	PROCEDURE Do*;
+		
+		VAR
+			
+			loc: Files.Locator;
+			name: Files.Name;
+			fi: Files.File;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			v: TextViews.View;
+			c: Compilateur;
+		
+		BEGIN (*Do*)
+			Dialog.GetIntSpec('tbl', loc, name);
+			IF loc # NIL THEN
+				fi := Files.dir.Old(loc, name, Files.shared);
+				IF fi # NIL THEN
+					c := LisCompilateur(fi);
+					t := TextModels.dir.New();
+					f.ConnectTo(t);
+					Sortie(c, f);
+					v := TextViews.dir.New(t);
+					Views.OpenView(v);
+				END;
+			END;
+		END Do;
+
+	END BabelBinText.
+
+BabelBinText.Do;

@@ -1,0 +1,423 @@
+(* 
+Babel: a compiler compiler.
+
+Copyright (C) 2001 Gérard Meunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+*)
+
+MODULE BabelCars;
+	
+	(**)
+	
+	(* The module BabelCars, is a part of the Babel subsystem, a compiler compiler. It implements the type CarEns, an efficient set of characters used in modules BabelLexique and BabelAnaSem. *)
+	
+	CONST
+		
+		cMin = ORD(MIN(CHAR));
+		cMax = ORD(MAX(CHAR));
+		
+		taCars = cMax - cMin + 1;
+	
+	TYPE
+		
+		Doublet = ARRAY 2 OF INTEGER;
+		
+		Segment = POINTER TO RECORD
+			suivant,
+			precedent: Segment;
+			largeurs: Doublet;
+		END;
+		
+		CarEns* = POINTER TO LIMITED RECORD
+			nbCars-, pos: INTEGER;
+			cars, cour: Segment;
+		END;
+		
+		TableVer = ARRAY 2, 2 OF BYTE;
+
+	PROCEDURE InsereSegment (apresSeg: Segment; plein, vide: INTEGER);
+		
+		VAR
+			
+			s: Segment;
+		
+		BEGIN (*InsereSegment*)
+			NEW(s);
+			s.suivant := apresSeg.suivant;
+			s.precedent := apresSeg;
+			s.largeurs[1] := plein;
+			s.largeurs[0] := vide;
+			apresSeg.suivant.precedent := s;
+			apresSeg.suivant := s;
+		END InsereSegment;
+	
+	PROCEDURE (e: CarEns) Empty, NEW;
+		
+		BEGIN (*Empty*)
+			e.nbCars := 0;
+			e.cars.largeurs[0] := taCars;
+			e.cars.suivant := e.cars;
+			e.cars.precedent := e.cars;
+			e.cour := NIL;
+		END Empty;
+
+	PROCEDURE NewCarEns* (OUT e: CarEns);
+		
+		BEGIN (*NewCarEns*)
+			NEW(e);
+			NEW(e.cars);
+			e.Empty;
+		END NewCarEns;
+	
+	PROCEDURE (e: CarEns) Full*, NEW;
+		
+		BEGIN (*Full*)
+			e.Empty;
+			e.nbCars := taCars;
+			e.cars.largeurs[0] := 0;
+			InsereSegment(e.cars, taCars, 0);
+		END Full;
+
+	PROCEDURE (e: CarEns) Interval* (min, max: INTEGER), NEW;
+
+		BEGIN (*Interval*)
+			ASSERT((min >= cMin) & (min <= cMax) & (max >= cMin) & (max <= cMax), 20);
+			e.Empty;
+			IF min <= max THEN
+				e.nbCars := max - min + 1;
+				e.cars.largeurs[0] := min;
+				InsereSegment(e.cars, e.nbCars, taCars - max - 1);
+			END;
+		END Interval;
+	
+	PROCEDURE (e: CarEns) IsEmpty* (): BOOLEAN, NEW;
+
+		BEGIN (*IsEmpty*)
+			RETURN e.cars.suivant = e.cars;
+		END IsEmpty;
+
+	PROCEDURE (e: CarEns) Copy* (src: CarEns), NEW;
+
+		VAR
+
+			p: Segment;
+
+		BEGIN (*Copy*)
+			e.Empty();
+			e.nbCars := src.nbCars;
+			e.cars.largeurs[0] := src.cars.largeurs[0];
+			p := src.cars.suivant;
+			WHILE p # src.cars DO
+				InsereSegment(e.cars.precedent, p.largeurs[1], p.largeurs[0]);
+				p := p.suivant;
+			END;
+		END Copy;
+	
+	PROCEDURE (e: CarEns) Melange (src1, src2: CarEns; IN combi: TableVer), NEW;
+		
+		VAR
+			
+			sup1, sup2: BOOLEAN;
+		
+		PROCEDURE Combine (c1, c2, c: Segment);
+			
+			VAR
+				
+				s1, s2: Segment;
+				fin: BOOLEAN;
+				plein1, plein2, plein3,
+				h1, h2, h3, long, larg: INTEGER;
+			
+			BEGIN (*Combine*)
+				s1 := c1; plein1 := 0;
+				s2 := c2; plein2 := 0;
+				plein3 := 0;
+				fin := FALSE;
+				h1 := 0; h2 := 0; h3 := 0;
+				larg := 0;
+				LOOP
+					IF (combi[plein1, plein2] = plein3) & ~fin THEN
+						long := MIN(h1 + s1.largeurs[plein1], h2 + s2.largeurs[plein2]);
+						IF h1 + s1.largeurs[plein1] = long THEN
+							h1 := long;
+							plein1 := 1 - plein1;
+							IF plein1 # 0 THEN
+								s1 := s1.suivant;
+								fin := s1 = c1;
+							END;
+						END;
+						IF h2 + s2.largeurs[plein2] = long THEN
+							h2 := long;
+							plein2 := 1 - plein2;
+							IF plein2 # 0 THEN
+								s2 := s2.suivant;
+								fin := s2 = c2;
+							END;
+						END;
+						INC(larg, long - h3);
+						h3 := long;
+					ELSE
+						IF plein3 = 0 THEN
+							c.precedent.largeurs[plein3] := larg;
+						ELSE
+							InsereSegment(c.precedent, larg, 0);
+							INC(e.nbCars, larg);
+						END;
+						larg := 0;
+						IF fin THEN
+							EXIT;
+						END;
+						plein3 := 1 - plein3;
+					END;
+				END;
+			END Combine;
+		
+		BEGIN (*Melange*)
+			sup1 := e = src1;
+			sup2 := e = src2;
+			IF sup1 OR sup2 THEN
+				NewCarEns(e);
+			ELSE
+				e.Empty;
+			END;
+			Combine(src1.cars, src2.cars, e.cars);
+			IF sup1 THEN
+				src1.nbCars := e.nbCars;
+				src1.cars := e.cars;
+				src1.cour := NIL;
+			ELSIF sup2 THEN
+				src2.nbCars := e.nbCars;
+				src2.cars := e.cars;
+				src2.cour := NIL;
+			END;
+		END Melange;
+
+	PROCEDURE (e: CarEns) Union* (src1, src2: CarEns), NEW;
+		
+		VAR
+			
+			verite: TableVer;
+		
+		BEGIN (*Union*)
+			IF src1.IsEmpty() THEN
+				IF src2 # e THEN
+					e.Copy(src2);
+				END;
+			ELSIF src2.IsEmpty() THEN
+				IF src1 # e THEN
+					e.Copy(src1);
+				END;
+			ELSE
+				verite[0, 0] := 0;
+				verite[0, 1] := 1;
+				verite[1, 0] := 1;
+				verite[1, 1] := 1;
+				e.Melange(src1, src2, verite);
+			END;
+		END Union;
+
+	PROCEDURE (e: CarEns) Inter* (src1, src2: CarEns), NEW;
+		
+		VAR
+			
+			verite: TableVer;
+		
+		BEGIN (*Inter*)
+			IF src1.IsEmpty() OR src2.IsEmpty() THEN
+				e.Empty;
+			ELSE
+				verite[0, 0] := 0;
+				verite[0, 1] := 0;
+				verite[1, 0] := 0;
+				verite[1, 1] := 1;
+				e.Melange(src1, src2, verite);
+			END;
+		END Inter;
+
+	PROCEDURE (e: CarEns) Diff* (src1, src2: CarEns), NEW;
+		
+		VAR
+			
+			verite: TableVer;
+		
+		BEGIN (*Diff*)
+			IF src1.IsEmpty() THEN
+				e.Empty;
+			ELSIF src2.IsEmpty() THEN
+				IF src1 # e THEN
+					e.Copy(src1);
+				END;
+			ELSE
+				verite[0, 0] := 0;
+				verite[0, 1] := 0;
+				verite[1, 0] := 1;
+				verite[1, 1] := 0;
+				e.Melange(src1, src2, verite);
+			END;
+		END Diff;
+
+	PROCEDURE (e: CarEns) XOR (src1, src2: CarEns), NEW;
+		
+		VAR
+			
+			verite: TableVer;
+		
+		BEGIN (*XOR*)
+			IF src1.IsEmpty() THEN
+				IF src2 # e THEN
+					e.Copy(src2);
+				END;
+			ELSIF src2.IsEmpty() THEN
+				IF src1 # e THEN
+					e.Copy(src1);
+				END;
+			ELSE
+				verite[0, 0] := 0;
+				verite[0, 1] := 1;
+				verite[1, 0] := 1;
+				verite[1, 1] := 0;
+				e.Melange(src1, src2, verite);
+			END;
+		END XOR;
+	
+	PROCEDURE (e: CarEns) Incl* (c: INTEGER), NEW;
+		
+		VAR
+			
+			ee: CarEns;
+		
+		BEGIN (*Incl*)
+			NewCarEns(ee);
+			ee.Interval(c, c);
+			e.Union(e, ee);
+		END Incl;
+	
+	PROCEDURE (e: CarEns) Small* (s: SET), NEW;
+		
+		VAR
+			
+			c: INTEGER;
+		
+		BEGIN (*Small*)
+			e.Empty;
+			FOR c := MIN(SET) TO MAX(SET) DO
+				IF c IN s THEN
+					e.Incl(c);
+				END;
+			END;
+		END Small;
+	
+	PROCEDURE (e: CarEns) In* (c: INTEGER): BOOLEAN, NEW;
+
+		VAR
+			
+			s: Segment;
+			plein: INTEGER;
+		
+		BEGIN (*In*)
+			ASSERT((c >= cMin) & (c <= cMax), 20);
+			s := e.cars;
+			plein := 0;
+			LOOP
+				IF c < s.largeurs[plein] THEN
+					RETURN plein # 0;
+				ELSE
+					DEC(c, s.largeurs[plein]);
+				END;
+				plein := 1 - plein;
+				IF plein # 0 THEN
+					s := s.suivant;
+				END;
+			END;
+		END In;
+	
+	PROCEDURE (e1: CarEns) Equal* (e2: CarEns): BOOLEAN, NEW;
+		
+		VAR
+			
+			e: CarEns;
+		
+		BEGIN (*Equal*)
+			NewCarEns(e);
+			e.XOR(e1, e2);
+			RETURN e.IsEmpty();
+		END Equal;
+	
+	PROCEDURE (e: CarEns) NextChar* (VAR c: INTEGER): BOOLEAN, NEW;
+		
+		VAR
+			
+			ancC, h: INTEGER;
+			s, t: Segment;
+		
+		BEGIN (*NextChar*)
+			IF e.IsEmpty() THEN
+				RETURN FALSE;
+			END;
+			ancC := c;
+			IF c < cMin THEN
+				c := cMin;
+			ELSE
+				INC(c);
+			END;
+			IF c > cMax THEN
+				c := ancC;
+				RETURN FALSE;
+			END;
+			s := e.cars;
+			t := s;
+			h := cMin;
+			LOOP
+				INC(h, s.largeurs[0]);
+				s := s.suivant;
+				IF s = t THEN
+					EXIT;
+				END;
+				IF c < h + s.largeurs[1] THEN
+					IF c < h THEN
+						c := h;
+					END;
+					EXIT;
+				END;
+				INC(h, s.largeurs[1]);
+			END;
+			IF s = t THEN
+				c := ancC;
+			END;
+			RETURN s # t;
+		END NextChar;
+	
+	PROCEDURE (e: CarEns) First* (OUT min, max: INTEGER): BOOLEAN, NEW;
+		
+		BEGIN (*First*)
+			IF e.IsEmpty() THEN
+				RETURN FALSE;
+			END;
+			e.cour := e.cars.suivant;
+			e.pos := cMin + e.cars.largeurs[0];
+			min := e.pos;
+			max := min + e.cour.largeurs[1] - 1;
+			RETURN TRUE;
+		END First;
+	
+	PROCEDURE (e: CarEns) Next* (OUT min, max: INTEGER): BOOLEAN, NEW;
+		
+		BEGIN (*Next*)
+			ASSERT(e.cour # NIL, 20);
+			e.pos := e.pos + e.cour.largeurs[1] + e.cour.largeurs[0];
+			e.cour := e.cour.suivant;
+			IF e.cour = e.cars THEN
+				e.cour := NIL;
+				RETURN FALSE;
+			END;
+			min := e.pos;
+			max := min + e.cour.largeurs[1] - 1;
+			RETURN TRUE;
+		END Next;
+	
+	END BabelCars.
