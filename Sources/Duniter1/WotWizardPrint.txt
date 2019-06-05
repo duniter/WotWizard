@@ -1,0 +1,477 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1WotWizardPrint;
+	
+	
+
+	IMPORT
+		
+		BA := Duniter1BasicPrint, GS := Duniter1GQLSender, Dialog, Math, Strings, TextMappers, TextModels, TextViews, J := UtilJson, Views;
+	
+	CONST
+		
+		waitDelay = 100;
+		
+		wwShowFileJson = "WWShowFile";
+		wwPermutationsJson = "WWPermutations";
+		
+		fileA = 0;
+		permA = 1;
+	
+	TYPE
+		
+		 Action = POINTER TO RECORD (BA.WaitFor)
+			what: INTEGER;
+		END;
+		
+		Cert* = RECORD
+			from*: BA.String;
+			ok*: BOOLEAN;
+			date*,
+			limit*: LONGINT;
+		END;
+		
+		Certs* = POINTER TO ARRAY OF Cert;
+
+		Certif* = POINTER TO RECORD
+			from*,
+			to*: BA.String;
+			ok*: BOOLEAN;
+			date*,
+			limit*: LONGINT;
+		END;
+
+		Dossier* = POINTER TO RECORD
+			newcomer*: BA.String;
+			main_certifs*: INTEGER;
+			proportion_of_sentries*: REAL;
+			ok*: BOOLEAN;
+			date*,
+			limit*: LONGINT;
+			certifs*: Certs;
+		END;
+		
+		CertOrDoss* = RECORD 
+			certif*: Certif;
+			dossier*: Dossier;
+		END;
+		
+		File* = POINTER TO ARRAY OF CertOrDoss;
+		
+		Meta* = POINTER TO RECORD
+			file*: File;
+			block*: INTEGER;
+			now*: LONGINT;
+		END;
+		
+		PerCent = ARRAY 5 OF CHAR;
+		
+		CCert = RECORD
+			from: BA.String;
+			date,
+			limit: BA.DateTime;
+			ok: BOOLEAN;
+		END;
+		
+		CCerts = POINTER TO ARRAY OF CCert;
+
+		CCertif = POINTER TO RECORD (CCertOrDoss)
+			from,
+			to: BA.String;
+		END;
+
+		CDossier = POINTER TO RECORD (CCertOrDoss)
+			newcomer: BA.String;
+			main_certifs: INTEGER;
+			proportion_of_sentries: PerCent;
+			certifs: CCerts;
+		END;
+		
+		CCertOrDoss = POINTER TO ABSTRACT RECORD 
+			date,
+			limit: BA.DateTime;
+			ok: BOOLEAN;
+		END;
+		
+		CFile = POINTER TO ARRAY OF CCertOrDoss;
+		
+		CMeta = POINTER TO RECORD
+			file: CFile;
+			block: INTEGER;
+			now: BA.DateTime;
+		END;
+		
+		Propagation* = RECORD
+			id*: BA.String;
+			date*: LONGINT;
+			after*: BOOLEAN;
+		END;
+		
+		Propagations* = POINTER TO ARRAY OF Propagation;
+		
+		Perm* = RECORD
+			proba*: REAL;
+			permutation*: Propagations;
+		END;
+		
+		Perms* = POINTER TO ARRAY OF Perm;
+		
+		Permut* = POINTER TO RECORD
+			permutations*: Perms;
+			block*: INTEGER;
+			now*: LONGINT;
+		END;
+	
+	VAR
+		
+		globalMeta*: Meta;
+		globalPerm*: Permut;
+	
+	PROCEDURE ConvertMeta (m: Meta; OUT cM: CMeta);
+		
+		PROCEDURE ConvertFile (f: File; OUT cF: CFile);
+			
+			VAR
+				
+				i: INTEGER;
+			
+			PROCEDURE ConvertCertOrDoss (IN cd: CertOrDoss; OUT cCd: CCertOrDoss);
+				
+				VAR
+					
+					c: CCertif;
+					d: CDossier;
+				
+				PROCEDURE ConvertCerts (c: Certs; OUT cc: CCerts);
+					
+					VAR
+						
+						i: INTEGER;
+					
+					PROCEDURE ConvertCert (IN c: Cert; OUT cc: CCert);
+						
+						BEGIN (*ConvertCert*)
+							cc.from := c.from;
+							BA.TimestampToString(c.date, cc.date);
+							BA.TimestampToString(c.limit, cc.limit);
+							cc.ok := c.ok;
+						END ConvertCert;
+					
+					BEGIN (*ConvertCerts*)
+						IF c = NIL THEN
+							cc := NIL;
+						ELSE
+							NEW(cc, LEN(c));
+							FOR i := 0 TO LEN(c) - 1 DO
+								ConvertCert(c[i], cc[i]);
+							END ;
+						END;
+					END ConvertCerts;
+				
+				BEGIN (*ConvertCertOrDoss*)
+					IF cd.certif = NIL THEN ASSERT(cd.dossier # NIL, 100);
+						NEW(d);
+						d.newcomer := cd.dossier.newcomer;
+						d.main_certifs := cd.dossier.main_certifs;
+						Strings.IntToString(SHORT(ENTIER(100 * cd.dossier.proportion_of_sentries)), d.proportion_of_sentries);
+						d.proportion_of_sentries := d.proportion_of_sentries + "%";
+						d.ok := cd.dossier.ok;
+						BA.TimestampToString(cd.dossier.date, d.date);
+						BA.TimestampToString(cd.dossier.limit, d.limit);
+						ConvertCerts(cd.dossier.certifs, d.certifs);
+						cCd := d;
+					ELSE ASSERT(cd.dossier = NIL, 101);
+						NEW(c);
+						c.from := cd.certif.from;
+						c.to := cd.certif.to;
+						c.ok := cd.certif.ok;
+						BA.TimestampToString(cd.certif.date, c.date);
+						BA.TimestampToString(cd.certif.limit, c.limit);
+						cCd := c;
+					END;
+				END ConvertCertOrDoss;
+			
+			BEGIN (*ConvertFile*)
+				IF f = NIL THEN
+					cF := NIL;
+				ELSE
+					NEW(cF, LEN(f));
+					FOR i := 0 TO LEN(f) - 1 DO
+						ConvertCertOrDoss(f[i], cF[i]);
+					END;
+				END;
+			END ConvertFile;
+		
+		BEGIN (*ConvertMeta*)
+			NEW(cM);
+			ConvertFile(m.file, cM.file);
+			cM.block := m.block;
+			BA.TimestampToString(m.now, cM.now);
+		END ConvertMeta;
+	
+	(* Print f with fo, starting at the element of rank i0; if withNow, the output begins with the printing of the current date *)
+	PROCEDURE PrintFile (f: CFile; block: INTEGER; now: BA.DateTime);
+		
+		VAR
+			
+			t: TextModels.Model;
+			fo: TextMappers.Formatter;
+			s: Views.Title;
+			i: INTEGER;
+		
+		PROCEDURE PrintCertOrDoss (cd: CCertOrDoss);
+			
+			(* Print c with fo *)
+			PROCEDURE PrintCertif (c: CCertif);
+				
+				BEGIN (*PrintCertif*)
+					fo.WriteString("    ");
+					fo.WriteString(c.to); fo.WriteString(" ← ");
+					fo.WriteString(c.from);
+					fo.WriteString(" ");
+					fo.WriteString(c.date);
+					fo.WriteString(" (→ ");
+					fo.WriteString(c.limit);
+					fo.WriteString(")");
+					fo.WriteLn;
+				END PrintCertif;
+			
+			(* Print d with fo *)
+			PROCEDURE PrintDossier (d: CDossier);
+				
+				(* Print c with fo *)
+				PROCEDURE PrintCerts (c: CCerts);
+					
+					VAR
+						
+						i: INTEGER;
+					
+					(* Print c with fo *)
+					PROCEDURE PrintCert (IN c: CCert);
+						
+						BEGIN (*PrintCert*)
+							fo.WriteString("      ");
+							fo.WriteString(c.from);
+							fo.WriteString(" ");
+							fo.WriteString(c.date);
+							fo.WriteString(" (→ ");
+							fo.WriteString(c.limit);
+							fo.WriteString(")");
+							IF c.ok THEN
+								fo.WriteString(" (OK)");
+							ELSE
+								fo.WriteString(" (KO)");
+							END;
+							fo.WriteLn;
+						END PrintCert;
+					
+					BEGIN (*PrintCerts*)
+						IF c # NIL THEN
+							FOR i := 0 TO LEN(c) - 1 DO
+								PrintCert(c[i]);
+							END;
+						END;
+					END PrintCerts;
+				
+				BEGIN (*PrintDossier*)
+					fo.WriteString("    ");
+					fo.WriteInt(d.main_certifs); fo.WriteString(" ");
+					fo.WriteString(d.newcomer);
+					fo.WriteString(" ("); fo.WriteString(d.date);
+					fo.WriteString(") (→ ");
+					fo.WriteString(d.limit);
+					fo.WriteString(") (");
+					fo.WriteString(d.proportion_of_sentries);
+					fo.WriteString(") (");
+					IF d.ok THEN
+						fo.WriteString("OK");
+					ELSE
+						fo.WriteString("KO");
+					END;
+					fo.WriteString(") |");
+					fo.WriteLn;
+					PrintCerts(d.certifs);
+				END PrintDossier;
+			
+			BEGIN (*PrintCertOrDoss*)
+				WITH
+					|cd: CCertif DO
+						PrintCertif(cd);
+					|cd: CDossier DO
+						PrintDossier(cd);
+				END;
+				fo.WriteLn;
+			END PrintCertOrDoss;
+		
+		BEGIN (*PrintFile*)
+			t := TextModels.dir.New();
+			fo.ConnectTo(t);
+			fo.WriteString("    ");
+			fo.WriteMsg("#Duniter1:Block");
+			fo.WriteString(" ");
+			fo.WriteInt(block);
+			fo.WriteLn;
+			fo.WriteString("    ");
+			fo.WriteString(now);
+			fo.WriteString(" (UTC+0)");
+			fo.WriteLn; fo.WriteLn;
+			IF f # NIL THEN
+				FOR i := 0 TO LEN(f) - 1 DO
+					PrintCertOrDoss(f[i]);
+				END;
+				fo.WriteLn;
+			END;
+			Dialog.MapString("#Duniter1:ShowFile", s);
+			Views.OpenAux(TextViews.dir.New(t), s);
+		END PrintFile;
+	
+	(* Print permutations returned by CalcPermutations *)
+	PROCEDURE PrintPermutations (p: Perms; block: INTEGER; now: LONGINT);
+		
+		VAR
+			
+			t: TextModels.Model;
+			fo: TextMappers.Formatter;
+			i, l: INTEGER;
+			s: BA.DateTime;
+			ss: Views.Title;
+		
+		PROCEDURE PrintPermutation (IN p: Perm);
+			
+			VAR
+				
+				j, n: INTEGER;
+			
+			PROCEDURE PrintPropagation (p: Propagation);
+				
+				VAR
+					
+					i: INTEGER;
+				
+				BEGIN (*PrintPropagation*)
+					fo.WriteString("    ");
+					fo.WriteString(p.id);
+					FOR i := 1 TO l - LEN(p.id$) DO
+						fo.WriteString(" ");
+					END;
+					fo.WriteString(" (");
+					BA.TimestampToString(p.date, s);
+					fo.WriteString(s);
+					IF p.after THEN
+						fo.WriteString("+");
+					END;
+					fo.WriteString(")");
+					fo.WriteLn;
+				END PrintPropagation;
+			
+			BEGIN (*PrintPermutation*)
+				fo.WriteString("    ");
+				fo.WriteMsg("#Duniter1:Proba"); fo.WriteString(" = ");
+				n := SHORT(ENTIER(Math.Round(p.proba * 100000000)));
+				fo.WriteInt(n DIV 1000000); fo.WriteString("."); fo.WriteIntForm(n MOD 1000000, 10, 6, '0', FALSE);
+				fo.WriteString("%");
+				fo.WriteLn;
+				IF p.permutation # NIL THEN
+					FOR j := 0 TO LEN(p.permutation) - 1 DO
+						PrintPropagation(p.permutation[j]);
+					END;
+					fo.WriteLn;
+				END;
+			END PrintPermutation;
+		
+		BEGIN (*PrintPermutations*)
+			t := TextModels.dir.New();
+			fo.ConnectTo(t);
+			fo.WriteString("    ");
+			fo.WriteMsg("#Duniter1:Block");
+			fo.WriteString(" ");
+			fo.WriteInt(block);
+			fo.WriteLn;
+			fo.WriteString("    ");
+			BA.TimestampToString(now, s);
+			fo.WriteString(s);
+			fo.WriteString(" (UTC+0)");
+			fo.WriteLn; fo.WriteLn;
+			l := 0;
+			IF p # NIL THEN
+				fo.WriteString("    ");
+				fo.WriteMsg("#Duniter1:PermutationsNb");
+				fo.WriteInt(LEN(p));
+				fo.WriteLn; fo.WriteLn;
+				FOR i := 0 TO LEN(p[0].permutation) - 1 DO
+					l := MAX(l, LEN(p[0].permutation[i].id$));
+				END;
+				FOR i := 0 TO LEN(p) - 1 DO
+					PrintPermutation(p[i]);
+				END;
+				fo.WriteLn;
+			END;
+			Dialog.MapString("#Duniter1:Permutations", ss);
+			Views.OpenAux(TextViews.dir.New(t), ss);
+		END PrintPermutations;
+	
+	PROCEDURE (a: Action) End (IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			j: J.Json;
+			meta: CMeta;
+		
+		BEGIN (*End*)
+			j := J.ReadFile(BA.waitDir, name); ASSERT(j # NIL, 100);
+			CASE a.what OF
+				|fileA:
+					NEW(globalMeta);
+					j.ApplyTo(globalMeta);
+					ConvertMeta(globalMeta, meta);
+					globalMeta := NIL;
+					PrintFile(meta.file, meta.block, meta.now);
+				|permA:
+					NEW(globalPerm);
+					j.ApplyTo(globalPerm);
+					PrintPermutations(globalPerm.permutations, globalPerm.block, globalPerm.now);
+					globalPerm := NIL;
+			END;
+		END End;
+	
+	(* Print the current W.File *)
+	PROCEDURE ShowFile*;
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*ShowFile*)
+			BA.SwitchOff(BA.waitDir, wwShowFileJson + ".json");
+			GS.Send("Duniter1WotWizardList", "ShowFile", "", wwShowFileJson);
+			NEW(a);
+			a.what := fileA;
+			a.Do(BA.waitDir, wwShowFileJson + ".json", waitDelay);
+		END ShowFile;
+	
+	(* Print the set of current possible permutations of entries *)
+	PROCEDURE Permutations*;
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Permutations*)
+			BA.SwitchOff(BA.waitDir, wwPermutationsJson + ".json");
+			GS.Send("Duniter1WotWizardList", "Permutations", "", wwPermutationsJson);
+			NEW(a);
+			a.what := permA;
+			a.Do(BA.waitDir, wwPermutationsJson + ".json", waitDelay);
+		END Permutations;
+	
+	END Duniter1WotWizardPrint.

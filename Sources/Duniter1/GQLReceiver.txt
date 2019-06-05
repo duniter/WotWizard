@@ -1,0 +1,86 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1GQLReceiver;
+	
+	
+
+	IMPORT
+		
+		BA := Duniter1Basic, G := UtilGraphQL, Dialog, Strings;
+	
+	CONST
+		
+		queryDir = "Query";
+		queryName = "Query.txt";
+		
+		waitDelay = 100;
+	
+	TYPE
+		
+		WaitFor = POINTER TO RECORD (BA.WaitFor)
+		END;
+	
+	PROCEDURE Start*;
+		
+		VAR
+			
+			w: WaitFor;
+		
+		BEGIN (*Start*)
+			BA.SwitchOff(queryDir, queryName);
+			NEW(w);
+			w.Do(queryDir, queryName, waitDelay);
+		END Start;
+	
+	PROCEDURE (w: WaitFor) End (IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			sel: G. SelectionSet;
+			call: Dialog.String;
+			res: INTEGER;
+			v: G.Value;
+			s: Dialog.String;
+		
+		BEGIN (*End*)
+			BA.lg.Msg("Reading Query");
+			sel := G.ReadGraphQL(queryDir, queryName); ASSERT(sel # NIL, 100);
+			call := sel[0].alias + ".json";
+			IF sel[0].selSet[0].arguments # NIL THEN
+				v := sel[0].selSet[0].arguments[0].value;
+				WITH
+					|v: G.BooleanValue DO
+						IF v.boolean THEN
+							s := "TRUE";
+						ELSE
+							s := "FALSE";
+						END;
+					|v: G.EnumValue DO
+						s := v.enum$;
+					|v: G.FloatValue DO
+						Strings.RealToString(v.float, s);
+					|v: G.IntValue DO
+						Strings.IntToString(v.int, s);
+					|v: G.NullValue DO
+						s := "NIL";
+					|v: G.StringValue DO
+						s := v.string$;
+				END;
+				call := call + "', '" + s$;
+			END;
+			call := sel[0].name$ + "." + sel[0].selSet[0].name$ + "('" + call + "')";
+			Dialog.Call(call, "", res); ASSERT(res = 0, 101);
+			Start;
+		END End;
+	
+	END Duniter1GQLReceiver.

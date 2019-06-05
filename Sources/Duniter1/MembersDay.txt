@@ -1,0 +1,134 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1MembersDay;
+	
+	
+	
+	(* Number of members, day by day *)
+
+	IMPORT
+		
+		(*
+		L := StdLog,
+		*)
+		
+		B := Duniter1Blockchain, BA := Duniter1Basic, Strings, TextMappers, TextModels, TextViews, J := UtilJson;
+	
+	TYPE
+		
+		Action = POINTER TO RECORD (B.Action)
+			output: BA.String;
+			period: INTEGER;
+		END;
+	
+	PROCEDURE DoCountP (period: INTEGER): J.Json;
+		
+		CONST
+			
+			day = 60 * 60 * 24;
+		
+		VAR
+			
+			ok, ok2, b: BOOLEAN;
+			pk: B.Pubkey;
+			jb, lb, n, m: INTEGER;
+			mt, time, t0, list: LONGINT;
+			p: INTEGER;
+			counts: POINTER TO ARRAY OF INTEGER;
+		
+		BEGIN (*DoCountP*)
+			p := period * day;
+			t0 := MAX(LONGINT);
+			ok := B.JLNextPubkey(TRUE, pk);
+			WHILE ok DO
+				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
+				WHILE ok2 DO
+					b := B.TimeOf(jb, mt, time); ASSERT(b, 100);
+					t0 := MIN(t0, time);
+					ok2 := B.JLPubLNext(list, jb, lb);
+				END;
+				ok := B.JLNextPubkey(FALSE, pk);
+			END;
+			J.StartObject;
+			J.StartArray;
+			IF t0 # MAX(LONGINT) THEN
+				NEW(counts, SHORT((B.RealNow() - t0 + p - 1) DIV p));
+				FOR n := 0 TO LEN(counts) - 1 DO
+					counts[n] := 0;
+				END;
+				ok := B.JLNextPubkey(TRUE, pk);
+				WHILE ok DO
+					ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
+					WHILE ok2 DO
+						b := B.TimeOf(jb, mt, time); ASSERT(b, 101);
+						INC(counts[SHORT((time - t0) DIV p)]);
+						IF lb # B.hasNotLeaved THEN
+							b := B.TimeOf(lb, mt, time); ASSERT(b, 102);
+							DEC(counts[SHORT((time - t0) DIV p)]);
+						END;
+						ok2 := B.JLPubLNext(list, jb, lb);
+					END;
+					ok := B.JLNextPubkey(FALSE, pk);
+				END;
+				m := 0;
+				FOR n := 0 TO LEN(counts) - 1 DO
+					INC(m, counts[n]);
+					J.PushInteger(m);
+				END;
+			END;
+			J.BuildArray;
+			J.BuildField("counts");
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			mt := B.Now();
+			J.PushInteger(mt);
+			J.BuildField("now");
+			J.BuildObject;
+			RETURN J.GetJson();
+		END DoCountP;
+	
+	PROCEDURE Json (j: J.Json; IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+		
+		BEGIN (*Json*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			j.Write(f);
+			BA.VRegister(TextViews.dir.New(t), BA.waitLoc, name$, 100, "MembersDay.Json");
+		END Json;
+	
+	PROCEDURE (a: Action) Activate;
+		
+		BEGIN (*Activate*)
+			Json(DoCountP(a.period), a.output);
+		END Activate;
+	
+	PROCEDURE CountP* (IN output, period: ARRAY OF CHAR);
+		
+		VAR
+			
+			a: Action;
+			res: INTEGER;
+		
+		BEGIN (*CountP*)
+			NEW(a);
+			NEW(a.output, LEN(output$) + 1); a.output^ := output$;
+			Strings.StringToInt(period, a.period, res); ASSERT(res = 0, 100);
+			B.AddAction(a);
+		END CountP;
+	
+	END Duniter1MembersDay.

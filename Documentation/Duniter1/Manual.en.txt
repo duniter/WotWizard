@@ -1,0 +1,107 @@
+WotWizard Manual
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+Warning: Legacy
+The French version is up to date and will be tranlated soon.
+
+WotWizard builds, from the blockchain and sandbox of Duniter, a prediction of the future entries of candidates into the Duniter Web of Trust (WOT). It uses a simulation of the Duniter mechanism. When several possibilities may happen, each one is listed with its probability. The published lists are automatically updated every five minutes, and any change is signaled visually.
+The StandAlone Version contains several tools and a fast Web of Trust Explorer.
+
+Warning: You should use the 1.6.29 version of duniter or any later version in the series 1.6.x. Don't use a 1.7.x version.
+
+How to use it?
+This program needs a Duniter node running on the same computer.
+This program runs natively on Windows. If your computer runs on Linux, install "wine" first, and, in a terminal, run "winecfg" and configure the drives to be sure that the Duniter database (see below) can be reached.
+Put the file "WotWizard.exe" into an empty directory, put the Windows dll "sqlite3.dll" into the same directory and run WotWizard with a double-click or with the command line from the directory (under Linux):
+	
+	$wine WotWizard.exe
+
+The dll can be found at the address:
+	
+	https://www.sqlite.org/2015/sqlite-dll-win32-x86-3081002.zip
+Choose your language in "Edit -> Preferences...".
+When some command is used for the first time, WotWizard asks you where the Duniter database lies. A first window pops up with the text "Choose Duniter Database". Click on "OK". Then, a new window lets you navigate to the database file. E.g. under Linux, the path of this file is:
+	
+	~/.config/duniter/duniter_default/duniter.db
+
+and, under Windows:
+	
+	C:\Utilisateur\nom_utilisateur\.config\duniter\duniter_default
+Then, a part of Duniter data is copied into a new database, to accelerate their future use. This operation may take a rather long time, and you'll can see, at the bottom of the application, the block numbers pass before your eyes.
+The WotWizard Window
+Open the WotWizard Window with "Duniter -> New WotWizard View".
+You can:
+	- choose the way the list is displayed (by names or by dates, or metadata)
+	- manually update the list (it's automatically updated every five minutes)
+When the list has changed, two asterisks appear, one on each side of the title, and a new button "Check" is created. Click on the button to make the marks disappear. You can then compare the new and old lists (by Dates and Metadata) by clicking on the button "Compare", or by using the menu item "Edit -> Compare Texts" (keyboard shortcut: F9).
+You can change the largest memory size in bytes (approximately) the WotWizard Window is allowed to allocate. The larger it is, the better are the previsions, but if it's too big, WotWizard may crash. By default, it's 430000000 bytes. You may change it with the menu command "Edit -> Change parameters".
+File: WotWizard calculates its forecasts from a state of affairs called File. It's a list of dossiers (newcomer alias + certifications list) and internal certifications (between members), sorted by availability dates. The command "WotWizard -> File" displays the following details:
+-	Internal certification : one line with:
++	the receiver and sender of the certification (aliases) with an arrow (←) between them;
++	the certification availability date;
++	between brackets, the validity limit of the certification;
++	a summary of the certification state: OK if it's available and valid, or KO otherwise.
+-	Dossier :
++	a first line describing the newcomer:
+*	the number of main certifications (those which fix the availability date of the dossier, see below) ;
+*	her alias
+*	her availability date;
+*	between brackets, the validity limit of her application;
+*	the distance rule result, as the percentage of reachable sentries;
+*	a summary of the dossier state: OK if it's valid and if the rule of minimal certification number and the distance rule are verified, or KO otherwise (certification availabilities are not checked here).
++	one additional line for each external certification, in the same form as for internal certifications, but without the sender alias (which is the newcomer's); these certifications are sorted by availability date.
+Main certifications: In a Dossier, it's the n first external certifications (in the order of availability dates), where n is the number of certifications it owns when it is less than or equal to sigQty (5). If it is greater, it's the number of certifications needed to satisfy the distance rule, or the total number if the distance rule can't be satisfied.
+Permutations : The command "WotWizard -> Permutations" displays all entry ranks permutations predicted by WotWizard, with their probabilities. Warning: their number may be sometimes very big and the display very large!
+Web of Trust Explorer
+Open the WoT Explorer with the menu command "Web of Trust -> Explorer".
+
+See the explorer map.
+You can search any identity in the blockchain or the sandbox by typing its first characters or the first characters of its public key into the first top field and by clicking on the "Search" button. The possible identities appear in the list at the bottom: choose the one you want to look at. Some details appear in the "Identity" frame, and the certifications, received and sent, in the "Certifications" frame. You can look at the identity of one of the senders or receivers by clicking on the corresponding "Go" button; step back with the arrow buttons. You can also display a text of informations on certifiers or certified identities by clicking on one of the "D" buttons (list of present certifiers or certified identities, sorted by alphabetic order, by expiration dates of membership (or limit date before revocation if the identity is no more member -  "×" before her name) and by expiration dates of certifications, and list of all non-revoked certifiers or certified identities of all times, able to certify or be certified again).
+Displayed dates are member's registration date into the blockchain, expiration dates, of member's membership and of her certifications, and the availability date of the next sent certification in the field "Availability" (if already available, this date comes after an exclamation mark "!"). If member's end of membership has been requested, her expiration date of membership is preceded by a cross (×). In this case, she can no more get new certifications, and, without renewal of her membership, she will be excluded at this date.
+
+The degree of centrality c of a member is the number of oriented paths (certifier -> certified) of shortest lengths to which she belongs and whose length is, at most, stepMax (5) plus one steps from the certifier. The centrality level c' of a member is calculated from her degree of centrality c by the expression:
+
+
+
+where  is the greatest value of  for all members.
+One may consider the centrality level of a member as the level of her involvement to help people she certified to respect the distance rule, independently of her capacity to do so. By opposition, the quality of a member is her capacity to help people she certifies to respect the distance rule, independently of her level of involvement.
+A member with a quality greater than or equal to xpercent (= 80%), makes, only by herself, people she certifiies respect the distance rule.
+Tools
+Parameters: Display the basic parameters of money.
+Revoked Identities: Display revoked identities with their aliases and public keys, and the dates of their entries.
+Missing Memberships: Display identities whose memberships were'nt renewed, with their aliases and public keys, the dates of their entries and  their limit dates before revocation.
+Identities: Display identities of all members with their aliases and public keys, the dates of their entries and  their limits of validity.
+Certifications From...: Display all certifications in the blockchain, sorted by senders, with their inscription dates.
+Certifications To...: Display all certifications in the blockchain, sorted by receivers, with their inscription dates.
+Sentries: Display the identities of sentries.
+Sandbox: Display identities and certifications in sandbox;
+1) Identities sorted by hashes, with hash, public key, id & expiration date
+2) Identities sorted by public keys, with public key & hash
+3) Identities sorted by ids, with id & hash
+4) Certifications sorted by senders' public keys, with sender's public key, receiver's hash & expiration date
+5) Certifications sorted by receivers' hashes, with receiver's hash, sender's public key & expiration date
+Number of Members: Give the list of block dates where the number of members changed and corresponding members' number since the beginning of the money (with drawing).
+Number of Members Day by Day: Give the list of day numbers and corresponding members' number since the beginning of the money (with drawing).
+Distances: Give the distances of all members to the web of trust (proportion of sentries reachable in at most stepMax (5) steps) sorted by proportions (with drawing) and by aliases.
+Distances (json): Give the distances of all members in json format.
+Qualities: Give the qualities of all members sorted by qualities (with drawing) and by aliases.
+Qualities (json): Give the qualities of all members in json format.
+Centralities: Give the centrality levels of all members sorted by centrality levels (with drawing) and by aliases.
+Centralities (json): Give the centrality levels of all members in json format.
+Limits of Memberships: Display the validity limits of memberships for all members, sorted by dates.
+Limits of Memberships (json): Display the validity limits of memberships for all members in json format.
+Limits of Missing Memberships: Display the limit dates before revocation of identities with not-renewed memberships, sorted by dates.
+Limits of Missing Memberships (json): Display the limit dates before revocation of identities with not-renewed memberships in json format.
+Limits of Certifications: Display the validity limits, for lack of certifications, of memberships for all members, sorted by dates.
+Limits of Certifications (json): Display the validity limits, for lack of certifications, of memberships for all members in json format.
+Special cases :
+In rare cases, you may want to change the path to the Duniter database. Use "Edit -> Change Duniter Database".
+You may, rarely too, want to reset the database WotWizard builds from Duniter. In this case, use "Edit -> Reset WotWizard Database". Warning: this operation may be long.
+
+Use it and enjoy! - ¡Úsalos y disfrútalos! - Bonne utilisation - Приятного использованияn - Powodzenia - Viel Spaß
+
+Gérard Meunier

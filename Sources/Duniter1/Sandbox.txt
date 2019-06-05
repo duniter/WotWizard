@@ -1,0 +1,619 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1Sandbox;
+	
+	(* Put the Duniter sandbox in AVL trees to access quickly sandbox data *)
+	
+	
+
+	IMPORT
+		
+		(**
+		L := StdLog,
+		**)
+		
+		A := UtilAvlTree, B := Duniter1Blockchain, BA := Duniter1Basic, Files, UtilExternal, J := UtilJson;
+	
+	CONST
+		
+		sBaseDir = B.dDir;
+		sBaseName = B.sBaseName;
+		
+		updtPath = "WWUpdt.exe";
+		stopName = "StopUpdt.txt";
+		initDir = BA.initDir;
+		runningName = "WWCmdsRunning.txt";
+	
+	TYPE
+		
+		String* = B.String;
+		Pubkey* = B.Pubkey;
+		Hash* = B.Hash;
+		
+		Identity* = POINTER TO RECORD
+			inBC*: BOOLEAN;
+			hash*: Hash; (* Needed in sandbox: key of identities *)
+			pubkey*: Pubkey;
+			uid*: String;
+			expires_on*: LONGINT;
+		END;
+		
+		(* Elements of A.Tree for identities *)
+		IdE = POINTER TO ABSTRACT RECORD (A.Elem)
+			ref: Identity;
+		END;
+		
+		IdUidE = POINTER TO RECORD (IdE) (* Sorted by uid *)
+		END;
+		
+		IdPubE = POINTER TO RECORD (IdE) (* Sorted by pubkey *)
+		END;
+		
+		IdHashE = POINTER TO RECORD (IdE) (* Sorted by hash *)
+		END;
+		
+		Certification* = POINTER TO RECORD
+			from*,
+			to*: Pubkey;
+			toHash*: Hash;
+			expires_on*: LONGINT;
+		END;
+		
+		(* Elements of A.Tree for certifications *)
+		CertE = POINTER TO ABSTRACT RECORD (A.Elem)
+			ref: Certification;
+			list: A.Tree; (* Subtree, sorted otherwise *)
+		END;
+		
+		CertFromE = POINTER TO RECORD (CertE) (* Sorted by ref.from *)
+		END;
+		
+		CertToE = POINTER TO RECORD (CertE) (* Sorted by ref.to *)
+		END;
+		
+		CertPos* = RECORD (* Position in a certification subtree *)
+			posT: A.Tree; (* The subtree *)
+			posCur: A.Elem; (* The last seen element in the subtree *)
+		END;
+		
+		SandboxData* = POINTER TO RECORD
+			block*: INTEGER;
+			date*: LONGINT;
+			identities*: POINTER TO ARRAY OF Identity;
+			certifications*: POINTER TO ARRAY OF Certification;
+		END;
+	
+	VAR
+		
+		globalSD*: SandboxData;
+		
+		(* AVL trees *)
+		idUidT, (* uid -> Identity *)
+		idPubT, (* pubkey -> Identity *)
+		idHashT, (* hash -> Identity *)
+		certFromT, (* from -> Certification *)
+		certToT: A.Tree; (* toHash -> Certification *)
+		
+		(* Positions in AVL trees *)
+		idUidCur,
+		idPubkeyCur,
+		idHashCur,
+		certFromCur,
+		certToCur: A.Elem;
+	
+	(* Comparison procedures for AVL trees *)
+	
+	PROCEDURE (i1: IdUidE) Compare (i2: A.Elem): BYTE;
+		
+		VAR
+			
+			b: BYTE;
+		
+		BEGIN (*Compare*)
+			WITH i2: IdUidE DO
+				b := BA.CompP(i1.ref.uid, i2.ref.uid);
+				IF b # A.eq THEN
+					RETURN b;
+				END;
+				IF i1.ref.hash < i2.ref.hash THEN
+					RETURN A.lt;
+				END;
+				IF i1.ref.hash > i2.ref.hash THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	PROCEDURE (i1: IdPubE) Compare (i2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH i2: IdPubE DO
+				IF i1.ref.pubkey < i2.ref.pubkey THEN
+					RETURN A.lt;
+				END;
+				IF i1.ref.pubkey > i2.ref.pubkey THEN
+					RETURN A.gt;
+				END;
+				IF i1.ref.hash < i2.ref.hash THEN
+					RETURN A.lt;
+				END;
+				IF i1.ref.hash > i2.ref.hash THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	PROCEDURE (i1: IdHashE) Compare (i2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH i2: IdHashE DO
+				IF i1.ref.hash$ < i2.ref.hash$ THEN
+					RETURN A.lt;
+				END;
+				IF i1.ref.hash$ > i2.ref.hash$ THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	PROCEDURE (c1: CertFromE) Compare (c2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH c2: CertFromE DO
+				IF c1.ref.from$ < c2.ref.from$ THEN
+					RETURN A.lt;
+				END;
+				IF c1.ref.from$ > c2.ref.from$ THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	PROCEDURE (c1: CertToE) Compare (c2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH c2: CertToE DO
+				IF c1.ref.toHash$ < c2.ref.toHash$ THEN
+					RETURN A.lt;
+				END;
+				IF c1.ref.toHash$ > c2.ref.toHash$ THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	(* hash -> Identity *)
+	PROCEDURE IdHash* (IN hash: Hash; OUT inBC: BOOLEAN; OUT pubkey: Pubkey; OUT uid: String; OUT expires_on: LONGINT): BOOLEAN;
+		
+		VAR
+			
+			id: Identity;
+			hE: IdHashE;
+			e: A.Elem;
+			n: INTEGER;
+		
+		BEGIN (*IdHash*)
+			NEW(id);
+			id.hash := hash$;
+			NEW(hE); hE.ref := id;
+			e := hE;
+			IF idHashT.Search(e, n) THEN
+				WITH e: IdE DO
+					inBC := e.ref.inBC;
+					pubkey := e.ref.pubkey;
+					NEW(uid, LEN(e.ref.uid$) + 1); uid^ := e.ref.uid$;
+					expires_on := e.ref.expires_on;
+				END;
+				RETURN TRUE;
+			END;
+			RETURN FALSE;
+		END IdHash;
+	
+	(* Number of identities *)
+	PROCEDURE IdLen* (): INTEGER;
+		
+		BEGIN (*IdLen*)
+			RETURN idHashT.NumberOfElems();
+		END IdLen;
+	
+	(* Position next Identity's uid for IdNextUid *)
+	PROCEDURE IdPosUid* (IN uid: ARRAY OF CHAR);
+		
+		VAR
+			
+			id: Identity;
+			uP: IdUidE;
+			e: A.Elem;
+			n: INTEGER;
+			b: BOOLEAN;
+		
+		BEGIN (*IdPosUid*)
+			NEW(id);
+			NEW(id.uid, LEN(uid$) + 1); id.uid^ := uid$;
+			id.hash := "";
+			NEW(uP); uP.ref := id;
+			e := uP;
+			b := idUidT.SearchNext(e, n);
+			idUidCur := idUidT.Previous(e);
+		END IdPosUid;
+	
+	(* Browse all Identity's uid(s) lexicographically step by step *)
+	PROCEDURE IdNextUid* (first: BOOLEAN; OUT uid: String; OUT hash: Hash): BOOLEAN;
+		
+		BEGIN (*IdNextUid*)
+			IF first THEN
+				idUidCur := NIL;
+			END;
+			idUidCur := idUidT.Next(idUidCur);
+			IF idUidCur = NIL THEN
+				RETURN FALSE;
+			END;
+			WITH idUidCur: IdE DO
+				NEW(uid, LEN(idUidCur.ref.uid$) + 1); uid^ := idUidCur.ref.uid$;
+				hash := idUidCur.ref.hash;
+			END;
+			RETURN TRUE;
+		END IdNextUid;
+	
+	(* Position next Identity's pubkey for IdNextPubkey *)
+	PROCEDURE IdPosPubkey* (IN pubkey: Pubkey);
+		
+		VAR
+			
+			id: Identity;
+			pU: IdPubE;
+			e: A.Elem;
+			n: INTEGER;
+			b: BOOLEAN;
+		
+		BEGIN (*IdPosPubkey*)
+			NEW(id);
+			id.pubkey := pubkey$;
+			id.hash := "";
+			NEW(pU); pU.ref := id;
+			e := pU;
+			b := idPubT.SearchNext(e, n);
+			idPubkeyCur := idPubT.Previous(e);
+		END IdPosPubkey;
+	
+	(* Browse all Identity's pubkey(s)  step by step *)
+	PROCEDURE IdNextPubkey* (first: BOOLEAN; OUT pubkey: Pubkey; OUT hash: Hash): BOOLEAN;
+		
+		BEGIN (*IdNextPubkey*)
+			IF first THEN
+				idPubkeyCur := NIL;
+			END;
+			idPubkeyCur := idPubT.Next(idPubkeyCur);
+			IF idPubkeyCur = NIL THEN
+				RETURN FALSE;
+			END;
+			WITH idPubkeyCur: IdE DO
+				pubkey := idPubkeyCur.ref.pubkey;
+				hash := idPubkeyCur.ref.hash;
+			END;
+			RETURN TRUE;
+		END IdNextPubkey;
+	
+	(* Position next Identity's hash for IdNextHash *)
+	PROCEDURE IdPosHash* (IN hash: Hash);
+		
+		VAR
+			
+			id: Identity;
+			hE: IdHashE;
+			e: A.Elem;
+			n: INTEGER;
+			b: BOOLEAN;
+		
+		BEGIN (*IdPosHash*)
+			NEW(id);
+			id.hash := hash$;
+			NEW(hE); hE.ref := id;
+			e := hE;
+			b := idHashT.SearchNext(e, n);
+			idHashCur := idHashT.Previous(e);
+		END IdPosHash;
+	
+	(* Browse all Identity's hash(es)  step by step *)
+	PROCEDURE IdNextHash* (first: BOOLEAN; OUT hash: Hash): BOOLEAN;
+		
+		BEGIN (*IdNextHash*)
+			IF first THEN
+				idHashCur := NIL;
+			END;
+			idHashCur := idHashT.Next(idHashCur);
+			IF idHashCur = NIL THEN
+				RETURN FALSE;
+			END;
+			WITH idHashCur: IdE DO
+				hash := idHashCur.ref.hash$;
+			END;
+			RETURN TRUE;
+		END IdNextHash;
+	
+	(* (Pubkey, Hash) -> Certification *)
+	PROCEDURE Cert* (IN from: Pubkey; IN toHash: Hash; OUT to: Pubkey; OUT expires_on: LONGINT): BOOLEAN;
+		
+		VAR
+			
+			c: Certification;
+			cf: CertFromE;
+			ct: CertToE;
+			e, ee: A.Elem;
+			n: INTEGER;
+		
+		BEGIN (*Cert*)
+			NEW(c);
+			c.from := from;
+			c.toHash := toHash;
+			NEW(cf); cf.ref := c;
+			e := cf;
+			IF certFromT.Search(e, n) THEN
+				WITH e: CertE DO
+					NEW(ct); ct.ref := c;
+					ee := ct; 
+					IF e.list.Search(ee, n) THEN
+						WITH ee: CertE DO
+							to := ee.ref.to;
+							expires_on := ee.ref.expires_on;
+						END;
+						RETURN TRUE;
+					END;
+				END;
+			END;
+			RETURN FALSE;
+		END Cert;
+	
+	(* Pubkey -> head of subtree *)
+	PROCEDURE CertFrom* (IN from: Pubkey; OUT pos: CertPos): BOOLEAN;
+		
+		VAR
+			
+			c: Certification;
+			cf: CertFromE;
+			e: A.Elem;
+			n: INTEGER;
+		
+		BEGIN (*CertFrom*)
+			NEW(c);
+			c.from := from;
+			NEW(cf); cf.ref := c;
+			e := cf;
+			IF certFromT.Search(e, n) THEN
+				WITH e: CertE DO
+					pos.posT := e.list;
+					pos.posCur := NIL;
+				END;
+				RETURN TRUE;
+			END;
+			pos.posT := NIL;
+			RETURN FALSE;
+		END CertFrom;
+	
+	(* Hash -> head of subtree *)
+	PROCEDURE CertTo* (IN toHash: Hash; OUT pos: CertPos): BOOLEAN;
+		
+		VAR
+			
+			c: Certification;
+			ct: CertToE;
+			e: A.Elem;
+			n: INTEGER;
+		
+		BEGIN (*CertTo*)
+			NEW(c);
+			c.toHash := toHash;
+			NEW(ct); ct.ref := c;
+			e := ct;
+			IF certToT.Search(e, n) THEN
+				WITH e: CertE DO
+					pos.posT := e.list;
+					pos.posCur := NIL;
+				END;
+				RETURN TRUE;
+			END;
+			pos.posT := NIL;
+			RETURN FALSE;
+		END CertTo;
+	
+	(* Number of elements in subtree *)
+	PROCEDURE (IN pos: CertPos) CertPosLen* (): INTEGER, NEW;
+		
+		BEGIN (*CertPosLen*)
+			IF pos.posT = NIL THEN
+				RETURN 0;
+			END;
+			RETURN pos.posT.NumberOfElems();
+		END CertPosLen;
+	
+	(* Browse all Certification(s) in a subtree step by step *)
+	PROCEDURE (VAR pos: CertPos) CertNextPos* (OUT from: Pubkey; OUT toHash: Hash): BOOLEAN, NEW;
+		
+		VAR
+			
+			e: A.Elem;
+		
+		BEGIN (*CertNextPos*)
+			IF pos.posT = NIL THEN
+				RETURN FALSE;
+			END;
+			pos.posCur := pos.posT.Next(pos.posCur);
+			e := pos.posCur;
+			IF e = NIL THEN
+				RETURN FALSE;
+			END;
+			WITH e: CertE DO
+				from := e.ref.from;
+				toHash := e.ref.toHash;
+			END;
+			RETURN TRUE;
+		END CertNextPos;
+	
+	(* Number of certifiers who certified in sandbox *)
+	PROCEDURE CertFromLen* (): INTEGER;
+		
+		BEGIN (*CertFromLen*)
+			RETURN certFromT.NumberOfElems();
+		END CertFromLen;
+	
+	(* Browse all subtrees for all from Pubkey step by step *)
+	PROCEDURE CertNextFrom* (first: BOOLEAN; OUT pos: CertPos): BOOLEAN;
+		
+		BEGIN (*CertNextFrom*)
+			IF first THEN
+				certFromCur := NIL;
+			END;
+			certFromCur := certFromT.Next(certFromCur);
+			IF certFromCur = NIL THEN
+				RETURN FALSE;
+			END;
+			WITH certFromCur: CertE DO
+				pos.posT := certFromCur.list;
+				pos.posCur := NIL;
+			END;
+			RETURN TRUE;
+		END CertNextFrom;
+	
+	(* Number of persons certified in sandbox *)
+	PROCEDURE CertToLen* (): INTEGER;
+		
+		BEGIN (*CertToLen*)
+			RETURN certToT.NumberOfElems();
+		END CertToLen;
+	
+	(* Browse all subtrees for all toHash Hash step by step *)
+	PROCEDURE CertNextTo* (first: BOOLEAN; OUT pos: CertPos): BOOLEAN;
+		
+		BEGIN (*CertNextFrom*)
+			IF first THEN
+				certToCur := NIL;
+			END;
+			certToCur := certToT.Next(certToCur);
+			IF certToCur = NIL THEN
+				RETURN FALSE;
+			END;
+			WITH certToCur: CertE DO
+				pos.posT := certToCur.list;
+				pos.posCur := NIL;
+			END;
+			RETURN TRUE;
+		END CertNextTo;
+	
+	PROCEDURE Import;
+		
+		VAR
+			
+			j: J.Json;
+			i, n: INTEGER;
+			b: BOOLEAN;
+			e, ee: A.Elem;
+			id: Identity;
+			idH: IdHashE;
+			idP: IdPubE;
+			idU: IdUidE;
+			c: Certification;
+			cF: CertFromE;
+			cT: CertToE;
+			elems: J.Values;
+		
+		BEGIN (*Import*)
+			NEW(globalSD);
+			A.New(idUidT);
+			A.New(idPubT);
+			A.New(idHashT);
+			A.New(certFromT);
+			A.New(certToT);
+			j := J.ReadFile(sBaseDir, sBaseName); ASSERT(j # NIL, 100);
+			elems := j(J.Object).fields[2].value(J.JsonVal).json(J.Array).elements;
+			n := LEN(elems);
+			NEW(globalSD.identities, n);
+			FOR i := 0 TO n - 1 DO
+				NEW(globalSD.identities[i]);
+			END;
+			elems := j(J.Object).fields[3].value(J.JsonVal).json(J.Array).elements;
+			n := LEN(elems);
+			NEW(globalSD.certifications, n);
+			FOR i := 0 TO n - 1 DO
+				NEW(globalSD.certifications[i]);
+			END;
+			j.ApplyTo (globalSD);
+			FOR i := 0 TO LEN(globalSD.identities) - 1 DO
+				id := globalSD.identities[i];
+				NEW(idH); idH.ref := id; e := idH;
+				b := idHashT.SearchIns(e, n); ASSERT(~b, 101);
+				NEW(idU); idU.ref := id; e := idU;
+				b := idUidT.SearchIns(e, n); ASSERT(~b, 102);
+				NEW(idP); idP.ref := id; e := idP;
+				b := idPubT.SearchIns(e, n); ASSERT(~b, 103);
+			END;
+			FOR i := 0 TO LEN(globalSD.certifications) - 1 DO
+				c := globalSD.certifications[i];
+				NEW(cF); cF.ref := c; e := cF;
+				IF ~certFromT.SearchIns(e, n) THEN
+					A.New(e(CertFromE).list);
+				END;
+				NEW(cT); cT.ref := c; ee := cT;
+				b := e(CertFromE).list.SearchIns(ee, n);
+				NEW(cT); cT.ref := c; e := cT;
+				IF ~certToT.SearchIns(e, n) THEN
+					A.New(e(CertToE).list);
+				END;
+				NEW(cF); cF.ref := c; ee := cF;
+				b := e(CertToE).list.SearchIns(ee, n);
+			END ;
+			globalSD := NIL;
+		END Import;
+	
+	PROCEDURE Start*;
+		
+		BEGIN (*Start*)
+			BA.lg.Msg("Starting"); BA.lg.Msg("");
+			BA.SwitchOn(initDir, runningName);
+			UtilExternal.Start(updtPath);
+		END Start;
+	
+	PROCEDURE Stop;
+		
+		VAR
+			
+			loc: Files.Locator;
+			f: Files.File;
+			res: INTEGER;
+		
+		BEGIN (*Stop*)
+			B.RemoveUpdateProc(Import);
+			loc := Files.dir.This(""); ASSERT(loc.res = 0, 100);
+			f := Files.dir.New(loc, Files.dontAsk); ASSERT(f # NIL, 101);
+			f.Register(stopName, 'txt', Files.dontAsk, res); ASSERT(res = 0, 102);
+			BA.lg.Msg('"' + stopName + '" written');
+			BA.SwitchOff(initDir, runningName);
+		END Stop;
+	
+	PROCEDURE Init;
+		
+		BEGIN (*Init*)
+			B.AddUpdateProc(Import);
+		END Init;
+	
+	BEGIN (*Duniter1Sandbox*)
+		Init;
+	CLOSE
+		Stop;
+	END Duniter1Sandbox.
+
+Duniter1Sandbox.Start;

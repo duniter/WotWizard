@@ -1,0 +1,869 @@
+BABEL UtilGraphQL;
+
+DEFINITION
+
+UnicodeBOM = #0FEFFH ;
+WhiteSpace = [#9H, #20H] ;
+LineTerminator = [#0AH, #0DH] | #0DH #0AH ;
+CommentChar = . ;
+Comment = "#" CommentChar* ;
+Comma = "," ;
+Ignored = UnicodeBOM | WhiteSpace | LineTerminator | Comment | Comma ;
+NegativeSign = "-" ;
+NonZeroDigit = ["1"-"9"] ;
+Digit = ["0"-"9"] ;
+IntegerPart = NegativeSign? ("0" | NonZeroDigit Digit*) ;
+FractionalPart = "." Digit+ ;
+ExponentIndicator = ["e", "E"] ;
+Sign = ["+", "-"] ;
+ExponentPart = ExponentIndicator Sign? Digit+ ;
+EscapedUnicode = ["0"-"9", "A"-"F", "a"-"f"]<4, 4> ;
+EscapedCharacter = ['"', "\", "/", "b", "f", "n", "r", "t"] ;
+StringCharacter = [#9H, #20H-#0FFFFH ^ '"', "\"] | "\u" EscapedUnicode |  "\" EscapedCharacter ;
+BlockStringCharacter = "\"? ('"'<1, 2> | '"'<4, 4> '"'*) | "\" ('"'<0, 2> [#9H, #0AH, #0DH, #20H-#0FFFFH ^ '"'])? | [#9H, #0AH, #0DH, #20H-#0FFFFH ^ '"', "\"] | '\"""' ;
+
+LEXICON
+
+spaces = Ignored+ ;
+
+ARGUMENT_DEFINITION = 'ARGUMENT_DEFINITION' ;
+ENUM = 'ENUM' ;
+ENUM_VALUE = 'ENUM_VALUE' ;
+FIELD = 'FIELD' ;
+FIELD_DEFINITION = 'FIELD_DEFINITION' ;
+FRAGMENT_DEFINITION = 'FRAGMENT_DEFINITION' ;
+FRAGMENT_SPREAD = 'FRAGMENT_SPREAD' ;
+INLINE_FRAGMENT = 'INLINE_FRAGMENT' ;
+INPUT_FIELD_DEFINITION = 'INPUT_FIELD_DEFINITION' ;
+INPUT_OBJECT = 'INPUT_OBJECT' ;
+INTERFACE = 'INTERFACE' ;
+MUTATION = 'MUTATION' ;
+OBJECT = 'OBJECT' ;
+QUERY = 'QUERY' ;
+SCALAR = 'SCALAR' ;
+SCHEMA = 'SCHEMA' ;
+SUBSCRIPTION = 'SUBSCRIPTION' ;
+UNION = 'UNION' ;
+directive = 'directive' ;
+enum = 'enum' ;
+extend = 'extend' ;
+false = 'false' ;
+fragment = 'fragment' ;
+implements = 'implements' ;
+input = 'input' ;
+interface = 'interface' ;
+mutation = 'mutation' ;
+null = 'null' ;
+on = 'on' ;
+query = 'query' ;
+scalar = 'scalar' ;
+schema = 'schema' ;
+subscription = 'subscription' ;
+true = 'true' ;
+type = 'type' ;
+union = 'union' ;
+
+exclamation = "!" ;
+dollar = "$" ;
+ampersand = "&" ;
+leftpar = "(" ;
+rightpar = ")" ;
+spread = "..." ;
+colon = ":" ;
+equal = "=" ;
+arobase = "@" ;
+leftbracket = "[" ;
+rightbracket = "]" ;
+leftbrace = "{" ;
+or = "|" ;
+rightbrace = "}" ;
+
+Name = ["_", "A"-"Z", "a"-"z"] ["_", "0"-"9", "A"-"Z", "a"-"z"]* ;
+IntValue = IntegerPart ;
+FloatValue = IntegerPart (FractionalPart | ExponentPart | FractionalPart ExponentPart) ;
+StringValue = '"' StringCharacter* '"' | '"""' BlockStringCharacter* '"""' ;
+
+DECLARATION
+
+_Alias (name) ;
+_AmpersandE ;
+_Ampersand_NamedTypeL (types) ;
+_Argument (arg) ;
+_ArgumentLP (args, aux) ;
+_Argument_const (arg) ;
+_Argument_constLP (args, aux) ;
+_Arguments (args) ;
+_ArgumentsDefinition (args) ;
+_ArgumentsDefinitionE (args) ;
+_ArgumentsE (args) ;
+_Arguments_const (args) ;
+_Arguments_constE (args) ;
+_BooleanValue (val) ;
+_DefaultValue (val) ;
+_DefaultValueE (val) ;
+_Definition (def) ;
+_Definitions (defs, aux) ;
+_Description (string) ;
+_DescriptionE (string) ;
+_Directive (dir) ;
+_DirectiveDefinition (def) ;
+_DirectiveLocation (loc) ;
+_DirectiveLocations (locs) ;
+_Directive_const (dir) ;
+_Directives (dirs, aux) ;
+_DirectivesE (dirs) ;
+_Directives_const (dirs, aux) ;
+_Directives_constE (dirs) ;
+_Document (doc, aux) ;
+_EnumTypeDefinition (def) ;
+_EnumTypeExtension (ext, aux) ;
+_EnumValue (val) ;
+_EnumValueDefinition (enum) ;
+_EnumValueDefinitionLP (enums, aux) ;
+_EnumValuesDefinition (enums) ;
+_EnumValuesDefinitionE (enums) ;
+_ExecutableDefinition (def) ;
+_ExecutableDirectiveLocation (loc) ;
+_Field (field) ;
+_FieldDefinition (field) ;
+_FieldDefinitionLP (fields, aux) ;
+_FieldsDefinition (fields) ;
+_FieldsDefinitionE (fields) ;
+_FragmentDefinition (def) ;
+_FragmentName (name) ;
+_FragmentSpread (frag) ;
+_ImplementsInterfaces (types) ;
+_ImplementsInterfacesE (types) ;
+_InlineFragment (inlF) ;
+_InputFieldsDefinition (fields) ;
+_InputFieldsDefinitionE (fields) ;
+_InputObjectTypeDefinition (def) ;
+_InputObjectTypeExtension (ext, aux) ;
+_InputValueDefinition (arg) ;
+_InputValueDefinitionLP (args, aux) ;
+_InterfaceTypeDefinition (def) ;
+_InterfaceTypeExtension (ext, aux) ;
+_ListType (type) ;
+_ListValue (val) ;
+_ListValue_const (val) ;
+_Name (name) ;
+_Name0 (name) ;
+_NameE (name) ;
+_NamedType (type) ;
+_NonNullType (type) ;
+_NullValue (val) ;
+_ObjectField (field) ;
+_ObjectFieldL (fields) ;
+_ObjectField_const (field) ;
+_ObjectField_constL (fields) ;
+_ObjectTypeDefinition (def) ;
+_ObjectTypeExtension (ext, aux) ;
+_ObjectValue (val) ;
+_ObjectValue_const (val) ;
+_OperationDefinition (def) ;
+_OperationType (type) ;
+_OperationTypeDefinition (opTDef) ;
+_OperationTypeDefinitionLP (opTDefs, aux) ;
+_OrE ;
+_Or_DirectiveLocationL (locs) ;
+_Or_NamedTypeL (types) ;
+_ScalarTypeDefinition (def) ;
+_ScalarTypeExtension (ext) ;
+_SchemaDefinition (def) ;
+_SchemaExtension (ext, aux) ;
+_Selection (sel) ;
+_SelectionLP (sels, aux) ;
+_SelectionSet (set) ;
+_SelectionSetE (set) ;
+_Start (void) ;
+_Type (type) ;
+_TypeCondition (cond) ;
+_TypeConditionE (cond) ;
+_TypeDefinition (def) ;
+_TypeExtension (ext) ;
+_TypeSystemDefinition (def) ;
+_TypeSystemDirectiveLocation (loc) ;
+_TypeSystemExtension (def) ;
+_UnionMemberTypes (types) ;
+_UnionMemberTypesE (types) ;
+_UnionTypeDefinition (def) ;
+_UnionTypeExtension (ext, aux) ;
+_Value (val) ;
+_ValueL (vals) ;
+_Value_const (val) ;
+_Value_constL (vals) ;
+_Variable (name) ;
+_VariableDefinition (var) ;
+_VariableDefinitionLP (vars, aux) ;
+_VariableDefinitions (vars) ;
+_VariableDefinitionsE (vars) ;
+
+cons = #1;
+nil = #2;
+void = #3;
+opDef = #4;
+query = #5;
+mutation = #6;
+subscription = #7;
+var = #8;
+namedT = #9;
+listT = #10;
+nonNullT = #11;
+field = #12;
+dir = #13;
+argument = #14;
+selField = #15;
+frag = #16;
+inlF = #17;
+cond = #18;
+fragDef = #19;
+schemDef = #20;
+opTDef = #21;
+scalarT = #22;
+objectT = #23;
+fieldDef = #24;
+inputDef = #25;
+interT = #26;
+unionT = #27;
+enumT = #28;
+enumDef = #29;
+inputObjT = #30;
+dirDef = #31;
+schemExt = #32;
+scalarExt = #33;
+objectExt = #34;
+interExt = #35;
+unionExt = #36;
+enumExt = #37;
+inputObjExt = #38;
+
+interpret = ^1;
+integer = ^2;
+float = ^3;
+string = ^4;
+boolean = ^5;
+null = ^6;
+enum = ^7;
+list = ^8;
+object = ^9;
+varVal = ^10;
+
+GRAMMAR
+
+_Name0 = Name :
+	$0.name = $1 ;
+_Name0 = ARGUMENT_DEFINITION :
+	$0.name = $1 ;
+_Name0 = ENUM :
+	$0.name = $1 ;
+_Name0 = ENUM_VALUE :
+	$0.name = $1 ;
+_Name0 = FIELD :
+	$0.name = $1 ;
+_Name0 = FIELD_DEFINITION :
+	$0.name = $1 ;
+_Name0 = FRAGMENT_DEFINITION :
+	$0.name = $1 ;
+_Name0 = FRAGMENT_SPREAD :
+	$0.name = $1 ;
+_Name0 = INLINE_FRAGMENT :
+	$0.name = $1 ;
+_Name0 = INPUT_FIELD_DEFINITION :
+	$0.name = $1 ;
+_Name0 = INPUT_OBJECT :
+	$0.name = $1 ;
+_Name0 = INTERFACE :
+	$0.name = $1 ;
+_Name0 = MUTATION :
+	$0.name = $1 ;
+_Name0 = OBJECT :
+	$0.name = $1 ;
+_Name0 = QUERY :
+	$0.name = $1 ;
+_Name0 = SCALAR :
+	$0.name = $1 ;
+_Name0 = SCHEMA :
+	$0.name = $1 ;
+_Name0 = SUBSCRIPTION :
+	$0.name = $1 ;
+_Name0 = UNION :
+	$0.name = $1 ;
+_Name0 = directive :
+	$0.name = $1 ;
+_Name0 = enum :
+	$0.name = $1 ;
+_Name0 = extend :
+	$0.name = $1 ;
+_Name0 = fragment :
+	$0.name = $1 ;
+_Name0 = implements :
+	$0.name = $1 ;
+_Name0 = input :
+	$0.name = $1 ;
+_Name0 = interface :
+	$0.name = $1 ;
+_Name0 = mutation :
+	$0.name = $1 ;
+_Name0 = query :
+	$0.name = $1 ;
+_Name0 = scalar :
+	$0.name = $1 ;
+_Name0 = schema :
+	$0.name = $1 ;
+_Name0 = subscription :
+	$0.name = $1 ;
+_Name0 = type :
+	$0.name = $1 ;
+_Name0 = union :
+	$0.name = $1 ;
+
+_Name = _Name0 :
+	$0.name = $1.name ;
+_Name = false :
+	$0.name = $1 ;
+_Name = null :
+	$0.name = $1 ;
+_Name = on :
+	$0.name = $1 ;
+_Name = true :
+	$0.name = $1 ;
+
+_Start = _Document :
+	$0.void = interpret($1.doc) ;
+
+_Document = _Definitions :
+	$0.doc = $1.defs ;
+_Document = _SelectionSet :
+	$0.doc = cons($1.set, $0.aux), $0.aux = nil ;
+
+_Definitions = _Definition :
+	$0.defs = cons($1.def, $0.aux), $0.aux = nil ;
+_Definitions = _Definition _Definitions :
+	$0.defs = cons($1.def, $2.defs) ;
+
+_Definition = _ExecutableDefinition :
+	$0.def = $1.def ;
+_Definition = _TypeSystemDefinition :
+	$0.def = $1.def ;
+_Definition = _TypeSystemExtension :
+	$0.def = $1.def ;
+
+_ExecutableDefinition = _OperationDefinition :
+	$0.def = $1.def ;
+_ExecutableDefinition = _FragmentDefinition :
+	$0.def = $1.def ;
+
+_OperationDefinition = _OperationType _NameE _VariableDefinitionsE _DirectivesE _SelectionSet :
+	$0.def =  opDef($1.type, $2.name, $3.vars, $4.dirs, $5.set) ;
+
+_NameE = :
+	$0.name = void ;
+_NameE = _Name:
+	$0.name = $1.name ;
+
+_VariableDefinitionsE = :
+	$0.vars = nil ;
+_VariableDefinitionsE = _VariableDefinitions :
+	$0.vars = $1.vars ;
+
+_DirectivesE = :
+	$0.dirs = void ;
+_DirectivesE = _Directives :
+	$0.dirs = $1.dirs ;
+
+_OperationType = query :
+	$0.type = query ;
+_OperationType = mutation :
+	$0.type = mutation ;
+_OperationType = subscription :
+	$0.type = subscription ;
+
+_VariableDefinitions = leftpar _VariableDefinitionLP rightpar :
+	$0.vars = $2.vars ;
+
+_VariableDefinitionLP = _VariableDefinition :
+	$0.vars = cons($1.var, $0.aux), $0.aux = nil ;
+_VariableDefinitionLP = _VariableDefinition _VariableDefinitionLP :
+	$0.vars = cons($1.var, $2.vars) ;
+
+_VariableDefinition = _Variable colon _Type _DefaultValueE :
+	$0.var = var($1.name, $3.type, $4.val) ;
+
+_DefaultValueE = :
+	$0.val = void ;
+_DefaultValueE = _DefaultValue :
+	$0.val = $1.val ;
+
+_Variable = dollar _Name :
+	$0.name = $2.name ;
+
+_Type = _NamedType :
+	$0.type = $1.type ;
+_Type = _ListType :
+	$0.type = $1.type ;
+_Type = _NonNullType :
+	$0.type = $1.type ;
+
+_NamedType = _Name :
+	$0.type = namedT($1.name) ;
+
+_ListType = leftbracket _Type rightbracket :
+	$0.type = listT($2.type) ;
+
+_NonNullType = _NamedType exclamation :
+	$0.type = nonNullT($1.type) ;
+_NonNullType = _ListType exclamation :
+	$0.type = nonNullT($1.type) ;
+
+_DefaultValue = equal _Value_const :
+	$0.val = $2.val ;
+
+_Value_const = IntValue :
+	$0.val = integer($1) ;
+_Value_const = FloatValue :
+	$0.val = float($1) ;
+_Value_const = StringValue :
+	$0.val = string($1) ;
+_Value_const = _BooleanValue :
+	$0.val = $1.val ;
+_Value_const = _NullValue :
+	$0.val = $1.val ;
+_Value_const = _EnumValue :
+	$0.val = $1.val ;
+_Value_const = _ListValue_const :
+	$0.val = $1.val ;
+_Value_const = _ObjectValue_const :
+	$0.val = $1.val ;
+
+_BooleanValue = true :
+	$0.val = boolean($1) ;
+_BooleanValue = false :
+	$0.val = boolean($1) ;
+
+_NullValue = null :
+	$0.val = null ;
+
+_EnumValue = _Name0 :
+	$0.val = enum($1.name) ;
+_EnumValue = on :
+	$0.val = enum($1) ;
+
+_ListValue_const = leftbracket _Value_constL rightbracket :
+	$0.val = list($2.vals) ;
+
+_Value_constL = :
+	$0.vals = nil ;
+_Value_constL = _Value_const _Value_constL :
+	$0.vals = cons($1.val, $2.vals) ;
+
+_ObjectValue_const = leftbrace _ObjectField_constL rightbrace :
+	$0.val = object($2.fields) ;
+
+_ObjectField_constL = :
+	$0.fields = nil ;
+_ObjectField_constL = _ObjectField_const _ObjectField_constL :
+	$0.fields = cons($1.field, $2.fields) ;
+
+_ObjectField_const = _Name colon _Value_const :
+	$0.field = field($1.name, $3.val) ;
+
+_Directives = _Directive :
+	$0.dirs = cons($1.dir, $0.aux), $0.aux = nil ;
+_Directives = _Directive _Directives :
+	$0.dirs = cons($1.dir, $2.dirs) ;
+
+_Directive = arobase _Name _ArgumentsE :
+	$0.dir = dir($2.name, $3.args) ;
+
+_ArgumentsE = :
+	$0.args = nil ;
+_ArgumentsE = _Arguments :
+	$0.args = $1.args ;
+
+_Arguments = leftpar _ArgumentLP rightpar :
+	$0.args = $2.args ;
+
+_ArgumentLP = _Argument :
+	$0.args = cons($1.arg, $0.aux), $0.aux = nil ;
+_ArgumentLP = _Argument _ArgumentLP :
+	$0.args = cons($1.arg, $2.args) ;
+
+_Argument = _Name colon _Value :
+	$0.arg = field($1.name, $3.val) ;
+
+_Value = _Variable :
+	$0.val =  varVal($1.name);
+_Value = IntValue :
+	$0.val = integer($1) ;
+_Value = FloatValue :
+	$0.val = float($1) ;
+_Value = StringValue :
+	$0.val = string($1) ;
+_Value = _BooleanValue :
+	$0.val = $1.val ;
+_Value = _NullValue :
+	$0.val = $1.val ;
+_Value = _EnumValue :
+	$0.val = $1.val ;
+_Value = _ListValue :
+	$0.val = $1.val ;
+_Value = _ObjectValue :
+	$0.val = $1.val ;
+
+_ListValue = leftbracket _ValueL rightbracket :
+	$0.val = list($2.vals) ;
+
+_ValueL = :
+	$0.vals = nil ;
+_ValueL = _Value _ValueL :
+	$0.vals = cons($1.val, $2.vals) ;
+
+_ObjectValue = leftbrace _ObjectFieldL rightbrace :
+	$0.val = object($2.fields) ;
+
+_ObjectFieldL = :
+	$0.fields = nil ;
+_ObjectFieldL = _ObjectField _ObjectFieldL :
+	$0.fields = cons($1.field, $2.fields) ;
+
+_ObjectField = _Name colon _Value :
+	$0.field = field($1.name, $3.val) ;
+
+_SelectionSet = leftbrace _SelectionLP rightbrace :
+	$0.set = $2.sels ;
+
+_SelectionLP = _Selection :
+	$0.sels = cons($1.sel, $0.aux), $0.aux = nil ;
+_SelectionLP = _Selection _SelectionLP :
+	$0.sels = cons($1.sel, $2.sels) ;
+
+_Selection = _Field :
+	$0.sel = $1.field ;
+_Selection = _FragmentSpread :
+	$0.sel = $1.frag ;
+_Selection = _InlineFragment :
+	$0.sel = $1.inlF ;
+
+_Field = _Name _ArgumentsE _DirectivesE _SelectionSetE :
+	$0.field = selField($1.name, $1.name, $2.args, $3.dirs, $4.set) ;
+_Field = _Alias _Name _ArgumentsE _DirectivesE _SelectionSetE :
+	$0.field = selField($1.name, $2.name, $3.args, $4.dirs, $5.set) ;
+
+_SelectionSetE = :
+	$0.set = void ;
+_SelectionSetE = _SelectionSet :
+	$0.set = $1.set ;
+
+_Alias = _Name colon :
+	$0.name = $1.name ;
+
+_FragmentSpread = spread _FragmentName _DirectivesE :
+	$0.frag = frag($2.name, $3.dirs) ;
+
+_FragmentName = _Name0 :
+	$0.name = $1.name ;
+_FragmentName = false :
+	$0.name = $1 ;
+_FragmentName = null :
+	$0.name = $1 ;
+_FragmentName = true :
+	$0.name = $1 ;
+
+_InlineFragment = spread _TypeConditionE _DirectivesE _SelectionSet :
+	$0.inlF = inlF($2.cond, $3.dirs, $4.set) ;
+
+_TypeConditionE = :
+	$0.cond = void ;
+_TypeConditionE = _TypeCondition :
+	$0.cond = $1.cond ;
+
+_TypeCondition = on _NamedType :
+	$0.cond = cond($2.type) ;
+
+_FragmentDefinition = fragment _FragmentName _TypeCondition _DirectivesE _SelectionSet :
+	$0.def = fragDef($2.name, $3.cond, $4.dirs, $5.set) ;
+
+_TypeSystemDefinition = _SchemaDefinition :
+	$0.def = $1.def ;
+_TypeSystemDefinition = _TypeDefinition :
+	$0.def = $1.def ;
+_TypeSystemDefinition = _DirectiveDefinition :
+	$0.def = $1.def ;
+
+_SchemaDefinition = schema _Directives_constE leftbrace _OperationTypeDefinitionLP rightbrace :
+	$0.def = schemDef($2.dirs, $4.opTDefs) ;
+
+_Directives_constE = :
+	$0.dirs = void ;
+_Directives_constE = _Directives_const :
+	$0.dirs = $1.dirs ;
+
+_Directives_const = _Directive_const :
+	$0.dirs = cons($1.dir, $0.aux), $0.aux = nil ;
+_Directives_const = _Directive_const _Directives_const :
+	$0.dirs = cons($1.dir, $2.dirs) ;
+
+_Directive_const = arobase _Name _Arguments_constE :
+	$0.dir = dir($2.name, $3.args) ;
+
+_Arguments_constE = :
+	$0.args = nil ;
+_Arguments_constE = _Arguments_const :
+	$0.args = $1.args ;
+
+_Arguments_const = leftpar _Argument_constLP rightpar :
+	$0.args = $2.args ;
+
+_Argument_constLP = _Argument_const :
+	$0.args = cons($1.arg, $0.aux), $0.aux = nil ;
+_Argument_constLP = _Argument_const _Argument_constLP :
+	$0.args = cons($1.arg, $2.args) ;
+
+_Argument_const = _Name colon _Value_const :
+	$0.arg = field($1.name, $3.val) ;
+
+_OperationTypeDefinitionLP = _OperationTypeDefinition :
+	$0.opTDefs = cons($1.opTDef, $0.aux), $0.aux = nil ;
+_OperationTypeDefinitionLP = _OperationTypeDefinition _OperationTypeDefinitionLP :
+	$0.opTDefs = cons($1.opTDef, $2.opTDefs) ;
+
+_OperationTypeDefinition = _OperationType colon _NamedType :
+	$0.opTDef = opTDef($1.type, $3.type) ;
+
+_TypeDefinition = _ScalarTypeDefinition :
+	$0.def = $1.def ;
+_TypeDefinition = _ObjectTypeDefinition :
+	$0.def = $1.def ;
+_TypeDefinition = _InterfaceTypeDefinition :
+	$0.def = $1.def ;
+_TypeDefinition = _UnionTypeDefinition :
+	$0.def = $1.def ;
+_TypeDefinition = _EnumTypeDefinition :
+	$0.def = $1.def ;
+_TypeDefinition = _InputObjectTypeDefinition :
+	$0.def = $1.def ;
+
+_ScalarTypeDefinition = _DescriptionE scalar _Name _Directives_const :
+	$0.def = scalarT($1.string, $3.name, $4.dirs) ;
+
+_DescriptionE = :
+	$0.string = void ;
+_DescriptionE = _Description :
+	$0.string = $1.string ;
+
+_Description = StringValue :
+	$0.string = string($1) ;
+
+_ObjectTypeDefinition = _DescriptionE type _Name _ImplementsInterfacesE _Directives_constE _FieldsDefinitionE :
+	$0.def = objectT($1.string, $3.name, $4.types, $5.dirs, $6.fields) ;
+
+_ImplementsInterfacesE = :
+	$0.types = void ;
+_ImplementsInterfacesE = _ImplementsInterfaces :
+	$0.types = $1.types ;
+
+_ImplementsInterfaces = implements _AmpersandE _NamedType _Ampersand_NamedTypeL :
+	$0.types = cons($3.type, $4.types) ;
+
+_AmpersandE = ;
+_AmpersandE = ampersand ;
+
+_Ampersand_NamedTypeL = :
+	$0.types = nil ;
+_Ampersand_NamedTypeL = ampersand _NamedType _Ampersand_NamedTypeL :
+	$0.types = cons($2.type, $3.types) ;
+
+_FieldsDefinitionE = :
+	$0.fields = void ;
+_FieldsDefinitionE = _FieldsDefinition :
+	$0.fields = $1.fields ;
+
+_FieldsDefinition = leftbrace _FieldDefinitionLP rightbrace :
+	$0.fields = $2.fields ;
+
+_FieldDefinitionLP = _FieldDefinition :
+	$0.fields = cons($1.field, $0.aux), $0.aux = nil ;
+_FieldDefinitionLP = _FieldDefinition _FieldDefinitionLP :
+	$0.fields = cons($1.field, $2.fields) ;
+
+_FieldDefinition = _DescriptionE _Name _ArgumentsDefinitionE colon _Type _Directives_constE :
+	$0.field = fieldDef($1.string, $2.name, $3.args, $5.type, $6.dirs) ;
+
+_ArgumentsDefinitionE = :
+	$0.args = nil ;
+_ArgumentsDefinitionE = _ArgumentsDefinition :
+	$0.args = $1.args ;
+
+_ArgumentsDefinition = leftpar _InputValueDefinitionLP rightpar :
+	$0.args = $2.args ;
+
+_InputValueDefinitionLP = _InputValueDefinition :
+	$0.args = cons($1.arg, $0.aux), $0.aux = nil ;
+_InputValueDefinitionLP = _InputValueDefinition _InputValueDefinitionLP :
+	$0.args = cons($1.arg, $2.args) ;
+
+_InputValueDefinition = _DescriptionE _Name colon _Type _DefaultValueE _Directives_constE :
+	$0.arg = inputDef($1.string, $2.name, $4.type, $5.val, $6.dirs) ;
+
+_InterfaceTypeDefinition = _DescriptionE interface _Name _Directives_constE _FieldsDefinitionE :
+	$0.def = interT($1.string, $3.name, $4.dirs, $5.fields) ;
+
+_UnionTypeDefinition = _DescriptionE union _Name _Directives_constE _UnionMemberTypesE :
+	$0.def = unionT($1.string, $3.name, $4.dirs, $5.types) ;
+
+_UnionMemberTypesE = :
+	$0.types = void ;
+_UnionMemberTypesE = _UnionMemberTypes :
+	$0.types = $1.types ;
+
+_UnionMemberTypes = equal _OrE _NamedType _Or_NamedTypeL :
+	$0.types = cons($3.type, $4.types) ;
+
+_OrE = ;
+_OrE = or ;
+
+_Or_NamedTypeL = :
+	$0.types = nil ;
+_Or_NamedTypeL = or _NamedType _Or_NamedTypeL :
+	$0.types = cons($2.type, $3.types) ;
+
+_EnumTypeDefinition = _DescriptionE enum _Name _Directives_constE _EnumValuesDefinitionE :
+	$0.def = enumT($1.string, $3.name, $4.dirs, $5.enums) ;
+
+_EnumValuesDefinitionE = :
+	$0.enums = void ;
+_EnumValuesDefinitionE = _EnumValuesDefinition :
+	$0.enums = $1.enums ;
+
+_EnumValuesDefinition = leftbrace _EnumValueDefinitionLP rightbrace :
+	$0.enums = $2.enums ;
+
+_EnumValueDefinitionLP = _EnumValueDefinition :
+	$0.enums = cons($1.enum, $0.aux), $0.aux = nil ;
+_EnumValueDefinitionLP = _EnumValueDefinition _EnumValueDefinitionLP :
+	$0.enums = cons($1.enum, $2.enums) ;
+
+_EnumValueDefinition = _DescriptionE _EnumValue _Directives_constE :
+	$0.enum = enumDef($1.string, $2.val, $3.dirs) ;
+
+_InputObjectTypeDefinition = _DescriptionE input _Name _Directives_constE _InputFieldsDefinitionE :
+	$0.def = inputObjT($1.string, $3.name, $4.dirs, $5.fields) ;
+
+_InputFieldsDefinitionE = :
+	$0.fields = void ;
+_InputFieldsDefinitionE = _InputFieldsDefinition :
+	$0.fields = $1.fields ;
+
+_InputFieldsDefinition = leftbrace _InputValueDefinitionLP rightbrace :
+	$0.fields = $2.args ;
+
+_DirectiveDefinition = _DescriptionE directive arobase _Name _ArgumentsDefinitionE on _DirectiveLocations :
+	$0.def = dirDef($1.string, $4.name, $5.args, $7.locs) ;
+
+_DirectiveLocations = _OrE _DirectiveLocation _Or_DirectiveLocationL :
+	$0.locs = cons($2.loc, $3.locs) ;
+
+_Or_DirectiveLocationL = :
+	$0.locs = nil ;
+_Or_DirectiveLocationL = or _DirectiveLocation _Or_DirectiveLocationL :
+	$0.locs = cons($2.loc, $3.locs) ;
+
+_DirectiveLocation = _ExecutableDirectiveLocation :
+	$0.loc = $1.loc ;
+_DirectiveLocation = _TypeSystemDirectiveLocation :
+	$0.loc = $1.loc ;
+
+_ExecutableDirectiveLocation = QUERY :
+	$0.loc = query ;
+_ExecutableDirectiveLocation = MUTATION :
+	$0.loc = mutation ;
+_ExecutableDirectiveLocation = SUBSCRIPTION :
+	$0.loc = subscription ;
+_ExecutableDirectiveLocation = FIELD :
+	$0.loc = field ;
+_ExecutableDirectiveLocation = FRAGMENT_DEFINITION :
+	$0.loc = fragDef ;
+_ExecutableDirectiveLocation = FRAGMENT_SPREAD :
+	$0.loc = frag ;
+_ExecutableDirectiveLocation = INLINE_FRAGMENT :
+	$0.loc = inlF ;
+
+_TypeSystemDirectiveLocation = SCHEMA :
+	$0.loc = schemDef ;
+_TypeSystemDirectiveLocation = SCALAR :
+	$0.loc = scalarT ;
+_TypeSystemDirectiveLocation = OBJECT:
+	$0.loc = objectT  ;
+_TypeSystemDirectiveLocation = FIELD_DEFINITION :
+	$0.loc = fieldDef ;
+_TypeSystemDirectiveLocation = ARGUMENT_DEFINITION :
+	$0.loc = argument ;
+_TypeSystemDirectiveLocation = INTERFACE :
+	$0.loc = interT ;
+_TypeSystemDirectiveLocation = UNION :
+	$0.loc = unionT ;
+_TypeSystemDirectiveLocation = ENUM :
+	$0.loc = enumT ;
+_TypeSystemDirectiveLocation = ENUM_VALUE :
+	$0.loc = enumDef ;
+_TypeSystemDirectiveLocation = INPUT_OBJECT :
+	$0.loc = inputObjT ;
+_TypeSystemDirectiveLocation = INPUT_FIELD_DEFINITION :
+	$0.loc = inputDef ;
+
+_TypeSystemExtension = _SchemaExtension :
+	$0.def = $1.ext ;
+_TypeSystemExtension = _TypeExtension :
+	$0.def = $1.ext ;
+
+_SchemaExtension = extend schema _Directives_constE leftbrace _OperationTypeDefinitionLP rightbrace :
+	$0.ext = schemExt($3.dirs, $5.opTDefs) ;
+_SchemaExtension = extend schema _Directives_const :
+	$0.ext = schemExt($3.dirs, $0.aux), $0.aux = nil ;
+
+_TypeExtension = _ScalarTypeExtension :
+	$0.ext = $1.ext ;
+_TypeExtension = _ObjectTypeExtension :
+	$0.ext = $1.ext ;
+_TypeExtension = _InterfaceTypeExtension :
+	$0.ext = $1.ext ;
+_TypeExtension = _UnionTypeExtension :
+	$0.ext = $1.ext ;
+_TypeExtension = _EnumTypeExtension :
+	$0.ext = $1.ext ;
+_TypeExtension = _InputObjectTypeExtension :
+	$0.ext = $1.ext ;
+
+_ScalarTypeExtension = extend scalar _Name _Directives_const :
+	$0.ext = scalarExt($3.name, $4.dirs) ;
+
+_ObjectTypeExtension = extend type _Name _ImplementsInterfacesE _Directives_constE _FieldsDefinition :
+	$0.ext = objectExt($3.name, $4.types, $5.dirs, $6.fields) ;
+_ObjectTypeExtension = extend type _Name _ImplementsInterfacesE _Directives_const :
+	$0.ext = objectExt($3.name, $4.types, $5.dirs, $0.aux), $0.aux = nil ;
+_ObjectTypeExtension = extend type _Name _ImplementsInterfaces :
+	$0.ext = objectExt($3.name, $4.types, $0.aux, $0.aux), $0.aux = nil ;
+
+_InterfaceTypeExtension = extend interface _Name _Directives_constE _FieldsDefinition :
+	$0.ext = interExt($3.name, $4.dirs, $5.fields) ;
+_InterfaceTypeExtension = extend interface _Name _Directives_const :
+	$0.ext = interExt($3.name, $4.dirs, $0.aux), $0.aux = nil ;
+
+_UnionTypeExtension = extend union _Name _Directives_constE _UnionMemberTypes :
+	$0.ext = unionExt($3.name, $4.dirs, $5.types) ;
+_UnionTypeExtension = extend union _Name _Directives_const :
+	$0.ext = unionExt($3.name, $4.dirs, $0.aux), $0.aux = nil ;
+
+_EnumTypeExtension = extend enum _Name _Directives_constE _EnumValuesDefinition :
+	$0.ext = enumExt($3.name, $4.dirs, $5.enums) ;
+_EnumTypeExtension = extend enum _Name _Directives_const :
+	$0.ext = enumExt($3.name, $4.dirs, $0.aux), $0.aux = nil ;
+
+_InputObjectTypeExtension = extend input _Name _Directives_constE _InputFieldsDefinition :
+	$0.ext = inputObjExt($3.name, $4.dirs, $5.fields) ;
+_InputObjectTypeExtension = extend input _Name _Directives_const :
+	$0.ext = inputObjExt($3.name, $4.dirs, $0.aux), $0.aux = nil ;
+
+AXIOM
+
+_Start.

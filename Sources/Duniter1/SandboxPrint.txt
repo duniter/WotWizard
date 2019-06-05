@@ -1,0 +1,243 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1SandboxPrint;
+	
+	
+
+	IMPORT
+		
+		BA := Duniter1BasicPrint, B := Duniter1BlockchainPrint, GS := Duniter1GQLSender, Dialog, TextMappers, TextModels, TextViews, J := UtilJson, Views;
+	
+	CONST
+		
+		waitDelay = 100;
+		
+		sandboxJson = "Sandbox";
+	
+	TYPE
+		
+		 Action = POINTER TO RECORD (BA.WaitFor)
+		END;
+		
+		IdHash* = RECORD
+			hash*: B.Hash;
+			pubkey*: B.Pubkey;
+			uid*: BA.String;
+			inBC*: BOOLEAN;
+			expired_on*: LONGINT;
+		END;
+		
+		IdHashs* = POINTER TO ARRAY OF IdHash;
+		
+		IdPub* = RECORD
+			pubkey*: B.Pubkey;
+			hash*: B.Hash;
+		END;
+		
+		IdPubs* = POINTER TO ARRAY OF IdPub;
+		
+		IdUid* = RECORD
+			uid*: BA.String;
+			hash*: B.Hash;
+		END;
+		
+		IdUids* = POINTER TO ARRAY OF IdUid;
+		
+		Identities* = POINTER TO RECORD
+			id_byHash*: IdHashs;
+			id_byPubkey*: IdPubs;
+			id_byUid*: IdUids;
+		END;
+		
+		Cert* = RECORD
+			from_pubkey*: B.Pubkey;
+			from_uid*: BA.String;
+			to_hash*: B.Hash;
+			to_uid*: BA.String;
+			expired_on*: LONGINT;
+		END;
+		
+		Certs* = POINTER TO ARRAY OF Cert;
+		
+		Certifications* = POINTER TO RECORD
+			certFrom*,
+			certTo*: Certs;
+		END;
+		
+		Sandbox* = POINTER TO RECORD
+			identities*: Identities;
+			certifications*: Certifications;
+			block*: INTEGER;
+			now*: LONGINT;
+		END;
+	
+	VAR
+		
+		globalSb*: Sandbox;
+	
+	PROCEDURE DoPrint;
+		
+		VAR
+			
+			ss: Views.Title;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			i: INTEGER;
+			ids: Identities;
+			idH: IdHashs;
+			idP: IdPubs;
+			idU: IdUids;
+			cs: Certifications;
+			c: Certs;
+			dt: BA.DateTime;
+		
+		BEGIN (*DoPrint*)
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			
+			f.WriteMsg("#Duniter1:Block");
+			f.WriteString(" ");
+			f.WriteInt(globalSb.block);
+			f.WriteTab;
+			BA.TimestampToString(globalSb.now, dt);
+			f.WriteString(dt);
+			f.WriteString(" (UTC+0)");
+			f.WriteLn; f.WriteLn;
+			
+			ids := globalSb.identities;
+			
+			f.WriteMsg("#Duniter1:HashNb"); f.WriteString(" = "); f.WriteInt(LEN(ids.id_byHash)); f.WriteLn;
+			f.WriteMsg("#Duniter1:PubNb"); f.WriteString(" = "); f.WriteInt(LEN(ids.id_byPubkey)); f.WriteLn;
+			f.WriteMsg("#Duniter1:UidNb"); f.WriteString(" = "); f.WriteInt(LEN(ids.id_byUid)); f.WriteLn;
+			f.WriteMsg("#Duniter1:CertNb"); f.WriteString(" = "); f.WriteInt(LEN(globalSb.certifications.certFrom)); f.WriteLn;
+			
+			idH := ids.id_byHash;
+			IF idH # NIL THEN
+				FOR i := 0 TO LEN(idH) - 1 DO
+					f.WriteLn;
+					f.WriteString(idH[i].hash); f.WriteLn;
+					f.WriteTab;
+					IF idH[i].inBC THEN
+						f.WriteMsg("#Duniter1:WasMember");
+					ELSE
+						f.WriteMsg("#Duniter1:Newcomer");
+					END;
+					f.WriteLn;
+					f.WriteTab; f.WriteString(idH[i].pubkey); f.WriteLn;
+					f.WriteTab; f.WriteString(idH[i].uid); f.WriteTab;
+					BA.TimestampToString(idH[i].expired_on, dt);
+					f.WriteString(dt);
+					f.WriteLn;
+				END;
+			END;
+			f.WriteLn;
+			idP := ids.id_byPubkey;
+			IF idP # NIL THEN
+				FOR i := 0 TO LEN(idP) - 1 DO
+					f.WriteLn;
+					f.WriteString(idP[i].pubkey); f.WriteLn; f.WriteTab;
+					f.WriteString(idP[i].hash);
+					f.WriteLn;
+				END;
+			END;
+			f.WriteLn;
+			idU := ids.id_byUid;
+			IF idU # NIL THEN
+				FOR i := 0 TO LEN(idU) - 1 DO
+					f.WriteLn;
+					f.WriteString(idU[i].uid); f.WriteLn; f.WriteTab;
+					f.WriteString(idU[i].hash);
+					f.WriteLn;
+				END;
+			END;
+			f.WriteLn;
+			
+			cs := globalSb.certifications;
+			c := cs.certFrom;
+			IF c # NIL THEN
+				FOR i := 0 TO LEN(c) - 1 DO
+					f.WriteLn;
+					f.WriteString(c[i].from_pubkey);
+					IF c[i].from_uid # NIL THEN
+						f.WriteLn; f.WriteTab;
+						f.WriteString(" ("); f.WriteString(c[i].from_uid); f.WriteString(")");
+					END;
+					f.WriteLn; f.WriteString("→"); f.WriteLn;
+					f.WriteString(c[i].to_hash);
+					IF c[i].to_uid # NIL THEN
+						f.WriteLn; f.WriteTab;
+						f.WriteString(" ("); f.WriteString(c[i].to_uid); f.WriteString(") ");
+					END;
+					f.WriteLn;
+					BA.TimestampToString(c[i].expired_on, dt);
+					f.WriteString(dt);
+					f.WriteLn;
+				END;
+			END;
+			f.WriteLn;
+			c := cs.certTo;
+			IF c # NIL THEN
+				FOR i := 0 TO LEN(c) - 1 DO
+					f.WriteLn;
+					f.WriteString(c[i].to_hash);
+					IF c[i].to_uid # NIL THEN
+						f.WriteLn; f.WriteTab;
+						f.WriteString(" ("); f.WriteString(c[i].to_uid); f.WriteString(")");
+					END;
+					f.WriteLn; f.WriteString("←"); f.WriteLn;
+					f.WriteString(c[i].from_pubkey);
+					IF c[i].from_uid # NIL THEN
+						f.WriteLn; f.WriteTab;
+						f.WriteString(" ("); f.WriteString(c[i].from_uid); f.WriteString(") ");
+					END;
+					f.WriteLn;
+					BA.TimestampToString(c[i].expired_on, dt);
+					f.WriteString(dt);
+					f.WriteLn;
+				END;
+			END;
+			
+			Dialog.MapString("#Duniter1:Sandbox", ss);
+			Views.OpenAux(TextViews.dir.New(t), ss);
+		END DoPrint;
+	
+	PROCEDURE (a: Action) End (IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			j: J.Json;
+		
+		BEGIN (*End*)
+			j := J.ReadFile(BA.waitDir, name); ASSERT(j # NIL, 100);
+			NEW(globalSb);
+			j.ApplyTo(globalSb);
+			DoPrint;
+			globalSb := NIL;
+		END End;
+	
+	PROCEDURE Print*;
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Print*)
+			BA.SwitchOff(BA.waitDir, sandboxJson + ".json");
+			GS.Send("Duniter1SandboxList", "Do", "", sandboxJson);
+			NEW(a);
+			a.Do(BA.waitDir, sandboxJson + ".json", waitDelay);
+		END Print;
+	
+	END Duniter1SandboxPrint.
+
+Duniter1SandboxPrint.Print;

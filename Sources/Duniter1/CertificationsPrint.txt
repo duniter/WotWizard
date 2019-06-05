@@ -1,0 +1,274 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1CertificationsPrint;
+	
+	
+
+	IMPORT
+		
+		BA := Duniter1BasicPrint, Dialog, GS := Duniter1GQLSender, TextMappers, TextModels, TextViews, J := UtilJson, Views;
+	
+	CONST
+		
+		waitDelay = 100;
+		
+		certFromJson = "CertificationsFrom";
+		certToJson = "CertificationsTo";
+		
+		fromAction = 0;
+		toAction = 1;
+	
+	TYPE
+		
+		 Action = POINTER TO RECORD (BA.WaitFor)
+			what: INTEGER;
+		END;
+		
+		Distribution* = POINTER TO ARRAY OF INTEGER;
+		
+		Stats* = POINTER TO RECORD
+			number*,
+			median*: INTEGER;
+			mean*,
+			standard_deviation*: REAL;
+			distribution*: Distribution;
+		END;
+		
+		Certif* = RECORD
+			uid*: BA.String;
+			created*,
+			expired*: LONGINT;
+		END;
+		
+		Certifs* = POINTER TO ARRAY OF Certif;
+		
+		DatumFrom* = RECORD
+			from*: BA.String;
+			to*: Certifs;
+		END;
+		
+		DataFrom* = POINTER TO ARRAY OF DatumFrom;
+		
+		CertificationsFrom* = POINTER TO RECORD
+			data*: DataFrom;
+			statistics*: Stats;
+			block*: INTEGER;
+			now*: LONGINT;
+		END;
+		
+		DatumTo* = RECORD
+			to*: BA.String;
+			from*: Certifs;
+		END;
+		
+		DataTo* = POINTER TO ARRAY OF DatumTo;
+		
+		CertificationsTo* = POINTER TO RECORD
+			data*: DataTo;
+			statistics*: Stats;
+			block*: INTEGER;
+			now*: LONGINT;
+		END;
+	
+	VAR
+		
+		globalCertFrom*: CertificationsFrom;
+		globalCertTo*: CertificationsTo;
+	
+	PROCEDURE PrintMoments (VAR f: TextMappers.Formatter; stats: Stats);
+		
+		VAR
+			
+			i: INTEGER;
+			s: Dialog.String;
+			d: Distribution;
+		
+		BEGIN (*PrintMoments*)
+			Dialog.MapString("#Duniter1:Certifications", s);
+			f.WriteInt(stats.number); f.WriteString(" " + s);
+			f.WriteLn;
+			Dialog.MapString("#Duniter1:Mean", s);
+			f.WriteString(s + " = "); f.WriteReal(stats.mean);
+			f.WriteLn;
+			Dialog.MapString("#Duniter1:Median", s);
+			f.WriteString(s + " = "); f.WriteInt(stats.median);
+			f.WriteLn;
+			Dialog.MapString("#Duniter1:SDev", s);
+			f.WriteString(s + " = "); f.WriteReal(stats.standard_deviation);
+			f.WriteLn;
+			d := stats.distribution;
+			Dialog.MapString("#Duniter1:Distribution", s);
+			f.WriteString(s);
+			f.WriteLn;
+			IF d # NIL THEN
+				FOR i := 0 TO LEN(d) - 1 DO
+					f.WriteTab; f.WriteInt(i);
+					f.WriteTab; f.WriteInt(d[i]);
+					f.WriteLn;
+				END;
+			END;
+			f.WriteString("~");
+		END PrintMoments;
+	
+	PROCEDURE PrintFrom*;
+		
+		VAR
+			
+			i, j: INTEGER;
+			s: Views.Title;
+			tt: TextModels.Model;
+			f: TextMappers.Formatter;
+			d: DataFrom;
+			cs: Certifs;
+			dt: BA.DateTime;
+		
+		BEGIN (*PrintFrom*)
+			tt := TextModels.dir.New();
+			f.ConnectTo(tt);
+			f.WriteMsg("#Duniter1:Block");
+			f.WriteString(" ");
+			f.WriteInt(globalCertFrom.block);
+			f.WriteTab;
+			BA.TimestampToString(globalCertFrom.now, dt);
+			f.WriteString(dt);
+			f.WriteString(" (UTC+0)");
+			f.WriteLn; f.WriteLn;
+			f.WriteMsg("#Duniter1:CertificationsFrom");
+			f.WriteLn; f.WriteLn;
+			d := globalCertFrom.data;
+			IF d # NIL THEN
+				FOR i := 0 TO LEN(d) - 1 DO
+					f.WriteString(d[i].from); f.WriteString(" →"); f.WriteLn;
+					cs := d[i].to;
+					IF cs # NIL THEN
+						FOR j := 0 TO LEN(cs) - 1 DO
+							f.WriteTab;
+							f.WriteString(cs[j].uid);
+							f.WriteTab;
+							BA.TimestampToString(cs[j].created, dt);
+							f.WriteString(dt); f.WriteString(" → ");
+							BA.TimestampToString(cs[j].expired, dt);
+							f.WriteString(dt); f.WriteLn;
+						END;
+					END;
+				END;
+			END;
+			f.WriteLn;
+			PrintMoments(f, globalCertFrom.statistics);
+			Dialog.MapString("#Duniter1:Certifications", s);
+			Views.OpenAux(TextViews.dir.New(tt), s);
+		END PrintFrom;
+	
+	PROCEDURE PrintTo*;
+		
+		VAR
+			
+			i, j: INTEGER;
+			s: Views.Title;
+			tt: TextModels.Model;
+			f: TextMappers.Formatter;
+			d: DataTo;
+			cs: Certifs;
+			dt: BA.DateTime;
+		
+		BEGIN (*PrintTo*)
+			tt := TextModels.dir.New();
+			f.ConnectTo(tt);
+			f.WriteMsg("#Duniter1:Block");
+			f.WriteString(" ");
+			f.WriteInt(globalCertTo.block);
+			f.WriteTab;
+			BA.TimestampToString(globalCertTo.now, dt);
+			f.WriteString(dt);
+			f.WriteString(" (UTC+0)");
+			f.WriteLn; f.WriteLn;
+			f.WriteMsg("#Duniter1:CertificationsTo");
+			f.WriteLn; f.WriteLn;
+			d := globalCertTo.data;
+			IF d # NIL THEN
+				FOR i := 0 TO LEN(d) - 1 DO
+					f.WriteString(d[i].to); f.WriteString(" ←"); f.WriteLn;
+					cs := d[i].from;
+					IF cs # NIL THEN
+						FOR j := 0 TO LEN(cs) - 1 DO
+							f.WriteTab;
+							f.WriteString(cs[j].uid);
+							f.WriteTab;
+							BA.TimestampToString(cs[j].created, dt);
+							f.WriteString(dt); f.WriteString(" → ");
+							BA.TimestampToString(cs[j].expired, dt);
+							f.WriteString(dt); f.WriteLn;
+						END;
+					END;
+				END;
+			END;
+			f.WriteLn;
+			PrintMoments(f, globalCertTo.statistics);
+			Dialog.MapString("#Duniter1:Certifications", s);
+			Views.OpenAux(TextViews.dir.New(tt), s);
+		END PrintTo;
+	
+	PROCEDURE (a: Action) End (IN name: ARRAY OF CHAR);
+		
+		VAR
+			
+			j: J.Json;
+		
+		BEGIN (*End*)
+			j := J.ReadFile(BA.waitDir, name); ASSERT(j # NIL, 100);
+			CASE a.what OF
+				|fromAction:
+					NEW(globalCertFrom);
+					j.ApplyTo(globalCertFrom);
+					PrintFrom;
+					globalCertFrom := NIL;
+				|toAction:
+					NEW(globalCertTo);
+					j.ApplyTo(globalCertTo);
+					PrintTo;
+					globalCertTo := NIL;
+			END;
+		END End;
+	
+	PROCEDURE From*;
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*From*)
+			BA.SwitchOff(BA.waitDir, certFromJson + ".json");
+			GS.Send("Duniter1Certifications", "From", "", certFromJson);
+			NEW(a);
+			a.what := fromAction;
+			a.Do(BA.waitDir, certFromJson + ".json", waitDelay);
+		END From;
+	
+	PROCEDURE To*;
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*To*)
+			BA.SwitchOff(BA.waitDir, certToJson + ".json");
+			GS.Send("Duniter1Certifications", "To", "", certToJson);
+			NEW(a);
+			a.what := toAction;
+			a.Do(BA.waitDir, certToJson + ".json", waitDelay);
+		END To;
+	
+	END Duniter1CertificationsPrint.
+
+Duniter1CertificationsPrint.From;
+Duniter1CertificationsPrint.To;

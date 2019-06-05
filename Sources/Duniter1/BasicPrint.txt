@@ -1,0 +1,313 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1BasicPrint;
+	
+	
+
+	IMPORT
+		
+		A := UtilAvlTree, Converters, Dates, Dialog, Files, Kernel, Services, UC := UnicodeCase_Mapping, UL := UnicodeLetter_Mapping, UtilLog, Views;
+	
+	CONST
+		
+		version = "3.1.0";
+		
+		year0 = 1970; month0 = 1; day0 = 1; (* Start date of computing history *)
+		
+		initDir* = "Duniter1/Rsrc";
+		logName = "LogPrint.txt";
+		logOldName = "LogPrint1.txt";
+		
+		textImpConv = "CpcUtf8Conv.ImportUtf8";
+		textExpConv = "CpcUtf8Conv.ExportUtf8";
+		
+		oldIcon = '×'; (* Icon for old items (old or leaving members) *)
+		
+		never = MAX(LONGINT); (* In WotWizard window *)
+		revoked = MIN(LONGINT); (* Limit date for revoked members *)
+		already = MIN(LONGINT) + 1; (* Already available certification date *)
+		
+		lt* = A.lt;
+		eq* = A.eq;
+		gt* = A.gt;
+		
+		waitDir* = "Json";
+	
+	TYPE
+		
+		String* = POINTER TO ARRAY OF CHAR;
+		
+		TimeString* = ARRAY 8 + 1 OF CHAR;
+		
+		DateTime* = ARRAY 1 + 10 + 1 + 8 + 1 OF CHAR;
+		
+		WaitFor* = POINTER TO ABSTRACT RECORD
+		END;
+		
+		WaitAction = POINTER TO RECORD (Services.Action)
+			w: WaitFor;
+			checkPresent: BOOLEAN;
+			dir,
+			name: POINTER TO ARRAY OF CHAR;
+			delay: LONGINT;
+		END;
+	
+	VAR
+		
+		lg*: UtilLog.Log;
+		
+		utf8Conv*: Converters.Converter;
+		
+		t0-: INTEGER; (* Origin of dates *)
+	
+	PROCEDURE VRegister* (v: Views.View; l: Files.Locator; name: Files.Name; errNumber: INTEGER; IN from: ARRAY OF CHAR);
+		
+		CONST
+			
+			maxRepeats = 10;
+		
+		VAR
+			
+			res, n: INTEGER;
+		
+		BEGIN (*VRegister*)
+			n := maxRepeats;
+			REPEAT
+				Views.Register(v, Views.dontAsk, l, name, utf8Conv, res);
+				DEC(n);
+			UNTIL (res = 0) OR (n = 0);
+			lg.Assert(res = 0, errNumber, res, from);
+		END VRegister;
+	
+	(* Convert the time t to the string ts *)
+	PROCEDURE TimeToString* (t: LONGINT; OUT ts: TimeString);
+		
+		VAR
+			
+			time: Dates.Time;
+		
+		BEGIN (*TimeToString*)
+			t := (t + Services.resolution DIV 2) DIV Services.resolution;
+			time.second := SHORT(t MOD 60); t := t DIV 60;
+			time.minute := SHORT(t MOD 60); t := t DIV 60;
+			time.hour := SHORT(t MOD 24);
+			ASSERT(t DIV 24 = 0, 20);
+			Dates.TimeToString(time, ts);
+		END TimeToString;
+	
+	(* Convert the time t to the strings date and time *)
+	PROCEDURE TimestampToDate (t: LONGINT; OUT date: Dates.Date; OUT time: Dates.Time);
+		
+		BEGIN (*TimestampToDate*)
+			time.second := SHORT(t MOD 60); t := t DIV 60;
+			time.minute := SHORT(t MOD 60); t := t DIV 60;
+			time.hour := SHORT(t MOD 24);
+			Dates.DayToDate(SHORT(t DIV 24 + t0), date);
+		END TimestampToDate;
+	
+	(* Convert the date t to the string dt *)
+	PROCEDURE TimestampToString* (t: LONGINT; OUT dt: DateTime);
+		
+		VAR
+			
+			ti, da: ARRAY 11 OF CHAR;
+			date: Dates.Date;
+			time: Dates.Time;
+		
+		BEGIN (*TimestampToString*)
+			IF t = never THEN
+				Dialog.MapString("#Duniter1:Never", dt);
+			ELSIF t = revoked THEN
+				Dialog.MapString("#Duniter1:Revoked", dt);
+			ELSIF t = already THEN
+				dt := "**/**/******:**:**";
+			ELSE
+				TimestampToDate(ABS(t), date, time);
+				Dates.DateToString(date, Dates.short, da);
+				Dates.TimeToString(time, ti);
+				dt := da + " " + ti;
+				IF t < 0 THEN (* leaving member *)
+					dt := oldIcon + dt;
+				END;
+			END;
+		END TimestampToString;
+	
+	(* Extract the significant character at the position i in s, or further; only alphanumeric characters are significant, and their case of lowest rank is returned *)
+	PROCEDURE DownC (IN s: ARRAY OF CHAR; VAR i: INTEGER): CHAR;
+		
+		VAR
+			
+			c: CHAR;
+		
+		PROCEDURE LetterOrDigit (c: CHAR): BOOLEAN;
+			
+			BEGIN (*LetterOrDigit*)
+				RETURN (c >= '0') & (c <= '9') OR UL.IsLetter(ORD(c));
+			END LetterOrDigit;
+		
+		BEGIN (*DownC*)
+			LOOP
+				c := s[i];
+				IF c = 0X THEN
+					EXIT;
+				END;
+				INC(i);
+				IF LetterOrDigit(c) THEN
+					c := MIN(UC.Lower(c), UC.Upper(c));
+					EXIT;
+				END;
+			END;
+			RETURN c;
+		END DownC;
+	
+	(* Standard comparison procedure for identifiers; they are first compared with only significant characters and case ignored, and if still equal, with all characters and case taken into account *)
+	PROCEDURE CompP* (IN s1, s2: ARRAY OF CHAR): BYTE;
+		
+		VAR
+			
+			i1, i2: INTEGER;
+			c1, c2: CHAR;
+		
+		BEGIN (*CompP*)
+			i1 := 0; i2 := 0;
+			REPEAT
+				c1 := DownC(s1, i1);
+				c2 := DownC(s2, i2);
+			UNTIL (c1 # c2) OR (c1 = 0X);
+			IF c1 < c2 THEN
+				RETURN lt;
+			END;
+			IF c1 > c2 THEN
+				RETURN gt;
+			END;
+			i1 := 0;
+			WHILE (s1[i1] = s2[i1]) & (s1[i1] # 0X) DO
+				INC(i1);
+			END;
+			IF s1[i1] < s2[i1] THEN
+				RETURN lt;
+			END;
+			IF s1[i1] > s2[i1] THEN
+				RETURN gt;
+			END;
+			RETURN eq;
+		END CompP;
+	
+	(* Help emptying the memory by calling the garbage collector *)
+	PROCEDURE Collect*;
+		
+		BEGIN (*Collect*)
+			IF Kernel.WouldFinalize() THEN
+				Kernel.Collect;
+			ELSE
+				Kernel.FastCollect;
+			END;
+		END Collect;
+	
+	PROCEDURE SwitchOff* (IN dir, name: ARRAY OF CHAR);
+		
+		VAR
+			
+			loc: Files.Locator;
+		
+		BEGIN (*SwitchOff*)
+			loc := Files.dir.This(dir); ASSERT(loc.res = 0, 100);
+			Files.dir.Delete(loc, name$); ASSERT(loc.res IN {0, 2}, 100);
+		END SwitchOff;
+	
+	PROCEDURE Check* (IN dir, name: ARRAY OF CHAR): BOOLEAN;
+		
+		VAR
+			
+			loc: Files.Locator;
+			f: Files.File;
+		
+		BEGIN (*Check*)
+			loc := Files.dir.This(dir); ASSERT(loc.res = 0, 100);
+			f := Files.dir.Old(loc, name$, Files.shared);
+			IF f # NIL THEN
+				f.Close;
+				RETURN TRUE;
+			END;
+			RETURN FALSE;
+		END Check;
+	
+	PROCEDURE (w: WaitFor) End- (IN name: ARRAY OF CHAR), NEW, EMPTY;
+	
+	PROCEDURE (w: WaitFor) Do* (IN dir, name: ARRAY OF CHAR; delay: LONGINT), NEW;
+		
+		VAR
+			
+			wa: WaitAction;
+		
+		BEGIN (*Do*)
+			NEW(wa);
+			wa.w := w;
+			wa.checkPresent := TRUE;
+			NEW(wa.dir, LEN(dir$) + 1); wa.dir^ := dir$;
+			NEW(wa.name, LEN(name$) + 1); wa.name^ := name$;
+			wa.delay := delay;
+			Services.DoLater(wa, Services.now);
+		END Do;
+	
+	PROCEDURE (w: WaitFor) Dont* (IN dir, name: ARRAY OF CHAR; delay: LONGINT), NEW;
+		
+		VAR
+			
+			wa: WaitAction;
+		
+		BEGIN (*Dont*)
+			NEW(wa);
+			wa.w := w;
+			wa.checkPresent := FALSE;
+			NEW(wa.dir, LEN(dir$) + 1); wa.dir^ := dir$;
+			NEW(wa.name, LEN(name$) + 1); wa.name^ := name$;
+			wa.delay := delay;
+			Services.DoLater(wa, Services.now);
+		END Dont;
+	
+	PROCEDURE (wa: WaitAction) Do;
+		
+		BEGIN (*Do*)
+			IF Check(wa.dir, wa.name) = wa.checkPresent THEN
+				wa.w.End(wa.name);
+			ELSE
+				Services.DoLater(wa, Services.Ticks() + wa.delay);
+			END;
+		END Do;
+	
+	PROCEDURE Init;
+		
+		VAR
+			
+			l: Files.Locator;
+			date: Dates.Date;
+		
+		BEGIN (*Init*)
+			l := Files.dir.This(initDir); ASSERT(l.res = 0, 100);
+			Files.dir.Delete(l, logOldName); ASSERT(l.res IN {0, 2}, 101);
+			Files.dir.Rename(l, logName, logOldName, Files.dontAsk); ASSERT(l.res IN {0, 2}, 102);
+			lg := UtilLog.NewLog(initDir, logName, TRUE);
+			lg.Msg("Version " + version); lg.Msg("");
+			date.year := year0; date.month := month0; date.day := day0;
+			t0 := Dates.Day(date);
+			utf8Conv := Converters.list;
+			WHILE (utf8Conv # NIL) & ((utf8Conv.imp # textImpConv) OR (utf8Conv.exp # textExpConv) OR (utf8Conv.fileType # "txt")) DO
+				utf8Conv := utf8Conv.next;
+			END;
+			ASSERT(utf8Conv # NIL, 101);
+		END Init;
+	
+	BEGIN (*Duniter1BasicPrint*)
+		Init;
+	END Duniter1BasicPrint.

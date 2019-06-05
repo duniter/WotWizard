@@ -1,0 +1,342 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1Server;
+	
+	
+	
+	(* Server *)
+
+	IMPORT
+		
+		
+		
+		A := UtilAvlTree, B := Duniter1Blockchain, BA := Duniter1Basic, Files, Services, TextMappers, TextModels, TextViews, W := Duniter1WotWizard, J := UtilJson, Views;
+	
+	CONST
+		
+		rsrcDir = "Duniter1/Rsrc"; (* Directory for the following file *)
+		parametersName = "Parameters.txt"; (* File containing the greatest allowed allocated memory size for W.CalcPermutations *)
+		
+		wwResult = "WWResult.json"; (* Json file containing metadata & calculated entries *)
+		wwDone = "WWDone.json";
+	
+	TYPE
+		
+		UpdateA = POINTER TO RECORD (B.Action)
+		END;
+	
+	VAR
+		
+		maxSize: LONGINT; (* Greatest allowed allocated memory size *)
+	
+	(* Write the metadata duration, f, cNb & dNb with the help of fo, in json format; duration is the computation duration, f is the Duniter1WotWizard.File structure, cNb and dNb are respectively the numbers of internal certifications and of external dossiers *)
+	PROCEDURE WriteMeta (duration: LONGINT; f: W.File; permutations, cNb, dNb: INTEGER);
+		
+		PROCEDURE WriteFile (f: W.File; withTo: BOOLEAN);
+			
+			VAR
+				
+				i: INTEGER;
+			
+			PROCEDURE WriteCertOrDoss (cd: W.CertOrDoss);
+				
+				PROCEDURE WriteCertOrDossEnd (cd: W.CertOrDoss);
+					
+					BEGIN (*WriteCertOrDossEnd*)
+						J.PushInteger(cd.date);
+						J.BuildField("date");
+						J.PushInteger(cd.limit);
+						J.BuildField("limit");
+					END WriteCertOrDossEnd;
+				
+				PROCEDURE WriteCertif (c: W.Certif);
+					
+					BEGIN (*WriteCertif*)
+						J.StartObject;
+						J.PushString(c.from);
+						J.BuildField("from");
+						IF withTo THEN
+							J.PushString(c.to);
+							J.BuildField("to");
+						END;
+						WriteCertOrDossEnd(c);
+						J.BuildObject;
+					END WriteCertif;
+				
+				PROCEDURE WriteDossier (d: W.Dossier);
+					
+					BEGIN (*WriteDossier*)
+						J.StartObject;
+						J.PushString(d.id);
+						J.BuildField("newcomer");
+						J.PushInteger(d.princCertif);
+						J.BuildField("main_certifs");
+						J.PushReal(d.proportionOfSentries);
+						J.BuildField("proportion_of_sentries");
+						WriteCertOrDossEnd(d);
+						WriteFile(d.certifs, FALSE);
+						J.BuildField("certifs");
+						J.BuildObject;
+					END WriteDossier;
+				
+				BEGIN (*WriteCertOrDoss*)
+					WITH
+						|cd: W.Certif DO
+							IF withTo THEN
+								J.StartObject;
+							END;
+							WriteCertif(cd);
+							IF withTo THEN
+								J.BuildField("certif");
+								J.BuildObject;
+							END;
+						|cd: W.Dossier DO
+							J.StartObject;
+							WriteDossier(cd);
+							J.BuildField("dossier");
+							J.BuildObject;
+					END;
+				END WriteCertOrDoss;
+			
+			BEGIN (*WriteFile*)
+				J.StartArray;
+				IF f # NIL THEN
+					FOR i := 0 TO LEN(f) - 1 DO
+						WriteCertOrDoss(f[i]);
+					END;
+				END;
+				J.BuildArray;
+			END WriteFile;
+		
+		BEGIN (*WriteMeta*)
+			J.StartObject;
+			J.PushInteger(permutations);
+			J.BuildField("permutations");
+			J.PushInteger(duration);
+			J.BuildField("computation_duration");
+			J.PushInteger(cNb);
+			J.BuildField("certNb");
+			J.PushInteger(dNb);
+			J.BuildField("dossNb");
+			WriteFile(f, TRUE);
+			J.BuildField("certifs_dossiers");
+			J.BuildObject;
+		END WriteMeta;
+	
+	(* Print the entries sorted by dates in json format *)
+	PROCEDURE ByDates (occur: A.Tree);
+		
+		VAR
+			
+			e: A.Elem;
+			date: LONGINT;
+			after: BOOLEAN;
+		
+		BEGIN (*ByDates*)
+			date := - 1;
+			e := occur.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: W.PropDate DO
+					IF (e.date # date) OR (e.after # after) THEN
+						IF date >= 0 THEN
+							J.BuildArray;
+							J.BuildField("names");
+							J.BuildObject;
+						END;
+						date := e.date; after := e.after;
+						J.StartObject;
+						J.PushBoolean(e.after);
+						J.BuildField("after");
+						J.PushInteger(e.date);
+						J.BuildField("date");
+						J.StartArray;
+					END;
+					J.StartObject;
+					J.PushString(e.id);
+					J.BuildField("name");
+					J.PushReal(e.proba);
+					J.BuildField("proba");
+					J.BuildObject;
+				END;
+				e := occur.Next(e);
+			END;
+			IF date >= 0 THEN
+				J.BuildArray;
+				J.BuildField("names");
+				J.BuildObject;
+			END;
+		END ByDates;
+	
+	(* Print the entries sorted by names in json format *)
+	PROCEDURE ByNames (occur: A.Tree);
+		
+		VAR
+			
+			e: A.Elem;
+			id: J.StrPtr;
+		
+		BEGIN (*ByNames*)
+			NEW(id, 1); id^ := "";
+			e := occur.Next(NIL);
+			WHILE e # NIL DO
+				WITH e: W.PropName DO
+					IF e.id$ # id$ THEN
+						IF id$ # "" THEN
+							J.BuildArray;
+							J.BuildField("dates");
+							J.BuildObject;
+						END;
+						id := e.id;
+						J.StartObject;
+						J.PushString(e.id);
+						J.BuildField("name");
+						J.StartArray;
+					END;
+					J.StartObject;
+					J.PushBoolean(e.after);
+					J.BuildField("after");
+					J.PushInteger(e.date);
+					J.BuildField("date");
+					J.PushReal(e.proba);
+					J.BuildField("proba");
+					J.BuildObject;
+				END;
+				e := occur.Next(e);
+			END;
+			IF id$ # "" THEN
+				J.BuildArray;
+				J.BuildField("dates");
+				J.BuildObject;
+			END;
+		END ByNames;
+	
+	(* Save the WotWizard lists on disk, in files wwMeta and wwResult in json format *)
+	PROCEDURE StoreText;
+		
+		VAR
+			
+			f: W.File;
+			occurDate, occurName: A.Tree;
+			cNb, dNb, permutations: INTEGER;
+			t: TextModels.Model;
+			fo: TextMappers.Formatter;
+			ti, duration: LONGINT;
+		
+		BEGIN (*StoreText*)
+			ti := Services.Ticks();
+			IF ~W.BuildEntries(f, permutations, cNb, dNb, occurDate, occurName) THEN
+				A.New(occurDate);
+				A.New(occurName);
+			END;
+			duration := Services.Ticks() - ti;
+			t := TextModels.dir.New();
+			fo.ConnectTo(t);
+			J.StartObject;
+			WriteMeta(duration, f, permutations, cNb, dNb);
+			J.BuildField("meta");
+			J.StartArray;
+			ByDates(occurDate);
+			J.BuildArray;
+			J.BuildField("dates");
+			J.StartArray;
+			ByNames(occurName);
+			J.BuildArray;
+			J.BuildField("names");
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			J.PushInteger(B.Now());
+			J.BuildField("now");
+			J.BuildObject;
+			J.GetJson().Write(fo);
+			BA.VRegister(TextViews.dir.New(t), BA.waitLoc, wwResult, 100, "Server.StoreText");
+			BA.VRegister(TextViews.dir.New(TextModels.dir.New()), BA.waitLoc, wwDone, 101, "Server.StoreText");
+		END StoreText;
+	
+	PROCEDURE (u: UpdateA) Activate;
+		
+		BEGIN (*Activate*)
+			StoreText;
+		END Activate;
+	
+	PROCEDURE Update*;
+		
+		VAR
+			
+			u: UpdateA;
+		
+		BEGIN (*Update*)
+			NEW(u);
+			B.AddAction(u);
+		END Update;
+	
+	PROCEDURE Start* (IN output: ARRAY OF CHAR);
+		
+		BEGIN (*Start*)
+			B.AddUpdateProc(StoreText);
+			Update;
+		END Start;
+	
+	PROCEDURE Stop* (IN output: ARRAY OF CHAR);
+		
+		BEGIN (*Stop*)
+			B.RemoveUpdateProc(StoreText);
+		END Stop;
+	
+	PROCEDURE StoreParameters;
+		
+		VAR
+			
+			l: Files.Locator;
+			f: TextMappers.Formatter;
+			t: TextModels.Model;
+		
+		BEGIN (*StoreParameters*)
+			l := Files.dir.This(rsrcDir); ASSERT(l.res = 0, 100);
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			f.WriteInt(maxSize);
+			f.WriteLn;
+			BA.VRegister(TextViews.dir.New(t), l, parametersName, 101, "Server.StoreParameters");
+		END StoreParameters;
+	
+	PROCEDURE Init;
+		
+		VAR
+			
+			l: Files.Locator;
+			sc: TextMappers.Scanner;
+			name: Files.Name;
+			v: Views.View;
+		
+		BEGIN (*Init*)
+			l := Files.dir.This(rsrcDir); ASSERT(l.res = 0, 100);
+			name := parametersName;
+			v := Views.Old(Views.dontAsk, l, name, BA.utf8Conv);
+			IF v = NIL THEN
+				maxSize := W.maxSize;
+				StoreParameters;
+			ELSE
+				ASSERT(v IS TextViews.View, 101);
+				sc.ConnectTo(v(TextViews.View).ThisModel());
+				sc.Scan; ASSERT((sc.type = TextMappers.int) OR (sc.type = TextMappers.lint), 102);
+				maxSize := sc.lint;
+				W.ChangeParameters(maxSize);
+			END;
+			B.AddUpdateProc(StoreText);
+		END Init;
+	
+	BEGIN (*Duniter1Server*)
+		Init;
+	CLOSE
+		B.RemoveUpdateProc(StoreText);
+	END Duniter1Server.

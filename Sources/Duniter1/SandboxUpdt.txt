@@ -1,0 +1,611 @@
+(* 
+Duniter1: WotWizard.
+
+Copyright (C) 2017 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+*)
+
+MODULE Duniter1SandboxUpdt;
+	
+	(* Put the Duniter sandbox in AVL trees to access quickly sandbox data *)
+	
+	
+
+	IMPORT
+		
+		(**
+		L := StdLog,
+		**)
+		
+		A := UtilAvlTree, B := Duniter1BlockchainUpdt, BA := Duniter1BasicUpdt, Files, HostMenus, J := UtilJson, S := SqlDB, Services, TextMappers, TextModels, TextViews;
+	
+	CONST
+		
+		sBaseDir = B.dDir;
+		sBaseName = "SBase.json";
+		
+		driver = B.driver; (* Driver SQLite *)
+		
+		stopDelay = 5 * Services.resolution;
+		stopName = "StopUpdt.txt";
+	
+	TYPE
+		
+		String = B.String;
+		Pubkey = B.Pubkey;
+		Hash = B.Hash;
+		
+		Identity* = POINTER TO RECORD
+			inBC-: BOOLEAN;
+			hash-: Hash; (* Needed in sandbox: key of identities *)
+			pubkey-: Pubkey;
+			uid-: String;
+			expires_on-: LONGINT;
+		END;
+		
+		(* Elements of A.Tree for identities *)
+		IdE = POINTER TO ABSTRACT RECORD (A.Elem)
+			ref: Identity;
+		END;
+		
+		IdUidE = POINTER TO RECORD (IdE) (* Sorted by uid *)
+		END;
+		
+		IdPubE = POINTER TO RECORD (IdE) (* Sorted by pubkey *)
+		END;
+		
+		IdHashE = POINTER TO RECORD (IdE) (* Sorted by hash *)
+		END;
+		
+		(* SQLite record for "SELECT pubkey, uid, buid, expires_on FROM idty WHERE revocation_sig IS NULL AND hash = '<hash>'" *)
+		CurId* = RECORD
+			pubkey*: Pubkey;
+			uid*,
+			buid*: String;
+			expires_on*: LONGINT;
+		END;
+		
+		(* SQLite record for "SELECT m.idtyHash, m.membership, m.issuer, m.userid, m.expires_on FROM membership m INNER JOIN block b ON m.blockHash = b.hash WHERE NOT b.fork ORDER BY m.blockNumber ASC" *)
+		CurOwn* = RECORD
+			hash*: Hash;
+			inOrOut*: ARRAY 4 OF CHAR;
+			pubkey*: Pubkey;
+			uid*: String;
+			expires_on*: LONGINT;
+		END;
+		
+		Certification* = POINTER TO RECORD
+			from-,
+			to-: Pubkey;
+			toHash-: Hash;
+			expires_on-: LONGINT;
+		END;
+		
+		(* Elements of A.Tree for certifications *)
+		CertE = POINTER TO ABSTRACT RECORD (A.Elem)
+			ref: Certification;
+			list: A.Tree; (* Subtree, sorted otherwise *)
+		END;
+		
+		CertFromE = POINTER TO RECORD (CertE) (* Sorted by ref.from *)
+		END;
+		
+		CertToE = POINTER TO RECORD (CertE) (* Sorted by ref.to *)
+		END;
+		
+		CertPos = RECORD (* Position in a certification subtree *)
+			posT: A.Tree; (* The subtree *)
+			posCur: A.Elem; (* The last seen element in the subtree *)
+		END;
+		
+		(* SQLite record for "SELECT [from], [to], target, expires_on FROM cert INNER JOIN block ON cert.block_hash = block.hash WHERE NOT block.fork" *)
+		CurC * = RECORD
+			from*: Pubkey;
+			to*: Pubkey;
+			toHash*: Hash;
+			expires_on*: LONGINT;
+		END;
+		
+		LookForStop = POINTER TO RECORD (Services.Action)
+		END;
+	
+	VAR
+		
+		(* AVL trees *)
+		idHashT, (* hash -> Identity *)
+		certFromT: A.Tree; (* toHash -> Certification *)
+		
+		(* Positions in AVL trees *)
+		idHashCur,
+		certFromCur: A.Elem;
+		
+		globalId-: Identity;
+		globalCert-: Certification;
+	
+	(* Comparison procedures for AVL trees *)
+	
+	PROCEDURE (i1: IdHashE) Compare (i2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH i2: IdHashE DO
+				IF i1.ref.hash$ < i2.ref.hash$ THEN
+					RETURN A.lt;
+				END;
+				IF i1.ref.hash$ > i2.ref.hash$ THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	PROCEDURE (c1: CertFromE) Compare (c2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH c2: CertFromE DO
+				IF c1.ref.from$ < c2.ref.from$ THEN
+					RETURN A.lt;
+				END;
+				IF c1.ref.from$ > c2.ref.from$ THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	PROCEDURE (c1: CertToE) Compare (c2: A.Elem): BYTE;
+		
+		BEGIN (*Compare*)
+			WITH c2: CertToE DO
+				IF c1.ref.toHash$ < c2.ref.toHash$ THEN
+					RETURN A.lt;
+				END;
+				IF c1.ref.toHash$ > c2.ref.toHash$ THEN
+					RETURN A.gt;
+				END;
+				RETURN A.eq;
+			END;
+		END Compare;
+	
+	(*
+	(* hash -> Identity *)
+	PROCEDURE IdHash (IN hash: Hash; OUT inBC: BOOLEAN; OUT pubkey: Pubkey; OUT uid: String; OUT expires_on: LONGINT): BOOLEAN;
+		
+		VAR
+			
+			id: Identity;
+			hE: IdHashE;
+			e: A.Elem;
+			n: INTEGER;
+		
+		BEGIN (*IdHash*)
+			NEW(id);
+			id.hash := hash$;
+			NEW(hE); hE.ref := id;
+			e := hE;
+			IF idHashT.Search(e, n) THEN
+				WITH e: IdE DO
+					inBC := e.ref.inBC;
+					pubkey := e.ref.pubkey;
+					NEW(uid, LEN(e.ref.uid$) + 1); uid^ := e.ref.uid$;
+					expires_on := e.ref.expires_on;
+				END;
+				RETURN TRUE;
+			END;
+			RETURN FALSE;
+		END IdHash;
+	*)
+	
+	(* hash -> Identity *)
+	PROCEDURE IdHashId (IN hash: Hash): Identity;
+		
+		VAR
+			
+			id: Identity;
+			hE: IdHashE;
+			e: A.Elem;
+			n: INTEGER;
+		
+		BEGIN (*IdHashId*)
+			NEW(id);
+			id.hash := hash$;
+			NEW(hE); hE.ref := id;
+			e := hE;
+			IF idHashT.Search(e, n) THEN
+				RETURN e(IdE).ref
+			END;
+			RETURN NIL;
+		END IdHashId;
+	
+	(* Browse all Identity's hash(es)  step by step *)
+	PROCEDURE IdNextHash (first: BOOLEAN; OUT hash: Hash): BOOLEAN;
+		
+		BEGIN (*IdNextHash*)
+			IF first THEN
+				idHashCur := NIL;
+			END;
+			idHashCur := idHashT.Next(idHashCur);
+			IF idHashCur = NIL THEN
+				RETURN FALSE;
+			END;
+			WITH idHashCur: IdE DO
+				hash := idHashCur.ref.hash$;
+			END;
+			RETURN TRUE;
+		END IdNextHash;
+	
+	(*
+	(* (Pubkey, Hash) -> Certification *)
+	PROCEDURE Cert (IN from: Pubkey; IN toHash: Hash; OUT to: Pubkey; OUT expires_on: LONGINT): BOOLEAN;
+		
+		VAR
+			
+			c: Certification;
+			cf: CertFromE;
+			ct: CertToE;
+			e, ee: A.Elem;
+			n: INTEGER;
+		
+		BEGIN (*Cert*)
+			NEW(c);
+			c.from := from;
+			c.toHash := toHash;
+			NEW(cf); cf.ref := c;
+			e := cf;
+			IF certFromT.Search(e, n) THEN
+				WITH e: CertE DO
+					NEW(ct); ct.ref := c;
+					ee := ct; 
+					IF e.list.Search(ee, n) THEN
+						WITH ee: CertE DO
+							to := ee.ref.to;
+							expires_on := ee.ref.expires_on;
+						END;
+						RETURN TRUE;
+					END;
+				END;
+			END;
+			RETURN FALSE;
+		END Cert;
+	*)
+	
+	(* (Pubkey, Hash) -> Certification *)
+	PROCEDURE CertC (IN from: Pubkey; IN toHash: Hash): Certification;
+		
+		VAR
+			
+			c: Certification;
+			cf: CertFromE;
+			ct: CertToE;
+			e, ee: A.Elem;
+			n: INTEGER;
+		
+		BEGIN (*CertC*)
+			NEW(c);
+			c.from := from;
+			c.toHash := toHash;
+			NEW(cf); cf.ref := c;
+			e := cf;
+			IF certFromT.Search(e, n) THEN
+				WITH e: CertE DO
+					NEW(ct); ct.ref := c;
+					ee := ct; 
+					IF e.list.Search(ee, n) THEN
+						RETURN ee(CertE).ref;
+					END;
+				END;
+			END;
+			RETURN NIL;
+		END CertC;
+	
+	(* Browse all Certification(s) in a subtree step by step *)
+	PROCEDURE (VAR pos: CertPos) CertNextPos (OUT from: Pubkey; OUT toHash: Hash): BOOLEAN, NEW;
+		
+		VAR
+			
+			e: A.Elem;
+		
+		BEGIN (*CertNextPos*)
+			IF pos.posT = NIL THEN
+				RETURN FALSE;
+			END;
+			pos.posCur := pos.posT.Next(pos.posCur);
+			e := pos.posCur;
+			IF e = NIL THEN
+				RETURN FALSE;
+			END;
+			WITH e: CertE DO
+				from := e.ref.from;
+				toHash := e.ref.toHash;
+			END;
+			RETURN TRUE;
+		END CertNextPos;
+	
+	(* Browse all subtrees for all from Pubkey step by step *)
+	PROCEDURE CertNextFrom (first: BOOLEAN; OUT pos: CertPos): BOOLEAN;
+		
+		BEGIN (*CertNextFrom*)
+			IF first THEN
+				certFromCur := NIL;
+			END;
+			certFromCur := certFromT.Next(certFromCur);
+			IF certFromCur = NIL THEN
+				RETURN FALSE;
+			END;
+			WITH certFromCur: CertE DO
+				pos.posT := certFromCur.list;
+				pos.posCur := NIL;
+			END;
+			RETURN TRUE;
+		END CertNextFrom;
+	
+	(* Extract bid out of buid *)
+	PROCEDURE ExtractBlockId (VAR buid: ARRAY OF CHAR; OUT hash: Hash);
+		
+		VAR
+			
+			i, j: INTEGER;
+		
+		BEGIN (*ExtractBlockId*)
+			i := 0;
+			WHILE (buid[i] # '-') & (buid[i] # 0X) DO
+				INC(i);
+			END;
+			j := 0;
+			REPEAT
+				INC(i);
+				hash[j] := buid[i];
+				INC(j);
+			UNTIL buid[i] = 0X;
+		END ExtractBlockId;
+	
+	(* Scan the membership and the idty tables in the Duniter database and build idHashT, idPubT and idUidT; remove all items which reference a forked block *)
+	PROCEDURE MembershipIds (d: S.Database);
+		
+		VAR
+			
+			t: S.Table;
+			i, n, bnb: INTEGER;
+			tr: A.Tree;
+			curOwn: CurOwn;
+			curId: CurId;
+			id: Identity;
+			idH: IdHashE;
+			p: Pubkey;
+			e, ee: A.Elem;
+			b: BOOLEAN;
+			h: Hash;
+			uid: String;
+			r: S.Row;
+			exp, app: LONGINT;
+		
+		BEGIN (*MembershipIds*)
+			t := d.NewTable(); ASSERT(t # NIL, 100);
+			REPEAT (* Membership applications *)
+				t.Exec("SELECT m.idtyHash, m.membership, m.issuer, m.userid, m.expires_on FROM membership m INNER JOIN block b ON m.blockHash = b.hash WHERE NOT b.fork ORDER BY m.blockNumber ASC");
+				ASSERT(t.res IN {0, 6}, 101);
+			UNTIL t.res = 0;
+			ASSERT((t.rows = 0) OR (t.columns = 5), 102);
+			A.New(tr);
+			FOR i := 0 TO t.rows - 1 DO
+				t.Read(i, curOwn);
+				NEW(id); id.hash := curOwn.hash; id.expires_on := 0;
+				NEW(idH); idH.ref := id; e := idH;
+				IF curOwn.inOrOut$ = "IN" THEN
+					b := tr.SearchIns(e, n);
+					WITH e: IdHashE DO
+						e.ref.pubkey := curOwn.pubkey;
+						e.ref.uid := curOwn.uid;
+						e.ref.expires_on := MAX(e.ref.expires_on, curOwn.expires_on); (* The last one is the good one *)
+					END;
+				ELSE ASSERT(curOwn.inOrOut$ = "OUT", 103); (* Leaving *)
+					b := tr.Delete(idH);
+				END;
+			END;
+			A.New(idHashT);
+			e := tr.Next(NIL);
+			WHILE e # NIL DO (* For every membership applications *)
+				WITH e: IdHashE DO
+					IF B.IdHash(e.ref.hash, p) THEN (* If identity already in BC... *)
+						IF B.IdPubComplete(p, uid, b, h, bnb, app, exp) & ~b & (exp # BA.revoked) THEN (* ... and if no more member but not revoked *)
+							NEW(id);
+							id.inBC := TRUE; id.hash := e.ref.hash; id.pubkey := p;
+							id.uid := uid; 
+							id.expires_on := MIN(ABS(exp), e.ref.expires_on);
+							NEW(idH); idH.ref := id; ee := idH;
+							b := idHashT.SearchIns(ee, n); ASSERT(~b, 104);
+						END;
+					ELSIF ~(B.IdPub(e.ref.pubkey, uid) OR B.IdUid(e.ref.uid, p)) THEN (* Not in BC *)
+						REPEAT (* New identities *)
+							t.Exec("SELECT pubkey, uid, buid, expires_on FROM idty WHERE revocation_sig IS NULL AND hash = '" + e.ref.hash + "'");
+							ASSERT(t.res IN {0, 6}, 105);
+						UNTIL t.res = 0;
+						ASSERT((t.rows = 0) OR (t.rows = 1) & (t.columns = 4), 106);
+						IF t.rows = 1 THEN
+							NEW(id);
+							t.Read(0, curId);
+							ExtractBlockId(curId.buid, h);
+							REPEAT
+								t.Exec("SELECT fork FROM block WHERE hash = '" + h + "'");
+								ASSERT(t.res IN {0, 6}, 107);
+							UNTIL t.res = 0;
+							ASSERT((t.rows = 1) & (t.columns = 1), 108);
+							t.Read(0, r);
+							IF r.fields[0]$ = "0" THEN
+								id.inBC := FALSE;
+								id.hash := e.ref.hash;
+								id.pubkey := curId.pubkey;
+								id.uid := curId.uid;
+								id.expires_on := MIN(e.ref.expires_on, curId.expires_on);
+								NEW(idH); idH.ref := id; ee := idH;
+								b := idHashT.SearchIns(ee, n); ASSERT(~b, 109);
+							END;
+						END;
+					END;
+				END;
+				e := tr.Next(e);
+			END;
+		END MembershipIds;
+	
+	(* Builds certFromT and certToT from the Duniter database; remove all certifications where block_hash is in a fork *)
+	PROCEDURE Certifications (d: S.Database);
+		
+		VAR
+			
+			t: S.Table;
+			i, n, bnb: INTEGER;
+			curC: CurC;
+			c: Certification;
+			cF: CertFromE;
+			cT: CertToE;
+			e, ee: A.Elem;
+			b, member: BOOLEAN;
+			uid: String;
+			hash: Hash;
+			now, exp, app: LONGINT;
+		
+		BEGIN (*Certifications*)
+			t := d.NewTable(); ASSERT(t # NIL, 100);
+			REPEAT
+				t.Exec("SELECT [from], [to], target, expires_on FROM cert INNER JOIN block ON cert.block_hash = block.hash WHERE NOT block.fork");
+				ASSERT(t.res IN {0, 6}, 101);
+			UNTIL t.res = 0;
+			ASSERT((t.rows = 0) OR (t.columns = 4), 102);
+			now := B.Now();
+			A.New(certFromT);
+			FOR i := 0 TO t.rows - 1 DO
+				t.Read(i, curC);
+				(*
+				IF (now <= curC.expires_on) & (IdHash(curC.toHash, inBC, pubkey, uid, exp) OR B.IdPubComplete(curC.to, uid, member, hash, bnb, app, exp) & (hash = curC.toHash) & member) & (~B.Cert(curC.from, curC.to, bnb, exp) OR (curC.expires_on - B.pars.sigWindow > exp - B.pars.sigValidity + B.pars.sigReplay)) THEN
+				*)
+				(**)
+				IF (now <= curC.expires_on) & ((IdHashId(curC.toHash) # NIL) OR B.IdPubComplete(curC.to, uid, member, hash, bnb, app, exp) & (hash = curC.toHash) & member) & (~B.Cert(curC.from, curC.to, bnb, exp) OR (curC.expires_on - B.pars.sigWindow > exp - B.pars.sigValidity + B.pars.sigReplay)) THEN
+				(**)
+					NEW(c);
+					c.from := curC.from;
+					c.to := curC.to;
+					c.toHash := curC.toHash;
+					c.expires_on := curC.expires_on;
+					
+					NEW(cF); cF.ref := c; e := cF;
+					IF ~certFromT.SearchIns(e, n) THEN
+						A.New(e(CertFromE).list);
+					END;
+					NEW(cT); cT.ref := c; ee := cT;
+					b := e(CertFromE).list.SearchIns(ee, n);
+				END;
+			END;
+		END Certifications;
+	
+	PROCEDURE Export;
+		
+		VAR
+			
+			ok: BOOLEAN;
+			h, toHash: Hash;
+			pos: CertPos;
+			from: Pubkey;
+			t: TextModels.Model;
+			f: TextMappers.Formatter;
+			loc: Files.Locator;
+		
+		BEGIN (*Export*)
+			J.StartObject;
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			J.PushInteger(B.Now());
+			J.BuildField("date");
+			J.StartArray;
+			ok := IdNextHash (TRUE, h);
+			WHILE ok DO
+				globalId := IdHashId(h); ASSERT(globalId # NIL, 100);
+				J.PushJson(J.BuildJsonFrom(globalId));
+				ok := IdNextHash(FALSE, h);
+			END;
+			J.BuildArray;
+			J.BuildField("identities");
+			J.StartArray;
+			ok := CertNextFrom(TRUE, pos);
+			WHILE ok DO
+				WHILE pos.CertNextPos(from, toHash) DO
+					globalCert := CertC(from, toHash); ASSERT(globalCert # NIL, 101);
+					J.PushJson(J.BuildJsonFrom(globalCert));
+				END;
+				ok := CertNextFrom(FALSE, pos);
+			END;
+			J.BuildArray;
+			J.BuildField("certifications");
+			J.BuildObject;
+			t := TextModels.dir.New();
+			f.ConnectTo(t);
+			J.GetJson().Write(f);
+			loc := Files.dir.This(sBaseDir); ASSERT(loc.res = 0, 102);
+			BA.VRegister(TextViews.dir.New(t), loc, sBaseName, 103, "SandboxUpdt.Export");
+		END Export;
+	
+	(* Scan the sandbox in the Duniter database *)
+	PROCEDURE Scan;
+		
+		VAR
+			
+			d: S.Database;
+			res: INTEGER;
+		
+		BEGIN (*Scan*)
+			S.OpenDatabase(driver, "", "", BA.duniBase, S.sync, S.hideErrors, d, res); ASSERT(res = 0, 100);
+			MembershipIds(d);
+			Certifications(d);
+			Export;
+		END Scan;
+	
+	PROCEDURE Start*;
+		
+		BEGIN (*Start*)
+			B.Start;
+		END Start;
+	
+	PROCEDURE (stop: LookForStop) Do;
+		
+		VAR
+			
+			loc: Files.Locator;
+			f: Files.File;
+		
+		BEGIN (*Do*)
+			loc := Files.dir.This(""); ASSERT(loc.res = 0, 100);
+			f := Files.dir.Old(loc, stopName, Files.shared);
+			IF f = NIL THEN
+				Services.DoLater(stop, Services.Ticks() + stopDelay);
+			ELSE
+				BA.lg.Msg("Halting");
+				Files.dir.Delete(loc, stopName); ASSERT(loc.res = 0, 101);
+				B.Stop;
+				HostMenus.Exit; 
+			END;
+		END Do;
+	
+	PROCEDURE Init;
+		
+		VAR
+			
+			stop: LookForStop;
+		
+		BEGIN (*Init*)
+			A.New(idHashT);
+			A.New(certFromT);
+			B.AddUpdateProc(Scan);
+			NEW(stop);
+			Services.DoLater(stop, Services.now);
+		END Init;
+	
+	BEGIN (*Duniter1SandboxUpdt*)
+		Init;
+	CLOSE
+		B.RemoveUpdateProc(Scan);
+	END Duniter1SandboxUpdt.
+
+Duniter1SandboxUpdt.Start;
