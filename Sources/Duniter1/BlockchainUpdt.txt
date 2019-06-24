@@ -2155,13 +2155,30 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 			Services.DoLater(update, Services.Ticks() + verifyPeriod)
 		END UpdateAll;
 	
+	PROCEDURE EndUnlock (data: ANYPTR; done: BOOLEAN);
+		
+		VAR
+			
+			f: Files.File;
+			res: INTEGER;
+		
+		BEGIN (*EndUnlock*)
+			IF done THEN
+				lg.Msg("Update done; mutex released");
+				f := Files.dir.New(dLoc, Files.dontAsk);
+				lg.Assert(f # NIL, 100, 0, "BlockchainUpdt.EndUnlock");
+				f.Register(dSyncName, "txt", Files.dontAsk, res);
+				lg.Assert(res = 0, 101, res, "BlockchainUpdt.EndUnlock");
+				lg.Msg('"' + dSyncName + '" written'); lg.Msg("");
+				UpdateAll;
+			END;
+		END EndUnlock;
+	
 	PROCEDURE DoUpdates (d: ANYPTR; done: BOOLEAN);
 		
 		VAR
 			
 			l: UpdateList;
-			f: Files.File;
-			res: INTEGER;
 		
 		BEGIN (*DoUpdates*)
 			IF done THEN
@@ -2179,14 +2196,7 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 				END;
 				CloseB;
 				BA.Collect;
-				mutex.Unlock(NIL, NIL);
-				lg.Msg("Update done; mutex released");
-				f := Files.dir.New(dLoc, Files.dontAsk);
-				lg.Assert(f # NIL, 100, 0, "BlockchainUpdt.DoUpdates");
-				f.Register(dSyncName, "txt", Files.dontAsk, res);
-				lg.Assert(res = 0, 101, res, "BlockchainUpdt.DoUpdates");
-				lg.Msg('"' + dSyncName + '" written'); lg.Msg("");
-				UpdateAll;
+				mutex.Unlock(EndUnlock, NIL);
 			ELSIF Services.Ticks() > d(MutexData).t1 THEN
 				WITH d: MutexData DO
 					INC(d.t1, addDelay);
@@ -2274,7 +2284,8 @@ Si le membre retrouve ses cinq certifications, il doit se renouveler pour reveni
 	PROCEDURE Stop*;
 		
 		BEGIN (*Stop*)
-			mutex.Unlock(NIL, NIL);
+			Services.RemoveAction(update);
+			mutex.Stop;
 		END Stop;
 	
 	PROCEDURE Init;

@@ -2031,6 +2031,9 @@ MODULE Duniter1Blockchain;
 		BEGIN (*Do*)
 			IF BA.Check("", stopName) THEN
 				BA.SwitchOff("", stopName);
+				Services.RemoveAction(dispatch);
+				mutex.Stop;
+				CloseB;
 				lg.Msg("Halting");
 				HostMenus.Exit; 
 			END;
@@ -2089,6 +2092,6 @@ MODULE Duniter1Blockchain;
 		Init;
 	CLOSE
 		Services.RemoveAction(dispatch);
+		mutex.Stop;
 		CloseB;
-		mutex.Unlock(NIL, NIL);
 	END Duniter1Blockchain.

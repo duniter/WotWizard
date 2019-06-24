@@ -631,7 +631,7 @@ MODULE UtilJson;
 					p := n;
 					FOR i := 0 TO n - 1 DO
 						CASE s[i] OF
-							|'"', '/':
+							|'"':
 								INC(p);
 							ELSE
 						END;
@@ -643,7 +643,7 @@ MODULE UtilJson;
 					j := 0;
 					FOR i := 0 TO n - 1 DO
 						CASE s[i] OF
-						|'"', '/':
+						|'"':
 							ss[j] := '\';
 							INC(j);
 						ELSE

@@ -1,16 +1,16 @@
 Making of WotWizard
 
 
-Download the Blackbox Component Framework Version 1.7 at:
+Download the Blackbox Component Framework Version 1.7.1 at:
 	
-	http://blackboxframework.org/stable/blackbox-1.7.zip
+	http://blackboxframework.org/stable/blackbox-1.7.1.zip
 
 and extract it into a new empty directory (let's call it "NewBB").
 Download the source code of the last "Stand Alone" version of WotWizard at:
 
 	https://github.com/duniter/WotWizard/releases
 
-and extract the content of the "Standalone version/Blackbox" directory into "NewBB" (merge all subdirectories and replace all files when asked).
+and extract the content of its "Blackbox" directory into "NewBB" (merge all subdirectories and replace all files when asked).
 
 Then, run "NewBB/BlackBox.exe" (double click), open this file (command "File -> Open") itself in the BlackBox framework (NewBB/Duniter1/Docu/MakingOfWotWizard.odc) and execute the commands below, by clicking on the black-disk icons (when small windows open, click on OK). Then read the last lines at the bottom of this text.
 

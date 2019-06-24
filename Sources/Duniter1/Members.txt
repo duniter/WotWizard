@@ -30,6 +30,9 @@ MODULE Duniter1Members;
 		firstEntriesA = 3;
 		fEFluxA = 4;
 		fEFluxPerMemberA = 5;
+		lossA = 6;
+		lossFluxA = 7;
+		lossFluxPMA = 8;
 	
 	TYPE
 		
@@ -218,7 +221,7 @@ MODULE Duniter1Members;
 			c: INTEGER;
 			mt: LONGINT;
 		
-		BEGIN (*fDoCountFluxPerMemberE*)
+		BEGIN (*DoCountFluxPerMember*)
 			DoCountFlux(timeUnit, countsR, FALSE, j);
 			DoCount(counts, FALSE, j);
 			IF countsR = NIL THEN
@@ -409,6 +412,180 @@ MODULE Duniter1Members;
 			j := J.GetJson();
 		END DoFEFluxPerMember;
 	
+	PROCEDURE DoLoss (OUT losses: Events; json: BOOLEAN; OUT j: J.Json);
+		
+		(* Loss of members, event by event *)
+		
+		VAR
+			
+			ok, ok2, b: BOOLEAN;
+			pk: B.Pubkey;
+			jb, lb, n: INTEGER;
+			mT, time, list: LONGINT;
+			t: A.Tree;
+			ev, ev0: Event;
+			e: A.Elem;
+			mt: LONGINT;
+		
+		BEGIN (*DoLoss*)
+			A.New(t);
+			ok := B.JLNextPubkey(TRUE, pk);
+			WHILE ok DO
+				ok2 := B.JLPub(pk, list) & B.JLPubLNext(list, jb, lb);
+				WHILE ok2 DO
+					IF ok2 THEN
+						b := B.TimeOf(jb, mT, time); ASSERT(b, 100);
+						NEW(ev); e := ev;
+						ev.date := time; ev.number := 0;
+						b := t.SearchIns(e, n);
+						ev0 := e(Event);
+						INC(ev0.number);
+					END;
+					IF lb # B.hasNotLeaved THEN
+						b := B.TimeOf(lb, mT, time); ASSERT(b, 101);
+						NEW(ev); e := ev;
+						ev.date := time; ev.number := 0;
+						b := t.SearchIns(e, n);
+						DEC(e(Event).number);
+					END;
+					ok2 := B.JLPubLNext(list, jb, lb);
+				END;
+				DEC(ev0.number);
+				ok := B.JLNextPubkey(FALSE, pk);
+			END;
+			n := t.NumberOfElems();
+			IF n = 0 THEN
+				losses := NIL;
+			ELSE
+				NEW(losses, t.NumberOfElems());
+				n := 0;
+				e := t.Next(NIL);
+				WHILE e # NIL DO
+					WITH e: Event DO
+						losses[n].date := e.date;
+						losses[n].number := - e.number;
+					END;
+					INC(n);
+					e := t.Next(e);
+				END;
+				FOR n := 1 TO LEN(losses) - 1 DO
+					INC(losses[n].number, losses[n - 1].number);
+				END;
+			END;
+			IF ~json THEN
+				RETURN;
+			END;
+			J.StartObject;
+			NEW(globalEvents);
+			globalEvents.events := losses;
+			j := J.BuildJsonFrom(globalEvents);
+			J.PushField(j(J.Object).fields[0]);
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			mt := B.Now();
+			J.PushInteger(mt);
+			J.BuildField("now");
+			J.BuildObject;
+			j := J.GetJson();
+		END DoLoss;
+	
+	PROCEDURE DoLossFlux (timeUnit: LONGINT; OUT lossesR: EventsR; json: BOOLEAN; OUT j: J.Json);
+		
+		(* Flux of losses, event by event *)
+		
+		CONST
+			
+			pointsNb = 80;
+			degree = 2;
+			
+		VAR
+			
+			losses: Events;
+			dots, dotsD: U.Dots;
+			i, oldPointsNb, oldDegree: INTEGER;
+			b: BOOLEAN;
+			mt: LONGINT;
+		
+		BEGIN (*DoLossFlux*)
+			DoLoss(losses, FALSE, j);
+			IF losses = NIL THEN
+				lossesR := NIL;
+				j := NIL;
+				RETURN;
+			END;
+			NEW(dots, LEN(losses));
+			FOR i := 0 TO LEN(losses) - 1 DO
+				dots[i].x := losses[i].date / timeUnit;
+				dots[i].y := losses[i].number;
+			END;
+			O.GetDeriveOptions(oldPointsNb, oldDegree);
+			O.SetDeriveOptions(pointsNb, degree);
+			b := O.Derive(dots, dotsD);
+			O.SetDeriveOptions(oldPointsNb, oldDegree);
+			NEW(lossesR, LEN(losses));
+			FOR i := 0 TO LEN(losses) - 1 DO
+				lossesR[i].date := losses[i].date;
+				lossesR[i].number := dotsD[i].y;
+			END;
+			IF ~json THEN
+				RETURN;
+			END;
+			J.StartObject;
+			NEW(globalEventsR);
+			globalEventsR.eventsR := lossesR;
+			j := J.BuildJsonFrom(globalEventsR);
+			J.PushField(j(J.Object).fields[0]);
+			J.PushInteger(timeUnit);
+			J.BuildField("time_unit");
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			mt := B.Now();
+			J.PushInteger(mt);
+			J.BuildField("now");
+			J.BuildObject;
+			j := J.GetJson();
+		END DoLossFlux;
+	
+	PROCEDURE DoLossFluxPerMember (timeUnit: LONGINT; OUT lossesR: EventsR; json: BOOLEAN; OUT j: J.Json);
+		
+		(* Flux of losses per member, event by event *)
+		
+		VAR
+			
+			counts: Events;
+			l: INTEGER;
+			mt: LONGINT;
+		
+		BEGIN (*DoLossFluxPerMember*)
+			DoLossFlux(timeUnit, lossesR, FALSE, j);
+			DoCount(counts, FALSE, j);
+			IF lossesR = NIL THEN
+				j := NIL;
+				RETURN;
+			END;
+			ASSERT((counts # NIL) & (LEN(counts) = LEN(lossesR)), 100);
+			FOR l := 0 TO LEN(lossesR) - 1 DO
+				lossesR[l].number := lossesR[l].number / counts[l].number;
+			END;
+			IF ~json THEN
+				RETURN;
+			END;
+			J.StartObject;
+			NEW(globalEventsR);
+			globalEventsR.eventsR := lossesR;
+			j := J.BuildJsonFrom(globalEventsR);
+			J.PushField(j(J.Object).fields[0]);
+			J.PushInteger(timeUnit);
+			J.BuildField("time_unit");
+			J.PushInteger(B.LastBlock());
+			J.BuildField("block");
+			mt := B.Now();
+			J.PushInteger(mt);
+			J.BuildField("now");
+			J.BuildObject;
+			j := J.GetJson();
+		END DoLossFluxPerMember;
+	
 	PROCEDURE Json (j: J.Json; IN name: ARRAY OF CHAR);
 		
 		VAR
@@ -450,6 +627,15 @@ MODULE Duniter1Members;
 					Json(j, a.output);
 				|fEFluxPerMemberA:
 					DoFEFluxPerMember(a.timeUnit, eventsR, TRUE, j);
+					Json(j, a.output);
+				|lossA:
+					DoLoss(events, TRUE, j);
+					Json(j, a.output);
+				|lossFluxA:
+					DoLossFlux(a.timeUnit, eventsR, TRUE, j);
+					Json(j, a.output);
+				|lossFluxPMA:
+					DoLossFluxPerMember(a.timeUnit, eventsR, TRUE, j);
 					Json(j, a.output);
 			END;
 		END Activate;
@@ -551,5 +737,54 @@ MODULE Duniter1Members;
 			Strings.StringToLInt(timeUnit, a.timeUnit, res); ASSERT(res = 0, 100);
 			B.AddAction(a);
 		END FEFluxPerMember;
+	
+	PROCEDURE Loss* (IN output: ARRAY OF CHAR);
+		
+		(* Loss of members, event by event *)
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*Loss*)
+			NEW(a);
+			a.what := lossA;
+			NEW(a.output, LEN(output$) + 1); a.output^ := output$;
+			B.AddAction(a);
+		END Loss;
+	
+	PROCEDURE LossFlux* (IN output, timeUnit: ARRAY OF CHAR);
+		
+		(* Flux of losses, event by event *)
+		
+		VAR
+			
+			a: Action;
+			res: INTEGER;
+		
+		BEGIN (*LossFlux*)
+			NEW(a);
+			a.what := lossFluxA;
+			NEW(a.output, LEN(output$) + 1); a.output^ := output$;
+			Strings.StringToLInt(timeUnit, a.timeUnit, res); ASSERT(res = 0, 100);
+			B.AddAction(a);
+		END LossFlux;
+	
+	PROCEDURE LossFluxPerMember* (IN output, timeUnit: ARRAY OF CHAR);
+		
+		(* Flux of losses per member, event by event *)
+		
+		VAR
+			
+			a: Action;
+			res: INTEGER;
+		
+		BEGIN (*LossFluxPerMember*)
+			NEW(a);
+			a.what := lossFluxPMA;
+			NEW(a.output, LEN(output$) + 1); a.output^ := output$;
+			Strings.StringToLInt(timeUnit, a.timeUnit, res); ASSERT(res = 0, 100);
+			B.AddAction(a);
+		END LossFluxPerMember;
 	
 	END Duniter1Members.

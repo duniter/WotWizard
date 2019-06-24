@@ -28,6 +28,9 @@ MODULE Duniter1MembersPrint;
 		firstEJson = "MembersFirstEntry";
 		fEFluxJson = "MembersFEFlux";
 		fEFluxPMJson = "MembersFEFluxPM";
+		lossJson = "MembersLoss";
+		lossFluxJson = "MembersLossFlux";
+		lossFluxPMJson = "MembersLossFluxPM";
 		
 		iA = 0;
 		rA = 1;
@@ -354,6 +357,65 @@ MODULE Duniter1MembersPrint;
 			a.unit := "% / " + tUnit;
 			a.Do(BA.waitDir, fEFluxPMJson + ".json", waitDelay);
 		END PrintFEFluxPerMember;
+
+	PROCEDURE PrintLoss*;
+		
+		(* Print and display the number of first entries, event by event *)
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*PrintLoss*)
+			BA.SwitchOff(BA.waitDir, lossJson + ".json");
+			GS.Send("Duniter1Members", "Loss", "", lossJson);
+			NEW(a);
+			a.what := iA;
+			a.title := "#Duniter1:Losses";
+			a.label := "l";
+			a.unit := "";
+			a.Do(BA.waitDir, lossJson + ".json", waitDelay);
+		END PrintLoss;
+
+	PROCEDURE PrintLossFlux*;
+		
+		(* Print and display the flux of first entries, event by event *)
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*PrintLossFlux*)
+			BA.SwitchOff(BA.waitDir, lossFluxJson + ".json");
+			GS.Send("Duniter1Members", "LossFlux", monthS, lossFluxJson);
+			NEW(a);
+			a.what := rA;
+			a.percent := FALSE;
+			a.title := "#Duniter1:LossesFlux";
+			a.label := "\frac{\d l}{\d t}";
+			a.unit := tUnit + "^{-1}";
+			a.Do(BA.waitDir, lossFluxJson + ".json", waitDelay);
+		END PrintLossFlux;
+
+	PROCEDURE PrintLossFluxPerMember*;
+		
+		(* Print and display the flux of first entries per member, event by event *)
+		
+		VAR
+			
+			a: Action;
+		
+		BEGIN (*PrintLossFluxPerMember*)
+			BA.SwitchOff(BA.waitDir, lossFluxPMJson + ".json");
+			GS.Send("Duniter1Members", "LossFluxPerMember", monthS, lossFluxPMJson);
+			NEW(a);
+			a.what := rA;
+			a.percent := TRUE;
+			a.title := "#Duniter1:LossesFluxPM";
+			a.label := "\frac{\d l}{n\d t}";
+			a.unit := "% / " + tUnit;
+			a.Do(BA.waitDir, lossFluxPMJson + ".json", waitDelay);
+		END PrintLossFluxPerMember;
 	
 	BEGIN (*Duniter1MembersPrint*)
 		Dialog.MapString("#Duniter1:month", tUnit);

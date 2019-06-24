@@ -46,7 +46,7 @@ MODULE Duniter1GQLReceiver;
 		
 		VAR
 			
-			sel: G. SelectionSet;
+			sel: G.SelectionSet;
 			call: Dialog.String;
 			res: INTEGER;
 			v: G.Value;

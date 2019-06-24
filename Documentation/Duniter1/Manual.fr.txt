@@ -117,6 +117,9 @@ Flux de membres par membre : Flux de membres divisé par le nombre  de membres :
 Nombre de premières entrées : Affiche la liste des dates des blocs où le nombre de membres entrant pour la première fois dans la toile de confiance a changé et les nombres  de premières entrées correspondantes depuis le début de la monnaie (avec tracé).
 Flux de premières entrées : Variation du nombre de premières entrées par unité de temps (ici: le mois). C'est donc la dérivée du nombre de premières entrées par rapport au temps  :  (avec tracé).
 Flux de premières entrées par membre : Flux de premières entrées divisé par le nombre  de membres : , en pourcentage par unité de temps (avec tracé).
+Pertes : Affiche la liste des dates des blocs où le nombre de membres a changé et les différences  correspondantes entre les premières entrées  et les nombres de membres  depuis le début de la monnaie (avec tracé).
+Flux de pertes : Variation des pertes par unité de temps (ici: le mois). C'est donc la dérivée des pertes par rapport au temps  :  (avec tracé).
+Flux de pertes par membre : Flux de pertes divisé par le nombre  de membres : , en pourcentage par unité de temps (avec tracé).
 Nombre de membres jour par jour : Affiche la liste des numéros des jours et des nombres de membres correspondants depuis le début de la monnaie (avec tracé).
 
 Use it and enjoy! - ¡Úsalos y disfrútalos! - Bonne utilisation - Приятного использованияn - Powodzenia - Viel Spaß
