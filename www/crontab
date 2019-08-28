@@ -1,0 +1,4 @@
+* * * * * cat /home/duniter/dev/WW/Json/WWResult.json | jq "{dossNb: (.meta.dossNb),block,now,computation_duration: (.meta.computation_duration)}" > /home/duniter/dev/WW/WWMeta.json
+* * * * * cat /home/duniter/dev/WW/Json/WWResult.json | jq "{now,names: (.names)}" > /home/duniter/dev/WW/WWByName.json
+* * * * * cat /home/duniter/dev/WW/Json/WWResult.json | jq "{now,dates: (.dates)}" > /home/duniter/dev/WW/WWByDate.json
+5 * * * * echo '{Start:Duniter1Server{Start}}' > /home/duniter/dev/WW/Query/Query.txt
