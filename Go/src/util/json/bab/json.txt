@@ -1,0 +1,116 @@
+{
+Util: Utility tools.
+
+Copyright (C) 2017…2018 GérardMeunier
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
+
+You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+}
+
+BABEL json;
+
+
+
+DEFINITION
+
+digit =  ['0'-'9']  ;
+hexa =  digit | ['A'-'F','a'-'f']  ;
+
+LEXICON
+
+spaces- = ([' ', #9, #2] | $)+ ;
+
+false = 'false' ;
+null = 'null' ;
+true = 'true' ;
+
+comma = "," ;
+colon = ":" ;
+lBracket = "[" ;
+rBracket = "]" ;
+lBrace = "{" ;
+rBrace = "}" ;
+
+string =  '"' ([#20H-#0FFFFH^'"','\'] | '\"' {quotation mark} | '\\' {reverse solidus} | '\/' {solidus} | '\b' {backspace} | '\f' {formfeed} | '\n' {newline} | '\r' {carriage return} | '\t' {horizontal tab} | '\u' hexa<4,4> {unicode character})* '"' ;
+number =  '-'? ('0' | ['1'-'9'] digit*) ('.' digit*)? (['E','e'] ['+','-']? digit*)?  ;
+
+DECLARATION
+
+*_array (elements);
+ _elementList (elements);
+ _elements (elements);
+ _json (data, void);
+*_object (fields);
+ _fieldList (fields);
+ _fields (fields);
+ _stringValue (string, val);
+ _value (val);
+
+object = #1;
+array = #2;
+nil = #3;
+cons = #4;
+json = ^1;
+string = ^2;
+number = ^3;
+true = ^4;
+false = ^5;
+null = ^6;
+
+GRAMMAR
+
+_json = _object rBrace:
+	$0.data = object($1.fields), $0.void = json($0.data);
+_json = _array rBracket:
+	$0.data = array($1.elements), $0.void = json($0.data);
+
+_object = lBrace _fields:
+	$0.fields = $2.fields;
+
+_fields =:
+	$0.fields = nil;
+_fields = _stringValue _fieldList:
+	$0.fields = cons($1.string, $1.val, $2.fields);
+
+_fieldList =:
+	$0.fields = nil;
+_fieldList = comma _stringValue _fieldList:
+	$0.fields = cons($2.string, $2.val, $3.fields);
+
+_stringValue = string colon _value:
+	$0.string = $1, $0.val = $3.val;
+
+_array = lBracket _elements:
+	$0.elements = $2.elements;
+
+_elements =:
+	$0.elements = nil;
+_elements = _value _elementList:
+	$0.elements = cons($1.val, $2.elements);
+
+_elementList =:
+	$0.elements = nil;
+_elementList = comma _value _elementList:
+	$0.elements = cons($2.val, $3.elements);
+
+_value = string:
+	$0.val = string($1);
+_value = number:
+	$0.val = number($1);
+_value = _object rBrace:
+	$0.val = object($1.fields);
+_value = _array rBracket:
+	$0.val = array($1.elements);
+_value = true:
+	$0.val = true($1);
+_value = false:
+	$0.val = false($1);
+_value = null:
+	$0.val = null($1);
+
+AXIOM
+
+_json.
