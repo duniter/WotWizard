@@ -141,8 +141,8 @@
               document.getElementById('ww-stuck').style.display = 'block'
             }
             // By date
-            for (var i = 0; i < jsonByDate.dates.length; i++) {
-              var entry = jsonByDate.dates[i]
+            for (var i = 0; i < jsonByDate.names.length; i++) {
+              var entry = jsonByDate.names[i]
               var html = '<blockquote>'
               html += '<h2 class="' + (entry.after ? 'not_before_or_never' : 'at') + '">' + ts2datetime(entry.date) + '</h2>'
               for (var j = 0; j < entry.names.length; j++) {
@@ -159,8 +159,8 @@
               var entry = jsonByName.names[i]
               var html = '<blockquote>'
               html += '<h2>' + entry.name + '</h2>'
-              for (var j = 0; j < entry.dates.length; j++) {
-                var date = entry.dates[j]
+              for (var j = 0; j < entry.names.length; j++) {
+                var date = entry.names[j]
                 var proba = date.proba
                 var probaClass = proba >= 1 ? 'sure' : (isNaN(proba) ? 'never' : 'possible')
                 html += '<p class="' + date.precision + '">' + ts2datetime(date.date) + ' (<span class="' + probaClass + '">' + proba2percent(proba) + '%</span>)</p>'
@@ -178,8 +178,8 @@
           names: []
         }
         var names = {}
-        for (var i = 0; i < jsonByDate.dates.length; i++) {
-          var entry = jsonByDate.dates[i]
+        for (var i = 0; i < jsonByDate.names.length; i++) {
+          var entry = jsonByDate.names[i]
           for (var j = 0; j < entry.names.length; j++) {
             var name = entry.names[j]
             names[name.name] = names[name.name] || { name: name.name, dates: [] }
