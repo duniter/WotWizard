@@ -159,8 +159,8 @@
               var entry = jsonByName.names[i]
               var html = '<blockquote>'
               html += '<h2>' + entry.name + '</h2>'
-              for (var j = 0; j < entry.names.length; j++) {
-                var date = entry.names[j]
+              for (var j = 0; j < entry.dates.length; j++) {
+                var date = entry.dates[j]
                 var proba = date.proba
                 var probaClass = proba >= 1 ? 'sure' : (isNaN(proba) ? 'never' : 'possible')
                 html += '<p class="' + date.precision + '">' + ts2datetime(date.date) + ' (<span class="' + probaClass + '">' + proba2percent(proba) + '%</span>)</p>'
