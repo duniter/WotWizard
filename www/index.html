@@ -134,7 +134,7 @@
             $('#nbFolders').text(jsonMeta.dossNb)
             $('#timeBCT').text(ts2datetime(jsonMeta.now) + ' BCT¹')
             $('#currentBlock').text(jsonMeta.block)
-            $('#computationDuration').text((jsonMeta.computation_duration/1000).toFixed(0) + 's')
+            $('#computationDuration').text((jsonMeta.computation_duration).toFixed(0) + 's')
 	          var dateISO = new Date(jsonMeta.now * 1000)
             var diffToNow = (Date.now() - dateISO.getTime()) / 1000
             var hoursOffset = diffToNow / 3600
