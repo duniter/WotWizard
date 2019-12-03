@@ -396,7 +396,7 @@ func extractBlockId (buid string) Hash {
 	return Hash(string(b[i + 1:]))
 }
 
-// Scan the membership and the idty tables in the Duniter database and build idHashT, idPubT and idUidT; remove all items which reference a forked block *)
+// Scan the membership and the idty tables in the Duniter database and build idHashT, idPubT and idUidT; remove all items which reference a forked block
 func membershipIds (d *Q.DB) {
 	// Membership applications
 	rows, err := d.Query("SELECT m.idtyHash, m.membership, m.issuer, m.userid, m.expires_on FROM membership m INNER JOIN block b ON m.blockHash = b.hash WHERE NOT b.fork ORDER BY m.blockNumber ASC")

@@ -354,9 +354,9 @@ func certs (mk *J.Maker, h S.Hash, pubkey B.Pubkey, inBC bool) (certifiers certi
 		_, idE.limit, b = B.Cert(from, to); M.Assert(b, 107)
 		if es.exp != nil {
 			es.exp[i] = idE.limit
-			i++
 		}
 		_, b, _ = t.SearchIns(idE); M.Assert(!b, 108)
+		i++
 		from, to, okB = posB.CertNextPos()
 	}
 	if okS {

@@ -82,6 +82,8 @@ func listFile (f W.File, withTo bool, mk *J.Maker) {
 			mk.PushBoolean(d.PrincCertif >= int(B.Pars().SigQty) && now <= d.Limit() && d.ProportionOfSentries >= B.Pars().Xpercent)
 			mk.BuildField("ok")
 			listCertOrDossEnd(d)
+			mk.PushInteger(d.MinDate)
+			mk.BuildField("minimum_date")
 			listFile(d.Certifs, false, mk)
 			mk.BuildField("certifs")
 			mk.BuildObject()

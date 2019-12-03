@@ -1701,8 +1701,9 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 		id.pubkey = Pubkey(scanS(ss, ':', &i))
 		skipS(ss, ':', &i)
 		s := scanS(ss, '-', &i); n, err := C.Atoi(s); M.Assert(err == nil, err, 100)
-		id.application, _, b = TimeOf(int32(n)); M.Assert(b, n, 101)
-		id.expires_on = id.application + int64(pars.MsValidity)
+		id.application, _, b = TimeOf(int32(nb)); M.Assert(b, nb, 101)
+		id.expires_on, _, b = TimeOf(int32(n)); M.Assert(b, n, 102)
+		id.expires_on += int64(pars.MsValidity)
 		skipS(ss, ':', &i)
 		skipS(ss, ':', &i)
 		id.uid = scanS(ss, '"', &i)
@@ -1710,18 +1711,18 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 			i++
 		}
 		rows, err := d.Query("SELECT hash FROM i_index WHERE pub == '" + string(id.pubkey) + "' ORDER BY writtenOn ASC")
-		M.Assert(err == nil, err, 102)
+		M.Assert(err == nil, err, 103)
 		id.hash = ""
 		for rows.Next() {
 			var s Q.NullString
 			err = rows.Scan(&s)
-			M.Assert(err == nil, err, 103)
+			M.Assert(err == nil, err, 104)
 			if s.Valid {
 				id.hash = Hash(s.String)
 			}
 		}
 		M.Assert(rows.Err() == nil, rows.Err(), 60)
-		M.Assert(id.hash != "", 104)
+		M.Assert(id.hash != "", 105)
 		bnb := int32(nb)
 		id.block_number = bnb
 		idU := &B.String{C: id.uid}
@@ -1731,7 +1732,7 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 		if iwP.SearchIns(idP) {
 			idRef = iwP.ReadValue()
 			oldId := idMan.ReadData(idRef).(*identity)
-			M.Assert(!oldId.member && oldId.uid == id.uid && oldId.hash == id.hash, 105)
+			M.Assert(!oldId.member && oldId.uid == id.uid && oldId.hash == id.hash, 106)
 			idTimeT.Writer().Erase(&filePosKey{ref: idRef})
 			if  withList {
 				idL := &undoListT{next: undoList, typ: idRemoveTimeList, ref: idRef, aux: 0, aux2: 0}
@@ -1740,10 +1741,10 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 			id.block_number = oldId.block_number
 			id.certifiers = oldId.certifiers; id.certified = oldId.certified
 			idMan.WriteData(idRef, id)
-			b = iwU.SearchIns(idU); M.Assert(b, idU.C, 106)
-			M.Assert(iwU.ReadValue() == idRef, 107)
-			b = iwH.SearchIns(idH); M.Assert(b, idH.ref, 108)
-			M.Assert(iwH.ReadValue() == idRef, 109)
+			b = iwU.SearchIns(idU); M.Assert(b, idU.C, 107)
+			M.Assert(iwU.ReadValue() == idRef, 108)
+			b = iwH.SearchIns(idH); M.Assert(b, idH.ref, 109)
+			M.Assert(iwH.ReadValue() == idRef, 110)
 			if withList {
 				idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: oldId.expires_on, aux2: oldId.application}
 				undoList = undoListMan.WriteAllocateData(idL)
@@ -1752,9 +1753,9 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 			id.certifiers = B.BNil; id.certified = B.BNil
 			idRef = idMan.WriteAllocateData(id)
 			iwP.WriteValue(idRef)
-			b = iwU.SearchIns(idU); M.Assert(!b, idU.C, 110)
+			b = iwU.SearchIns(idU); M.Assert(!b, idU.C, 111)
 			iwU.WriteValue(idRef)
-			b = iwH.SearchIns(idH); M.Assert(!b, idH.ref, 111)
+			b = iwH.SearchIns(idH); M.Assert(!b, idH.ref, 112)
 			iwH.WriteValue(idRef)
 			if withList {
 				idL := &undoListT{next: undoList, typ: idAddList, ref: idRef, aux: 0}
@@ -1786,21 +1787,22 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 		idP := new(pubKey)
 		idP.ref = Pubkey(scanS(ss, ':', &i))
 		skipS(ss, ':', &i)
-		s := scanS(ss, '-', &i); n, err := C.Atoi(s); M.Assert(err == nil, err, 112)
+		s := scanS(ss, '-', &i); n, err := C.Atoi(s); M.Assert(err == nil, err, 113)
 		skipS(ss, '"', &i)
 		if ss[i] != ']' {
 			i++
 		}
-		b = iwP.Search(idP); M.Assert(b, idP.ref, 113)
+		b = iwP.Search(idP); M.Assert(b, idP.ref, 114)
 		idRef := iwP.ReadValue()
 		id := idMan.ReadData(idRef).(*identity)
-		M.Assert(id.member, 114)
+		M.Assert(id.member, 115)
 		if withList {
 			idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: id.application}
 			undoList = undoListMan.WriteAllocateData(idL)
 		}
-		id.application, _, b = TimeOf(int32(n)); M.Assert(b, n, 115) // Bug: !b
-		id.expires_on = id.application + int64(pars.MsValidity)
+		id.application, _, b = TimeOf(int32(nb)); M.Assert(b, nb, 116)
+		id.expires_on, _, b = TimeOf(int32(n)); M.Assert(b, n, 117)
+		id.expires_on += int64(pars.MsValidity)
 		idMan.WriteData(idRef, id)
 	}
 	
@@ -1810,20 +1812,18 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 		i++
 		idP := new(pubKey)
 		idP.ref = Pubkey(scanS(ss, ':', &i))
-		skipS(ss, ':', &i)
-		s := scanS(ss, '-', &i); n, err := C.Atoi(s); M.Assert(err == nil, err, 116) // Bug : ss == ""
 		skipS(ss, '"', &i)
 		if ss[i] != ']' {
 			i++
 		}
-		b = iwP.Search(idP); M.Assert(b, idP.ref, 117)
+		b = iwP.Search(idP); M.Assert(b, idP.ref, 118)
 		idRef := iwP.ReadValue()
 		id := idMan.ReadData(idRef).(*identity)
 		if withList {
 			idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: id.application}
 			undoList = undoListMan.WriteAllocateData(idL)
 		}
-		id.application, _, b = TimeOf(int32(n)); M.Assert(b, n, 118)
+		id.application, _, b = TimeOf(int32(nb)); M.Assert(b, nb, 119)
 		id.expires_on = - M.Abs64(id.expires_on)
 		idMan.WriteData(idRef, id)
 	}
@@ -1838,7 +1838,7 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 			i++
 		}
 		idP := &pubKey{ref: p}
-		b = iwP.Search(idP); M.Assert(b, idP.ref, 119)
+		b = iwP.Search(idP); M.Assert(b, idP.ref, 120)
 		idRef := iwP.ReadValue()
 		if idTimeT.Writer().Erase(&filePosKey{ref: idRef}) && withList {
 			idL := &undoListT{next: undoList, typ: idRemoveTimeList, ref: idRef, aux: 0}
@@ -1857,17 +1857,17 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 		if ss[i] != ']' {
 			i++
 		}
-		b = iwP.Search(idP); M.Assert(b, idP.ref, 120)
+		b = iwP.Search(idP); M.Assert(b, idP.ref, 121)
 		idRef := iwP.ReadValue()
 		id := idMan.ReadData(idRef).(*identity)
-		M.Assert(id.member, 121)
+		M.Assert(id.member, 122)
 		id.member = false
 		idMan.WriteData(idRef, id)
-		b = iwJ.Search(idP); M.Assert(b, idP.ref, 122)
+		b = iwJ.Search(idP); M.Assert(b, idP.ref, 123)
 		jlRef := iwJ.ReadValue()
 		jl := joinAndLeaveMan.ReadData(jlRef).(*joinAndLeave)
 		jlL := joinAndLeaveLMan.ReadData(jl.list).(*joinAndLeaveL)
-		M.Assert(jlL.leavingBlock == HasNotLeaved, 123)
+		M.Assert(jlL.leavingBlock == HasNotLeaved, 124)
 		jlL.leavingBlock = int32(nb)
 		joinAndLeaveMan.WriteData(jl.list, jlL)
 		if withList {
@@ -1885,7 +1885,7 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 				id.expires_on -= int64(pars.MsValidity)
 			}
 			idMan.WriteData(idRef, id)
-			b = idTimeT.Writer().SearchIns(&filePosKey{ref: idRef}); M.Assert(!b, 124)
+			b = idTimeT.Writer().SearchIns(&filePosKey{ref: idRef}); M.Assert(!b, 125)
 			if withList {
 				idL := &undoListT{next: undoList, typ: idAddTimeList, ref: idRef, aux: 0}
 				undoList = undoListMan.WriteAllocateData(idL)
@@ -2601,7 +2601,7 @@ func updateCmds () {
 	}
 	updateAll()
 	showUpdated()
-	lg.Println("Update done")
+	lg.Println("Update of commands done")
 }
 
 // Cmds

@@ -55,6 +55,7 @@ type (
 	// Dossier of external certifications
 	Dossier struct {
 		date, // Entry date
+		MinDate, // Minimum date: last membership application + msPeriod
 		limit int64 // Expiration date
 		Id string // Certified identity
 		pub Pubkey
@@ -390,6 +391,7 @@ func fileDates (f File, afterNow bool) {
 						cd.date = cd.Certifs[cd.PrincCertif - 1].(*Certif).date
 					}
 				}
+				cd.date = M.Max64(cd.date, cd.MinDate)
 				if cd.date > cd.limit {
 					cd.date = BA.Never
 				}
@@ -826,11 +828,13 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 	toHash, ok := S.IdNextHash(true, &el)
 	for ok { // For all identity hash in sandbox
 		idInBC, to, _, exp2, b := S.IdHash(toHash); M.Assert(b, 100)
-		var app, exp int64
+		var minDate int64
 		bb := !idInBC
 		if !bb {
+			var exp, app int64
 			_, b, _, _, app, exp, bb = B.IdPubComplete(to)
-			bb = bb && !b && exp >= 0 && exp2 - int64(B.Pars().MsWindow) > app + int64(B.Pars().MsPeriod)
+			minDate = app + int64(B.Pars().MsPeriod)
+			bb = bb && !b && exp >= 0 && exp2 > minDate
 		}
 		if bb { // identity in sandBox or not member & not leaving & new membership application date later than previous one plus msPeriod; to be verified with the Duniter new version
 			nbCertifs := 0; certs := (*pubList)(nil)
@@ -880,7 +884,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 			}
 			if bb {
 				dNb++
-				d := &Dossier{PrincCertif: princCertif, ProportionOfSentries: proportionOfSentries, pub: new(B.Pubkey)}
+				d := &Dossier{MinDate: minDate, PrincCertif: princCertif, ProportionOfSentries: proportionOfSentries, pub: new(B.Pubkey)}
 				l.next = new(cdList); l = l.next
 				l.cd = d
 				var idInBC bool

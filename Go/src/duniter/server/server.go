@@ -95,6 +95,8 @@ func writeFile (f W.File, withTo bool, mk *J.Maker) {
 			mk.PushFloat(d.ProportionOfSentries)
 			mk.BuildField("proportion_of_sentries")
 			writeCertOrDossEnd(d)
+			mk.PushInteger(d.MinDate)
+			mk.BuildField("minimum_date")
 			writeFile(d.Certifs, false, mk)
 			mk.BuildField("certifs")
 			mk.BuildObject()
