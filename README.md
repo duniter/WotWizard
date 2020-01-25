@@ -6,7 +6,7 @@ Several other tools are provided, such as a fast "Web of Trust" Explorer.
 
 This program needs that a Duniter node runs on the same computer.
 
-There are two parts in WotWizard: first a server (wwServer), written in Go (v1.12.5) and which communicates through files containing, on input, GraphQL requests, and on output, JSON answers; second a graphical user interface (WotWizard.exe) written in Component Pascal (BlackBox v1.7.1 under Windows or Wine), which generates GraphQL requests through menus and interactive windows, and display answers with texts or graphics.
+There are two parts in WotWizard: first a server (wwServer), written in Go (v1.13.6) under GNU / Linux and which communicates through files containing, on input, GraphQL requests, and on output, JSON answers; second a graphical user interface (WotWizard.exe) written in Component Pascal (BlackBox v1.7.1 under Wine), which generates GraphQL requests through menus and interactive windows, and display answers with texts or graphics.
 
 You can find the executables here:
 	https://github.com/duniter/WotWizard/releases
