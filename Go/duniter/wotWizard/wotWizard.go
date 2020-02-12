@@ -3,7 +3,7 @@ WotWizard
 
 Copyright (C) 2017-2020 GérardMeunier
 
-This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License  for more details.
 
@@ -835,14 +835,14 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 		var minDate int64 = 0
 		bb := !idInBC
 		if !bb {
-			var exp, app int64
-			_, b, _, _, app, exp, bb = B.IdPubComplete(to)
+			var (member bool; app, exp int64)
+			_, member, _, _, app, exp, bb = B.IdPubComplete(to)
 			if bb {
 				minDate = app + int64(B.Pars().MsPeriod)
-				bb = !b && exp >= 0 && exp2 > minDate
+				bb = !member && exp >= 0 && exp2 > minDate
 			}
 		}
-		if bb { // identity in sandBox or not member & not leaving & new membership application date later than previous one plus msPeriod
+		if bb { // identity in sandBox or (not member & not leaving & new membership application date later than previous one plus msPeriod)
 			nbCertifs := 0; certs := (*pubList)(nil)
 			var posBI B.CertPos
 			if idInBC && B.CertTo(to, &posBI) {
@@ -853,7 +853,11 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 						_, b, _, _, _, _, bb = B.IdPubComplete(from)
 						var posBF B.CertPos
 						bb = bb && b && (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
-						if bb { // Don't consider certifications sent by a non-member or by a member who already has sent sigStock (100) certifications
+						if bb {
+							_, exp, b := B.Cert(from, to); M.Assert(b, 100)
+							bb = exp > minDate
+						}
+						if bb { // Don't consider certifications sent by a non-member or by a member who already has sent sigStock (100) certifications or certifications whose limit date is smaller than minDate
 							nbCertifs++
 							certs = &pubList{pub: &from, date: BA.Already, next: certs}
 						}
@@ -873,7 +877,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 						if bb {
 							_, exp, b := S.Cert(from, toHash); M.Assert(b, 101)
 							date := fixCertNextDate(from)
-							if date <= exp { // Not-expired certification
+							if M.Max64(date, minDate) <= exp { // Not-expired certification
 								nbCertifs++
 								certs = &pubList{pub: &from, date: date, next: certs}
 							}
@@ -908,11 +912,13 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 							bb = bb && b &&(!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
 							if bb {
 								_, exp, b := B.Cert(from, to); M.Assert(b, 103)
-								c := &Certif{date: BA.Already, limit: exp}
-								c.fromP = new(B.Pubkey); *c.fromP = from
-								c.From, b = B.IdPub(from); M.Assert(b, 104)
-								d.Certifs[j] = c
-								j++
+								if exp > minDate {
+									c := &Certif{date: BA.Already, limit: exp}
+									c.fromP = new(B.Pubkey); *c.fromP = from
+									c.From, b = B.IdPub(from); M.Assert(b, 104)
+									d.Certifs[j] = c
+									j++
+								}
 							}
 							from, to, okP = posBI.CertNextPos()
 						}
@@ -925,7 +931,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 						if bb {
 							_, exp, b := S.Cert(from, toHash); M.Assert(b, 105)
 							date := fixCertNextDate(from)
-							if date <= exp {
+							if M.Max64(date, minDate) <= exp {
 								useful.SearchIns(&pubSet{p: from})
 								c := &Certif{date: date, limit: exp}
 								c.fromP = new(B.Pubkey); *c.fromP = from

@@ -252,14 +252,14 @@ func (c *compilation) Execution (fNum, parsNb int, pars C.ObjectsList) (o *C.Obj
 	
 	// Replace all "\/" occurences by "/"
 	makeString := func (s string) string {
-		s = strings.ReplaceAll(s, `\"`, `"`)
-		s = strings.ReplaceAll(s, `\\`, `\`)
-		s = strings.ReplaceAll(s, `\/`, "/")
-		s = strings.ReplaceAll(s, `\b`, "\u0008")
-		s = strings.ReplaceAll(s, `\f`, "\u000C")
-		s = strings.ReplaceAll(s, `\n`, "\u000A")
-		s = strings.ReplaceAll(s, `\r`, "\u000D")
-		s = strings.ReplaceAll(s, `\t`, "\u0009")
+		s = strings.Replace(s, `\"`, `"`, -1)
+		s = strings.Replace(s, `\\`, `\`, -1)
+		s = strings.Replace(s, `\/`, "/", -1)
+		s = strings.Replace(s, `\b`, "\u0008", -1)
+		s = strings.Replace(s, `\f`, "\u000C", -1)
+		s = strings.Replace(s, `\n`, "\u000A", -1)
+		s = strings.Replace(s, `\r`, "\u000D", -1)
+		s = strings.Replace(s, `\t`, "\u0009", -1)
 		pos := strings.Index(s, `\u`)
 		for pos >= 0 {
 			M.Assert(len(s) >= pos + 6, 100)

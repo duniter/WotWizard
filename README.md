@@ -14,3 +14,5 @@ You can find the executables here:
 WotWizard may be used as well as a server, or as a stand-alone application with a front-end.
 
 The version of the associated Duniter node must be 1.7.17 at least.
+
+All included softwares have a GPLv3 license, excepted the BlackBox system which has a FreeBSD license (compatible with GPL).
