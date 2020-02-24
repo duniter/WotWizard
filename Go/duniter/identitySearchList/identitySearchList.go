@@ -12,6 +12,8 @@ You should have received a copy of the GNU General Public License along with thi
 
 package identitySearchList
 
+// À corriger dans certs
+
 import (
 	
 	A	"util/avl"
@@ -330,7 +332,7 @@ func certs (mk *J.Maker, h S.Hash, pubkey B.Pubkey, inBC bool) (certifiers certi
 	}
 	recFNb := 0
 	if okS {
-		recFNb = posS.CertPosLen()
+		recFNb = posS.CertPosLen() // À corriger : Enlever les émetteurs qui ne sont plus membres
 	}
 	certifiers = make(certifiersT, recNb + recFNb)
 	var (es expSort; ts = sort.TS{Sorter: &es})
@@ -363,7 +365,7 @@ func certs (mk *J.Maker, h S.Hash, pubkey B.Pubkey, inBC bool) (certifiers certi
 		from, toH, okS = posS.CertNextPos()
 	}
 	for okS {
-		certifiers[i] = from
+		certifiers[i] = from // À corriger : vérifier que from est toujours membre et sinon ajouter une croix à côté du rond
 		i++
 		idE := new(idET)
 		var b bool

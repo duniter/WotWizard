@@ -50,10 +50,6 @@ type (
 		rac *dico
 	}
 	
-	directory struct {
-		r *bufio.Reader
-	}
-	
 	value interface{}
 	
 	dico struct {
@@ -187,10 +183,8 @@ func Map (key string, p ...string) string {
 
 // Reinit flushes the contents of the .str files from main memory and fixes the current language to lang (two characters).
 func Reinit (lang string) {
-	M.Assert(len(lang) == 0 || len(lang) == 2, 20)
-	if len(lang) > 0 {
-		language = lang
-	}
+	M.Assert(len(lang) == 2, 20)
+	language = lang
 	dicos = &dico{next: nil}
 }
 
@@ -208,11 +202,6 @@ func init () {
 		s.Error = func(s *scanner.Scanner, msg string) {panic(errors.New("File" + name + "incorrect"))}
 		s.Scan()
 		lang := s.TokenText()
-		if lang == "en" {
-			lang = ""
-		}
 		Reinit(lang)
-	} else {
-		Reinit("")
 	}
 }

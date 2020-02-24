@@ -81,6 +81,11 @@ func (e *Elem) Val () interface{} {
 	return e.val
 }
 
+func (e *Elem) SetVal (v interface{}) {
+	if e == nil {panic("Invalid Elem")}
+	e.val = v
+}
+
 func copie1 (e *Elem, t bool) {
 	if t {
 		f := new(Elem)

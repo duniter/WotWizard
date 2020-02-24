@@ -103,7 +103,7 @@ func ToDown (s string) string {
 	return string(buf.Bytes())
 }
 
-// Extract the significant characters in s; only alphanumeric characters are significant, and their case of lowest rank is returned
+// Extract the significant characters in s; only alphanumeric characters are significant, and are returned
 func strip (s string) string {
 	rs := bytes.Runes([]byte(s))
 	buf := new(bytes.Buffer)

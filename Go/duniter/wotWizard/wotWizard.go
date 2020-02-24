@@ -724,6 +724,7 @@ func CalcEntries (f File) (permutations int, occurDate, occurName *A.Tree, ok bo
 		permutations = sets.NumberOfElems()
 		
 		// Computing of Propagation(s) with their proba(s)
+		now := B.Now()
 		occur := A.New()
 		e := sets.Next(nil)
 		for e != nil {
@@ -731,6 +732,7 @@ func CalcEntries (f File) (permutations int, occurDate, occurName *A.Tree, ok bo
 			ee := s.T.Next(nil)
 			for ee != nil {
 				p := ee.Val().(*Propagation)
+				p.Date = M.Max64(p.Date, now)
 				p.Proba = 0.
 				eee, _, _ := occur.SearchIns(p)
 				p = eee.Val().(*Propagation)
@@ -767,18 +769,6 @@ func CalcEntries (f File) (permutations int, occurDate, occurName *A.Tree, ok bo
 			p := e.Val().(*Propagation)
 			_, b, _ := occurDate.SearchIns(&PropDate{Id: p.Id, Date: p.Date, After: p.After, Proba: p.Proba}); M.Assert(!b, 101)
 			e = occur.Next(e)
-		}
-		
-		// All dates >= B.Now()
-		now := B.Now()
-		e = occurDate.Next(nil)
-		for e != nil {
-			p := e.Val().(*PropDate)
-			if p.Date >= now {
-				break
-			}
-			p.Date = now
-			e = occurDate.Next(e)
 		}
 		
 		// PropDate -> PropName
@@ -854,7 +844,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 						var posBF B.CertPos
 						bb = bb && b && (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
 						if bb {
-							_, exp, b := B.Cert(from, to); M.Assert(b, 100)
+							_, exp, b := B.Cert(from, to); M.Assert(b, 101)
 							bb = exp > minDate
 						}
 						if bb { // Don't consider certifications sent by a non-member or by a member who already has sent sigStock (100) certifications or certifications whose limit date is smaller than minDate
@@ -875,7 +865,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 						var posBF B.CertPos
 						bb = bb && b && (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
 						if bb {
-							_, exp, b := S.Cert(from, toHash); M.Assert(b, 101)
+							_, exp, b := S.Cert(from, toHash); M.Assert(b, 102)
 							date := fixCertNextDate(from)
 							if M.Max64(date, minDate) <= exp { // Not-expired certification
 								nbCertifs++
@@ -898,7 +888,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 				l.next = new(cdList); l = l.next
 				l.cd = d
 				var idInBC bool
-				idInBC, *d.pub, d.Id, d.limit, b = S.IdHash(toHash); M.Assert(b, 102)
+				idInBC, *d.pub, d.Id, d.limit, b = S.IdHash(toHash); M.Assert(b, 103)
 				if nbCertifs == 0 {
 					d.Certifs = nil
 				} else {
@@ -911,11 +901,11 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 							var posBF B.CertPos
 							bb = bb && b &&(!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
 							if bb {
-								_, exp, b := B.Cert(from, to); M.Assert(b, 103)
+								_, exp, b := B.Cert(from, to); M.Assert(b, 104)
 								if exp > minDate {
 									c := &Certif{date: BA.Already, limit: exp}
 									c.fromP = new(B.Pubkey); *c.fromP = from
-									c.From, b = B.IdPub(from); M.Assert(b, 104)
+									c.From, b = B.IdPub(from); M.Assert(b, 105)
 									d.Certifs[j] = c
 									j++
 								}
@@ -929,13 +919,13 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 						var posBF B.CertPos
 						bb = bb && b &&  (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
 						if bb {
-							_, exp, b := S.Cert(from, toHash); M.Assert(b, 105)
+							_, exp, b := S.Cert(from, toHash); M.Assert(b, 106)
 							date := fixCertNextDate(from)
 							if M.Max64(date, minDate) <= exp {
 								useful.SearchIns(&pubSet{p: from})
 								c := &Certif{date: date, limit: exp}
 								c.fromP = new(B.Pubkey); *c.fromP = from
-								c.From, b = B.IdPub(from); M.Assert(b, 106)
+								c.From, b = B.IdPub(from); M.Assert(b, 107)
 								d.Certifs[j] = c
 								j++
 							}
@@ -952,7 +942,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 	if n <= 0 { // Encore utile ?
 		mt = 0
 	} else {
-		mt, _, b = B.TimeOf(n - 1); M.Assert(b, 107)
+		mt, _, b = B.TimeOf(n - 1); M.Assert(b, 108)
 	}
 	cNb = 0; cNbU := 0
 	var pos S.CertPos
@@ -960,7 +950,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 	for ok {
 		from, toHash, ok2 := pos.CertNextPos()
 		for ok2 {
-			to, exp, b := S.Cert(from, toHash); M.Assert(b, 108)
+			to, exp, b := S.Cert(from, toHash); M.Assert(b, 109)
 			uid, b, _, _, _, _, bb := B.IdPubComplete(to)
 			var posBF B.CertPos
 			bb = bb && b && (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
@@ -971,7 +961,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 					cNb++
 					if _, b, _ := useful.Search(&pubSet{p: from}); b { // Keep only certifications whose sender is also a sender of a certification in SandBox in a dossier
 						c := &Certif{fromP: &from, To: uid, limit: exp, date: date}
-						c.From, b = B.IdPub(from); M.Assert(b, 109)
+						c.From, b = B.IdPub(from); M.Assert(b, 110)
 						cNbU++
 						l.next = new(cdList); l = l.next
 						l.cd = c
