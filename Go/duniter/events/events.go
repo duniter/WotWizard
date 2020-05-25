@@ -14,36 +14,17 @@ package events
 
 import (
 	
+	A	"util/avl"
 	B	"duniter/blockchain"
 	BA	"duniter/basic"
-	BT	"util/gbTree"
-	G	"duniter/gqlReceiver"
-	J	"util/json"
+	G	"util/graphQL"
+	GQ	"duniter/gqlReceiver"
 	M	"util/misc"
 		"util/sort"
 
 )
 
-const (
-	
-	memEndsName = "MemEnds";
-	missEndsName = "MissEnds";
-	certEndsName = "CertEnds";
-	
-	memA = iota
-	missA
-	certA
-
-)
-
 type (
-	
-	action struct {
-		what int
-		output string
-	}
-	
-	doProc func () Memberships
 	
 	Membershiper interface {
 		Id () string
@@ -54,6 +35,8 @@ type (
 		id string
 		exp int64
 	}
+	
+	memberships []membership
 	
 	MembershipCer interface {
 		Membershiper
@@ -68,7 +51,7 @@ type (
 	Memberships []Membershiper
 	
 	memSort struct {
-		m Memberships
+		m memberships
 	}
 	
 	certif struct {
@@ -98,84 +81,95 @@ func (ms *memSort) Swap (m1, m2 int) {
 	ms.m[m1], ms.m[m2] = ms.m[m2], ms.m[m1]
 }
 
-func DoMembershipsEnds () Memberships {
+func filter (ms memSort, start, end int64) memberships {
+	n := len(ms.m) - 1
+	ts := sort.TS{Sorter: &ms}
+	ts.QuickSort(0, n - 1)
+	tf := sort.TF{Finder: &ms}
+	ms.m[n] = membership{exp: start}
+	beg := n
+	tf.BinSearchNext(0, n - 1, &beg)
+	ms.m[n] = membership{exp: end}
+	stop := n
+	tf.BinSearchNext(0, n - 1, &stop)
+	return ms.m[beg:stop]
+}
+
+func doMembershipsEnds (start, end int64) memberships {
 	var ms memSort
-	ms.m = make(Memberships, B.IdLenM())
-	var ir *BT.IndexReader
+	n := B.IdLenM()
+	ms.m = make(memberships, n + 1)
+	var pst *B.Position
 	i := 0
-	id, ok := B.IdNextUidM(true, &ir)
+	id, ok := B.IdNextUidM(true, &pst)
 	for ok {
 		_, mem, _, _, _, exp, b := B.IdUidComplete(id); M.Assert(b && mem, 100)
 		ms.m[i] = membership{id: id, exp: exp}
 		i++
-		id, ok = B.IdNextUidM(false, &ir)
+		id, ok = B.IdNextUidM(false, &pst)
 	}
-	ts := sort.TS{Sorter: &ms}
-	ts.QuickSort(0, len(ms.m) - 1)
-	return ms.m
+	return filter(ms, start, end)
 }
 
-func doMissingEnds () Memberships {
-	var ir *BT.IndexReader
-	i := 0
-	id, ok := B.IdNextUid(true, &ir)
+func doMissingEnds (start, end int64) memberships {
+	var pst *B.Position
+	n := 0
+	id, ok := B.IdNextUid(true, &pst)
 	for ok {
 		_, mem, _, _, _, exp, b := B.IdUidComplete(id); M.Assert(b, 100)
 		if !mem && exp != BA.Revoked {
-			i++
+			n++
 		}
-		id, ok = B.IdNextUid(false, &ir)
+		id, ok = B.IdNextUid(false, &pst)
 	}
 	var ms memSort
-	ms.m = make(Memberships, i)
-	i = 0
-	id, ok = B.IdNextUid(true, &ir)
+	ms.m = make(memberships, n + 1)
+	i := 0
+	id, ok = B.IdNextUid(true, &pst)
 	for ok {
 		_, mem, _, _, _, exp, b := B.IdUidComplete(id); M.Assert(b, 101)
 		if !mem && exp != BA.Revoked {
 			ms.m[i] = membership{id: id, exp: exp}
 			i++
 		}
-		id, ok = B.IdNextUid(false, &ir)
+		id, ok = B.IdNextUid(false, &pst)
 	}
-	ts := sort.TS{Sorter: &ms}
-	ts.QuickSort(0, len(ms.m) - 1)
-	return ms.m
+	return filter(ms, start, end)
 }
 
 // Time of calculation reduced.
 // Time in O(n), with n = number of certifications.
 // Previous time in O(n^2)
 // With 25246 certifications, previous time 10s, new time 3s
-func DoCertifsEnds () Memberships {
-	var ir *BT.IndexReader
-	i := 0
-	id, ok := B.IdNextUid(true, &ir)
+func DoCertifsEnds (start, end int64, missingIncluded bool) memberships {
+	var pst *B.Position
+	n := int(B.Pars().SigQty)
+	m := 0
+	id, ok := B.IdNextUid(true, &pst)
 	for ok {
-		p, _, _, _, _, exp, b := B.IdUidComplete(id); M.Assert(b, 100)
-		bb := exp != BA.Revoked
+		p, member, _, _, _, exp, b := B.IdUidComplete(id); M.Assert(b, 100)
+		bb := missingIncluded && exp != BA.Revoked || !missingIncluded && member
 		if bb {
 			var pos B.CertPos
 			bb = B.CertToByExp(p, &pos)
-			bb = bb && pos.CertPosLen() >= int(B.Pars().SigQty)
+			bb = bb && pos.CertPosLen() >= n
 		}
 		if bb {
-			i++
+			m++
 		}
-		id, ok = B.IdNextUid(false, &ir)
+		id, ok = B.IdNextUid(false, &pst)
 	}
 	var ms memSort
-	ms.m = make(Memberships, i)
-	n := int(B.Pars().SigQty)
-	i = 0
-	id, ok = B.IdNextUid(true, &ir)
+	ms.m = make(memberships, m + 1)
+	i := 0
+	id, ok = B.IdNextUid(true, &pst)
 	for ok {
-		p, mem, _, _, _, exp, b := B.IdUidComplete(id); M.Assert(b, 101)
+		p, member, _, _, _, exp, b := B.IdUidComplete(id); M.Assert(b, 101)
 		var pos B.CertPos
-		bb := exp != BA.Revoked
+		bb := missingIncluded && exp != BA.Revoked || !missingIncluded && member
 		if bb {
 			bb = B.CertToByExp(p, &pos)
-			bb = bb && pos.CertPosLen() >= int(B.Pars().SigQty)
+			bb = bb && pos.CertPosLen() >= n
 		}
 		if bb {
 			var from, to B.Pubkey
@@ -183,87 +177,145 @@ func DoCertifsEnds () Memberships {
 				from, to, b = pos.CertNextPos(); M.Assert(b, 102)
 			}
 			_, exp, b = B.Cert(from, to); M.Assert(b, 103)
-			ms.m[i] = membershipC{membership: membership{id: id, exp: exp}, member: mem}
+			ms.m[i] = membership{id: id, exp: exp}
 			i++
 		}
-		id, ok = B.IdNextUid(false, &ir)
+		id, ok = B.IdNextUid(false, &pst)
 	}
-	ts := sort.TS{Sorter: &ms}
-	ts.QuickSort(0, len(ms.m) - 1)
-	return ms.m
+	return filter(ms, start, end)
 }
 
-func JsonCommon (mk *J.Maker) {
-	mk.PushInteger(int64(B.LastBlock()))
-	mk.BuildField("block")
-	mk.PushInteger(B.Now())
-	mk.BuildField("now")
-}
-
-func list (do doProc) J.Json {
-	mk := J.NewMaker()
-	mk.StartObject()
-	mk.StartArray()
-	ms := do()
-	for _, m := range ms {
-		mk.StartObject()
-		mk.PushString(m.Id())
-		mk.BuildField("id")
-		if mc, ok := m.(MembershipCer); ok {
-			mk.PushBoolean(mc.Member())
-		} else {
-			mk.PushBoolean(true)
+func getStartEnd (as *A.Tree) (start, end int64) {
+	var v G.Value
+	if G.GetValue(as, "startFromNow", &v) {
+		switch v := v.(type) {
+		case *G.IntValue:
+			start = v.Int
+		case *G.NullValue:
+			start = 0
+		default:
+			M.Halt(v, 100)
 		}
-		mk.BuildField("member")
-		mk.PushInteger(m.Exp())
-		mk.BuildField("limit")
-		mk.BuildObject()
+	} else {
+		start = 0
 	}
-	mk.BuildArray()
-	mk.BuildField("limits")
-	JsonCommon(mk)
-	mk.BuildObject()
-	return mk.GetJson()
-}
-
-func (a *action) Name () string {
-	var s string
-	switch a.what {
-	case memA:
-		s = memEndsName
-	case missA:
-		s = missEndsName
-	case certA:
-		s = certEndsName
+	start += B.Now()
+	if G.GetValue(as, "period", &v) {
+		switch v := v.(type) {
+		case *G.IntValue:
+			end = v.Int
+		case *G.NullValue:
+			end = M.MaxInt64
+		default:
+			M.Halt(v, 100)
+		}
+	} else {
+		end = M.MaxInt64
 	}
-	return s
-}
-
-func (a *action) Activate () {
-	switch a.what {
-	case memA:
-		G.Json(list(DoMembershipsEnds), a.output)
-	case missA:
-		G.Json(list(doMissingEnds), a.output)
-	case certA:
-		G.Json(list(DoCertifsEnds), a.output)
+	if end < M.MaxInt64 - start {
+		end += start
+	} else {
+		end = M.MaxInt64
 	}
-}
+	return
+} //getStartEnd
 
-func member (output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: memA, output: output}
-}
+func memStreamResolver (rootValue *G.OutputObjectValue, argumentValues *A.Tree) *G.EventStream { // *G.ValMapItem
+	return GQ.CreateStream("memEnds", rootValue, argumentValues)
+} //memStreamResolver
 
-func missing (output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: missA, output: output}
-}
+func missStreamResolver (rootValue *G.OutputObjectValue, argumentValues *A.Tree) *G.EventStream { // *G.ValMapItem
+	return GQ.CreateStream("missEnds", rootValue, argumentValues)
+} //missStreamResolver
 
-func certifs (output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: certA, output: output}
+func certStreamResolver (rootValue *G.OutputObjectValue, argumentValues *A.Tree) *G.EventStream { // *G.ValMapItem
+	return GQ.CreateStream("certEnds", rootValue, argumentValues)
+} //certStreamResolver
+
+func memEndsStopR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	GQ.Unsubscribe("memEnds")
+	return nil
+} //memEndsStopR
+
+func missEndsStopR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	GQ.Unsubscribe("missEnds")
+	return nil
+} //missEndsStopR
+
+func certEndsStopR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	GQ.Unsubscribe("certEnds")
+	return nil
+} //certEndsStopR
+
+func memEndsR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	start, end := getStartEnd(argumentValues)
+	l := G.NewListValue()
+	if start >= end {
+		return l
+	}
+	ms := doMembershipsEnds(start, end)
+	for _, m := range ms {
+		_, _, h, _, _, _, b := B.IdUidComplete(m.id); M.Assert(b, 100)
+		l.Append(GQ.Wrap(h))
+	}
+	return l
+} //memEndsR
+
+func missEndsR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {		start, end := getStartEnd(argumentValues)
+	l := G.NewListValue()
+	if start >= end {
+		return l
+	}
+	ms := doMissingEnds(start, end)
+	for _, m := range ms {
+		_, _, h, _, _, _, b := B.IdUidComplete(m.id); M.Assert(b, 100)
+		l.Append(GQ.Wrap(h))
+	}
+	return l
+} //missEndsR
+
+func certEndsR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {		start, end := getStartEnd(argumentValues)
+	l := G.NewListValue()
+	if start >= end {
+		return l
+	}
+	var (v G.Value; missingIncluded bool)
+	if G.GetValue(argumentValues, "missingIncluded", &v) {
+		switch v := v.(type) {
+		default:
+			M.Halt(v, 100)
+		}
+	} else {
+		missingIncluded = true
+	}
+	ms := DoCertifsEnds(start, end, missingIncluded)
+	for _, m := range ms {
+		_, _, h, _, _, _, b := B.IdUidComplete(m.id); M.Assert(b, 100)
+		l.Append(GQ.Wrap(h))
+	}
+	return l
+} //certEndsR
+
+func fixFieldResolvers (ts G.TypeSystem) {
+	ts.FixFieldResolver("Query", "memEnds", memEndsR)
+	ts.FixFieldResolver("Query", "missEnds", missEndsR)
+	ts.FixFieldResolver("Query", "certEnds", certEndsR)
+	ts.FixFieldResolver("Mutation", "memEndsStop", memEndsStopR)
+	ts.FixFieldResolver("Mutation", "missEndsStop", missEndsStopR)
+	ts.FixFieldResolver("Mutation", "certEndsStop", certEndsStopR)
+	ts.FixFieldResolver("Subscription", "memEnds", memEndsR)
+	ts.FixFieldResolver("Subscription", "missEnds", missEndsR)
+	ts.FixFieldResolver("Subscription", "certEnds", certEndsR)
+} //fixFieldResolvers
+
+func fixStreamResolvers (ts G.TypeSystem) {
+	ts.FixStreamResolver("memEnds", memStreamResolver)
+	ts.FixStreamResolver("missEnds", missStreamResolver)
+	ts.FixStreamResolver("certEnds", certStreamResolver)
 }
 
 func init () {
-	G.AddAction(memEndsName, member, G.Arguments{})
-	G.AddAction(missEndsName, missing, G.Arguments{})
-	G.AddAction(certEndsName, certifs, G.Arguments{})
+	ts := GQ.TS()
+	fixFieldResolvers(ts)
+	fixStreamResolvers(ts)
 }

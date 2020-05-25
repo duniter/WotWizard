@@ -14,33 +14,33 @@ package run
 
 import (
 	
+	_	"babel/static"
+	_	"util/json/static"
+	_	"util/graphQL/static"
+	_	"duniter/static"
+	
 	B	"duniter/blockchain"
 	BA	"duniter/basic"
 	G	"duniter/gqlReceiver"
 	S	"duniter/sandbox"
-		"fmt"
-	_	"duniter/centralities"
+	
+	_	"duniter/blocks"
 	_	"duniter/certifications"
 	_	"duniter/events"
 	_	"duniter/history"
 	_	"duniter/identities"
-	_	"duniter/identitySearchList"
 	_	"duniter/members"
 	_	"duniter/parameters"
-	_	"duniter/qualities"
-	_	"duniter/sandboxList"
 	_	"duniter/sentries"
-	_	"duniter/server"
-	_	"duniter/tellLimits"
 	_	"duniter/wotWizardList"
 	
-	_	"util/graphQLPartial/staticComp"
+		"fmt"
 
 )
 
 const (
 	
-	version = "4.1.1"
+	version = "4.2.0"
 
 )
 

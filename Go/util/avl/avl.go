@@ -51,11 +51,13 @@ type (
 
 // Is t empty?
 func (t *Tree) IsEmpty () bool {
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {panic("Invalid Tree")}
 	return !t.root.lTag
 }
 
 func (t *Tree) Empty () {
+	if t == nil {panic("Nil Tree")}
 	e := Elem{lTag: false, rTag: true}
 	e.left = &e
 	e.right = &e
@@ -69,6 +71,7 @@ func New () *Tree {
 }
 
 func (t *Tree) Valid () bool {
+	if t == nil {panic("Nil Tree")}
 	return t.root != nil
 }
 
@@ -110,6 +113,7 @@ func copie2 (e *Elem, t bool) *Elem {
 }
 
 func (t *Tree) Copy () *Tree {
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {panic("Invalid Tree")}
 	u := New()
 	t.root.cop = u.root
@@ -442,6 +446,7 @@ func sIns (q *Elem, l bool, pkey, pp **Elem, rank *int, t, h, found *bool) {
 }
 
 func (t *Tree) SearchIns (key Comparer) (res *Elem, found bool, rank int) {
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
@@ -457,6 +462,9 @@ func (t *Tree) SearchIns (key Comparer) (res *Elem, found bool, rank int) {
 }
 
 func (t *Tree) Search  (key Comparer) (res *Elem, found bool, rank int) {
+	if t == nil {
+		panic("Nil Tree")
+	}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
@@ -496,10 +504,11 @@ func (t *Tree) Search  (key Comparer) (res *Elem, found bool, rank int) {
 }
 
 func (t *Tree) SearchNext (key Comparer) (res *Elem, found bool, rank int) {
-	var valNext *Elem
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
+	var valNext *Elem
 	if key == nil {
 		panic("Nil Key")
 	}
@@ -619,6 +628,7 @@ func delD (key Comparer, l bool, pp **Elem, t *bool) (h, found bool) {
 }
 
 func (t *Tree) Delete (key Comparer) bool {
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
@@ -640,6 +650,7 @@ func nOE (p *Elem, tag bool) int {
 }
 
 func (t *Tree) NumberOfElems () int {
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
@@ -679,6 +690,7 @@ func ins (pos int, key, q *Elem, l bool, pp **Elem, t *bool) (h bool) {
 }
 
 func (t *Tree) Insert (key interface{}, rank int) {
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
@@ -689,10 +701,12 @@ func (t *Tree) Insert (key interface{}, rank int) {
 }
 
 func (t *Tree) Prepend (key interface{}) {
+	if t == nil {panic("Nil Tree")}
 	t.Insert(key, 0)
 }
 
 func (t *Tree) Append (key interface{}) {
+	if t == nil {panic("Nil Tree")}
 	t.Insert(key, maxint)
 }
 
@@ -747,6 +761,7 @@ func delE (l bool, pp **Elem, t *bool, rank *int) (h bool) {
 }
 
 func (t *Tree) Erase (rank int) {
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
@@ -754,6 +769,7 @@ func (t *Tree) Erase (rank int) {
 }
 
 func (t *Tree) Find (rank int) (res *Elem, found bool) {
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
@@ -942,9 +958,11 @@ func eraseRight (p **Elem, t *bool) (j *Elem, h bool) {
 }
 
 func (t1 *Tree) Cat (t2 *Tree) {
+	if t1 == nil {panic("Nil Tree")}
 	if t1.root == nil {
 		panic("Invalid first Tree")
 	}
+	if t2 == nil {panic("Nil Tree")}
 	if t2.root == nil {
 		panic("Invalid second Tree")
 	}
@@ -1054,6 +1072,7 @@ func doSplit (t1 *Tree, after int, p *Elem, t bool, t2 *Tree) (e1, e2 *Elem, tag
 }
 
 func (t1 *Tree) Split (after int) (t2 *Tree) {
+	if t1 == nil {panic("Nil Tree")}
 	if t1.root == nil {panic("Invalid Tree")}
 	t2 = New()
 	if after < t1.NumberOfElems() {
@@ -1082,6 +1101,7 @@ func ahead (e *Elem, t bool, do DoFunc, p ...interface{}) {
 }
 
 func (t *Tree) WalkThrough (do DoFunc, p ...interface{}) {
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
@@ -1089,6 +1109,7 @@ func (t *Tree) WalkThrough (do DoFunc, p ...interface{}) {
 }
 
 func (t *Tree) Next (e *Elem) *Elem {
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
@@ -1109,6 +1130,7 @@ func (t *Tree) Next (e *Elem) *Elem {
 }
 
 func (t *Tree) Previous (e *Elem) *Elem {
+	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}

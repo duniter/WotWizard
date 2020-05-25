@@ -16,220 +16,447 @@ import (
 	
 	A	"util/avl"
 	B	"duniter/blockchain"
-	G	"duniter/gqlReceiver"
-	J	"util/json"
+	BA	"duniter/basic"
+	G	"util/graphQL"
+	GQ	"duniter/gqlReceiver"
 	M	"util/misc"
 	W	"duniter/wotWizard"
+		/*
+		"fmt"
+		*/
 
 )
 
-const (
-	
-	fileName = "WotWizardListFile"
-	permName = "WotWizardListPerm"
-	
-	fileA = iota
-	permA
+func wwFileStreamResolver (rootValue *G.OutputObjectValue, argumentValues *A.Tree) *G.EventStream { // *G.ValMapItem
+	return GQ.CreateStream("wwFile", rootValue, argumentValues)
+} //wwFileStreamResolver
 
-)
+func wwServerStreamResolver (rootValue *G.OutputObjectValue, argumentValues *A.Tree) *G.EventStream { // *G.ValMapItem
+	return GQ.CreateStream("wwResult", rootValue, argumentValues)
+} //wwServerStreamResolver
 
-type (
-	
-	action struct {
-		what int
-		output string
+func wwFileStopR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	GQ.Unsubscribe("wwFile")
+	return nil
+} //wwFileStopR
+
+func wwServerStopR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	GQ.Unsubscribe("wwResult")
+	return nil
+} //wwServerStopR
+
+func wwFileR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	var (v G.Value; full bool)
+	ok := G.GetValue(argumentValues, "full", &v)
+	M.Assert(ok, 100)
+	switch v := v.(type) {
+	case *G.BooleanValue:
+		full = v.Boolean
+	default:
+		M.Halt(101)
 	}
-
-)
-
-func listFile (f W.File, withTo bool, mk *J.Maker) {
-
-	var now int64
-	
-	listCertOrDoss := func (cd W.CertOrDoss) {
-		
-		listCertOrDossEnd := func (cd W.CertOrDoss) {
-			mk.PushInteger(cd.Date())
-			mk.BuildField("date")
-			mk.PushInteger(cd.Limit())
-			mk.BuildField("limit")
-		}
-		
-		// List c
-		listCertif := func (c *W.Certif) {
-			mk.StartObject()
-			mk.PushString(c.From)
-			mk.BuildField("from")
-			if withTo {
-				mk.PushString(c.To)
-				mk.BuildField("to")
-			}
-			mk.PushBoolean(c.Date() < now && now <= c.Limit())
-			mk.BuildField("ok")
-			listCertOrDossEnd(c)
-			mk.BuildObject()
-		}
-		
-		// List d
-		listDossier := func (d *W.Dossier) {
-			mk.StartObject()
-			mk.PushString(d.Id)
-			mk.BuildField("newcomer")
-			mk.PushInteger(int64(d.PrincCertif))
-			mk.BuildField("main_certifs")
-			mk.PushFloat(d.ProportionOfSentries)
-			mk.BuildField("proportion_of_sentries")
-			mk.PushBoolean(d.PrincCertif >= int(B.Pars().SigQty) && now <= d.Limit() && d.ProportionOfSentries >= B.Pars().Xpercent)
-			mk.BuildField("ok")
-			listCertOrDossEnd(d)
-			mk.PushInteger(d.MinDate)
-			mk.BuildField("minimum_date")
-			listFile(d.Certifs, false, mk)
-			mk.BuildField("certifs")
-			mk.BuildObject()
-		}
-		
-		// listCertOrDoss
-		switch cdd := cd.(type) {
-		case *W.Certif:
-			if withTo {
-				mk.StartObject()
-			}
-			listCertif(cdd)
-			if withTo {
-				mk.BuildField("certif")
-				mk.BuildObject()
-			}
-		case *W.Dossier:
-			mk.StartObject()
-			listDossier(cdd)
-			mk.BuildField("dossier")
-			mk.BuildObject()
-		}
+	q := 0;
+	if !full {
+		q = int(B.Pars().SigQty)
 	}
-	
-	// listFile
-	mk.StartArray()
-	if f != nil {
-		now = B.Now()
+	f, cNb, dNb := W.FillFile(q)
+	return GQ.Wrap(f, cNb, dNb)
+} //wwFileR
+
+func wwResultR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	_, cNb, dNb, permutations, occurDate, occurName, duration := W.BuildEntries()
+	return GQ.Wrap(permutations, occurDate, occurName, duration, dNb, cNb)
+} //wwResultR
+
+func resPermsNbR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch permutations := GQ.Unwrap(rootValue, 0).(type) {
+	case *A.Tree:
+		return G.MakeIntValue(permutations.NumberOfElems())
+	default:
+		M.Halt(permutations, 100)
+		return nil
+	}
+} //resPermsNbR
+
+func resPermsR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch permutations := GQ.Unwrap(rootValue, 0).(type) {
+	case *A.Tree:
+		l := G.NewListValue()
+		e := permutations.Next(nil)
+		for e != nil {
+			l.Append(GQ.Wrap(e.Val().(*W.Set)))
+			e = permutations.Next(e)
+		}
+		return l
+	default:
+		M.Halt(permutations, 100)
+		return nil
+	}
+} //resPermsR
+
+func resDurationR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch duration := GQ.Unwrap(rootValue, 3).(type) {
+	case int64:
+		return G.MakeInt64Value(duration)
+	default:
+		M.Halt(duration, 100)
+		return nil
+	}
+} //resDurationR
+
+func resDossiersNbR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch dNb := GQ.Unwrap(rootValue, 4).(type) {
+	case int:
+		return G.MakeIntValue(dNb)
+	default:
+		M.Halt(dNb, 100)
+		return nil
+	}
+} //resDossiersNbR
+
+func resCertifsNbR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch cNb := GQ.Unwrap(rootValue, 5).(type) {
+	case int:
+		return G.MakeIntValue(cNb)
+	default:
+		M.Halt(cNb, 100)
+		return nil
+	}
+} //resCertifsNbR
+
+func resByDatesR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch occurDate := GQ.Unwrap(rootValue, 1).(type) {
+	case *A.Tree:
+		l := G.NewListValue()
+		e := occurDate.Next(nil)
+		for e != nil {
+			l.Append(GQ.Wrap(e.Val().(*W.PropDate)))
+			e = occurDate.Next(e)
+		}
+		return l
+	default:
+		M.Halt(occurDate, 100)
+		return nil
+	}
+} //resByDatesR
+
+func resByNamesR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch occurName := GQ.Unwrap(rootValue, 2).(type) {
+	case *A.Tree:
+		var (v G.Value; hint string)
+		if G.GetValue(argumentValues, "with", &v) {
+			switch v := v.(type) {
+			case *G.StringValue:
+				hint = v.String.S
+			default:
+				M.Halt(v, 100)
+			}
+		} else {
+			M.Halt(101)
+		}
+		l := G.NewListValue()
+		hint = BA.ToDown(hint)
+		e, _, _ := occurName.SearchNext(&W.PropName{Id: hint})
+		for e != nil && BA.Prefix(hint, BA.ToDown(e.Val().(*W.PropName).Id)) {
+			l.Append(GQ.Wrap(e.Val().(*W.PropName)))
+			e = occurName.Next(e)
+		}
+		return l
+	default:
+		M.Halt(occurName, 100)
+		return nil
+	}
+} //resByNamesR
+
+func wPermProbaR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch set := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Set:
+		return G.MakeFloat64Value(set.Proba)
+	default:
+		M.Halt(set, 100)
+		return nil
+	}
+} //wPermProbaR
+
+func wPermPermR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch set := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Set:
+		perm := set.T
+		l := G.NewListValue()
+		e := perm.Next(nil)
+		for e != nil {
+			l.Append(GQ.Wrap(e.Val().(*W.PropDate)))
+			e = perm.Next(e)
+		}
+		return l
+	default:
+		M.Halt(set, 100)
+		return nil
+	}
+} //wPermPermR
+
+func permEIdR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch permE := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.PropDate:
+		return GQ.Wrap(permE.Hash)
+	default:
+		M.Halt(permE, 100)
+		return nil
+	}
+} //permEIdR
+
+func permEDateR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch permE := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.PropDate:
+		return G.MakeInt64Value(permE.Date)
+	default:
+		M.Halt(permE, 100)
+		return nil
+	}
+} //permEDateR
+
+func permEAfterR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch permE := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.PropDate:
+		return G.MakeBooleanValue(permE.After)
+	default:
+		M.Halt(permE, 100)
+		return nil
+	}
+} //permEAfterR
+
+func forecastIdR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch forecast := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.PropDate:
+		return GQ.Wrap(forecast.Hash)
+	case *W.PropName:
+		return GQ.Wrap(forecast.Hash)
+	default:
+		M.Halt(forecast, 100)
+		return nil
+	}
+} //forecastIdR
+
+func forecastDateR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch forecast := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.PropDate:
+		return G.MakeInt64Value(forecast.Date)
+	case *W.PropName:
+		return G.MakeInt64Value(forecast.Date)
+	default:
+		M.Halt(forecast, 100)
+		return nil
+	}
+} //forecastDateR
+
+func forecastAfterR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch forecast := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.PropDate:
+		return G.MakeBooleanValue(forecast.After)
+	case *W.PropName:
+		return G.MakeBooleanValue(forecast.After)
+	default:
+		M.Halt(forecast, 100)
+		return nil
+	}
+} //forecastAfterR
+
+func forecastProbaR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch forecast := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.PropDate:
+		return G.MakeFloat64Value(forecast.Proba)
+	case *W.PropName:
+		return G.MakeFloat64Value(forecast.Proba)
+	default:
+		M.Halt(forecast, 100)
+		return nil
+	}
+} //forecastProbaR
+
+func fileCDR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch f := GQ.Unwrap(rootValue, 0).(type) {
+	case W.File:
+		l := G.NewListValue()
 		for _, cd := range f {
-			listCertOrDoss(cd)
+			l.Append(GQ.Wrap(cd))
 		}
+		return l
+	default:
+		M.Halt(f, 100)
+		return nil
 	}
-	mk.BuildArray()
-}
+} //fileCDR
 
-// List f with fo, starting at the element of rank i0; if withNow, the output begins with the listing of the current date
-func doListFile (f W.File) J.Json {
-	mk := J.NewMaker()
-	mk.StartObject()
-	listFile(f, true, mk)
-	mk.BuildField("file")
-	mk.PushInteger(int64(B.LastBlock()))
-	mk.BuildField("block")
-	mk.PushInteger(B.Now())
-	mk.BuildField("now")
-	mk.BuildObject()
-	return mk.GetJson()
-}
+func fileCNbR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch cNb := GQ.Unwrap(rootValue, 1).(type) {
+	case int:
+		return G.MakeIntValue(cNb)
+	default:
+		M.Halt(cNb, 100)
+		return nil
+	}
+} //fileCNbR
 
-// Print the current W.File
-func doShowFile () J.Json {
-	f, _, _ := W.FillFile(0)
-	return doListFile(f)
-}
+func fileDNbR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch dNb := GQ.Unwrap(rootValue, 2).(type) {
+	case int:
+		return G.MakeIntValue(dNb)
+	default:
+		M.Halt(dNb, 100)
+		return nil
+	}
+} //fileDNbR
 
-// List permutations returned by CalcPermutations
-func listPermutations (f W.File) J.Json {
+func mCertCertR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Certif:
+		return rootValue
+	default:
+		M.Halt(100)
+		return nil
+	}
+} //mCertCertR
 
-	byDate := func (tId *A.Tree) *A.Tree {
-		tD :=A.New()
-		e := tId.Next(nil)
-		for e != nil {
-			p := e.Val().(*W.Propagation)
-			_, b, _ := tD.SearchIns(&W.PropDate{Id: p.Id, Date: p.Date, After: p.After}); M.Assert(!b, 101)
-			e = tId.Next(e)
+func certCertR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch c := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Certif:
+		_, _, from, _, _, _, ok := B.IdUidComplete(*c.From); M.Assert(ok, 101)
+		return GQ.Wrap(from, *c.ToH, true)
+	default:
+		M.Halt(c, 100)
+		return nil
+	}
+} //certCertR
+
+func certDateR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch c := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Certif:
+		return G.MakeInt64Value(c.Date())
+	default:
+		M.Halt(c, 100)
+		return nil
+	}
+} //certDateR
+
+func mDossierDossierR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Dossier:
+		return rootValue
+	default:
+		M.Halt(100)
+		return nil
+	}
+} //mDossierDossierR
+
+func dossierNewcomerR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch d := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Dossier:
+		return GQ.Wrap(*d.Hash)
+	default:
+		M.Halt(d, 100)
+		return nil
+	}
+} //dossierNewcomerR
+
+func dossierMainCR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch d := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Dossier:
+		return G.MakeIntValue(d.PrincCertif)
+	default:
+		M.Halt(d, 100)
+		return nil
+	}
+} //dossierMainCR
+
+func dossierCertsR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch d := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Dossier:
+		l := G.NewListValue()
+		for _, cd := range d.Certifs {
+			l.Append(GQ.Wrap(cd.(*W.Certif)))
 		}
-		return tD
+		return l
+	default:
+		M.Halt(d, 100)
+		return nil
 	}
+} //dossierCertsR
 
-	//listPermutations
-	mk := J.NewMaker()
-	mk.StartObject()
-	mk.StartArray()
-	if sets, ok := W.CalcPermutations(f); ok {
-		e := sets.Next(nil)
-		for e != nil {
-			mk.StartObject()
-			s := e.Val().(*W.Set)
-			mk.PushFloat(s.Proba)
-			mk.BuildField("proba")
-			tD := byDate(s.T)
-			mk.StartArray()
-			ee := tD.Next(nil)
-			for ee != nil {
-				mk.StartObject()
-				p := ee.Val().(*W.PropDate)
-				mk.PushString(p.Id)
-				mk.BuildField("id")
-				mk.PushInteger(p.Date)
-				mk.BuildField("date")
-				mk.PushBoolean(p.After)
-				mk.BuildField("after")
-				mk.BuildObject()
-				ee = tD.Next(ee)
-			}
-			mk.BuildArray()
-			mk.BuildField("permutation")
-			mk.BuildObject()
-			e = sets.Next(e)
-		}
+func dossierMinDateR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch d := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Dossier:
+		return G.MakeInt64Value(d.MinDate)
+	default:
+		M.Halt(d, 100)
+		return nil
 	}
-	mk.BuildArray()
-	mk.BuildField("permutations")
-	mk.PushInteger(int64(B.LastBlock()))
-	mk.BuildField("block")
-	mk.PushInteger(B.Now())
-	mk.BuildField("now")
-	mk.BuildObject()
-	return mk.GetJson()
-}
+} //dossierMinDateR
 
-// Print the set of current possible permutations of entries
-func doPermutations () J.Json {
-	f, _, _ := W.FillFile(int(B.Pars().SigQty))
-	return listPermutations(f)
-}
-
-func (a *action) Name () string {
-	var s string
-	switch a.what {
-	case fileA:
-		s = fileName
-	case permA:
-		s = permName
+func dossierDateR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch d := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Dossier:
+		return G.MakeInt64Value(d.Date())
+	default:
+		M.Halt(d, 100)
+		return nil
 	}
-	return s
-}
+} //dossierDateR
 
-func (a *action) Activate () {
-	switch a.what {
-	case fileA:
-		G.Json(doShowFile(), a.output)
-	case permA:
-		G.Json(doPermutations(), a.output)
+func dossierLimitR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch d := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Dossier:
+		return G.MakeInt64Value(d.Limit())
+	default:
+		M.Halt(d, 100)
+		return nil
 	}
-}
+} //dossierLimitR
 
-func file (output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: fileA, output: output}
-}
+func fixFieldResolvers (ts G.TypeSystem) {
+	ts.FixFieldResolver("Query", "wwFile", wwFileR)
+	ts.FixFieldResolver("Query", "wwResult", wwResultR)
+	ts.FixFieldResolver("File", "certifs_dossiers", fileCDR)
+	ts.FixFieldResolver("File", "certifs_nb", fileCNbR)
+	ts.FixFieldResolver("File", "dossiers_nb", fileDNbR)
+	ts.FixFieldResolver("MarkedDatedCertification", "datedCertification", mCertCertR)
+	ts.FixFieldResolver("DatedCertification", "certification", certCertR)
+	ts.FixFieldResolver("DatedCertification", "date", certDateR)
+	ts.FixFieldResolver("MarkedDossier", "dossier", mDossierDossierR)
+	ts.FixFieldResolver("Dossier", "newcomer", dossierNewcomerR)
+	ts.FixFieldResolver("Dossier", "main_certifs", dossierMainCR)
+	ts.FixFieldResolver("Dossier", "certifications", dossierCertsR)
+	ts.FixFieldResolver("Dossier", "minDate", dossierMinDateR)
+	ts.FixFieldResolver("Dossier", "date", dossierDateR)
+	ts.FixFieldResolver("Dossier", "limit", dossierLimitR)
+	ts.FixFieldResolver("WWResult", "computation_duration", resDurationR)
+	ts.FixFieldResolver("WWResult", "permutations_nb", resPermsNbR)
+	ts.FixFieldResolver("WWResult", "dossiers_nb", resDossiersNbR)
+	ts.FixFieldResolver("WWResult", "certifs_nb", resCertifsNbR)
+	ts.FixFieldResolver("WWResult", "permutations", resPermsR)
+	ts.FixFieldResolver("WWResult", "forecastsByDates", resByDatesR)
+	ts.FixFieldResolver("WWResult", "forecastsByNames", resByNamesR)
+	ts.FixFieldResolver("WeightedPermutation", "proba", wPermProbaR)
+	ts.FixFieldResolver("WeightedPermutation", "permutation", wPermPermR)
+	ts.FixFieldResolver("PermutationElem", "id", permEIdR)
+	ts.FixFieldResolver("PermutationElem", "date", permEDateR)
+	ts.FixFieldResolver("PermutationElem", "after", permEAfterR)
+	ts.FixFieldResolver("Forecast", "id", forecastIdR)
+	ts.FixFieldResolver("Forecast", "date", forecastDateR)
+	ts.FixFieldResolver("Forecast", "after", forecastAfterR)
+	ts.FixFieldResolver("Forecast", "proba", forecastProbaR)
+	ts.FixFieldResolver("Subscription", "wwFile", wwFileR)
+	ts.FixFieldResolver("Subscription", "wwResult", wwResultR)
+	ts.FixFieldResolver("Mutation", "wwFileStop", wwFileStopR)
+	ts.FixFieldResolver("Mutation", "wwServerStop", wwServerStopR)
+} //fixFieldResolvers
 
-func permutations (output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: permA, output: output}
+func fixStreamResolvers (ts G.TypeSystem) {
+	ts.FixStreamResolver("wwFile", wwFileStreamResolver)
+	ts.FixStreamResolver("wwResult", wwServerStreamResolver)
 }
 
 func init () {
-	G.AddAction(fileName, file, G.Arguments{})
-	G.AddAction(permName, permutations, G.Arguments{})
+	ts := GQ.TS()
+	fixFieldResolvers(ts)
+	fixStreamResolvers(ts)
 }

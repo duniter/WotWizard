@@ -16,80 +16,50 @@ import (
 	
 	A	"util/avl"
 	B	"duniter/blockchain"
-	BT	"util/gbTree"
-	G	"duniter/gqlReceiver"
-	J	"util/json"
+	G	"util/graphQL"
+	GQ	"duniter/gqlReceiver"
 	M	"util/misc"
 	O	"util/operations"
 
 )
-	
+
 const (
 	
-	countName = "MembersCount"
-	countNameAll = "MembersCountAll"
-	countFName = "MembersCountFlux"
-	countFNameAll = "MembersCountFluxAll"
-	countFPMName = "MembersCountFluxPM"
-	countFPMNameAll = "MembersCountFluxPMAll"
-	firstEName = "MembersFirstEntry"
-	firstENameAll = "MembersFirstEntryAll"
-	fEFluxName = "MembersFEFlux"
-	fEFluxNameAll = "MembersFEFluxAll"
-	fEFluxPMName = "MembersFEFluxPM"
-	fEFluxPMNameAll = "MembersFEFluxPMAll"
-	lossName = "MembersLoss"
-	lossNameAll = "MembersLossAll"
-	lossFluxName = "MembersLossFlux"
-	lossFluxNameAll = "MembersLossFluxAll"
-	lossFluxPMName = "MembersLossFluxPM"
-	lossFluxPMNameAll = "MembersLossFluxPMAll"
-	
-	fromName = "from"
-	toName = "to"
-	timeUnitName = "timeUnit"
-	
-	countA = iota
-	countFA
-	countFPMA
-	firstEntriesA
-	fEFluxA
-	fEFluxPerMemberA
-	lossA
-	lossFluxA
-	lossFluxPMA
+	defaultPointsNb = 80
+	defaultdegree = 2
 
 )
 
 type (
 	
-	action struct {
-		what int
-		from,
-		to,
-		timeUnit int64
-		output string
-	}
-	
-	uidList struct {
-		next *uidList
+	idList struct {
+		next *idList
 		in	bool
-		uid string
+		id B.Hash
 	}
 	
 	event struct {
-		date,
-		mTime int64
-		uidL *uidList
+		date int64
+		block int32
+		idL *idList
 		number int
 	}
 	
 	events []event
 	
-	eventsR []struct {
-		date int64
-		number float64
+	eventR struct {
+		block int32
+		value float64
 	}
+	
+	eventsR []eventR
+
+)
+
+var (
+	
+	pointsNb = defaultPointsNb
+	degree = defaultdegree
 
 )
 
@@ -104,85 +74,39 @@ func (ev1 *event) Compare (ev2 A.Comparer) A.Comp {
 	return A.Eq
 }
 
-func listBlock (mk *J.Maker) {
-	mk.PushInteger(int64(B.LastBlock()))
-	mk.BuildField("block")
-	mk.PushInteger(B.Now())
-	mk.BuildField("now")
-}
-
-func listEvents (evts events, mk *J.Maker) {
-	mk.StartArray()
-	for _, ev := range evts {
-		mk.StartObject()
-		mk.PushInteger(ev.date)
-		mk.BuildField("date")
-		mk.PushInteger(ev.mTime)
-		mk.BuildField("mTime")
-		mk.StartArray()
-		uidL := ev.uidL
-		for uidL != nil {
-			mk.StartObject()
-			mk.PushBoolean(uidL.in)
-			mk.BuildField("in")
-			mk.PushString(uidL.uid)
-			mk.BuildField("uid")
-			mk.BuildObject()
-			uidL = uidL.next
-		} 
-		mk.BuildArray()
-		mk.BuildField("uidList")
-		mk.PushInteger(int64(ev.number))
-		mk.BuildField("number")
-		mk.BuildObject()
-	}
-	mk.BuildArray()
-}
-
-func listEventsR (evts eventsR, mk *J.Maker) {
-	mk.StartArray()
-	for _, ev := range evts {
-		mk.StartObject()
-		mk.PushInteger(ev.date)
-		mk.BuildField("date")
-		mk.PushFloat(ev.number)
-		mk.BuildField("number")
-		mk.BuildObject()
-	}
-	mk.BuildArray()
+func countLimits () (min, max int32) {
+	return 0, B.LastBlock()
 }
 
 // Number of members, event by event
-func doCount (from, to int64, json bool) (counts events, j J.Json) {
+func doCount (from, to int64) (counts events) {
 	M.Assert(from <= to, 20)
-	var ir *BT.IndexReader
+	var pst *B.Position
 	t := A.New()
 	var jb, lb int32
-	pk, ok := B.JLNextPubkey(true, &ir)
+	pk, ok := B.JLNextPubkey(true, &pst)
 	for ok {
-		uid, b := B.IdPub(pk); M.Assert(b, 100)
+		_, _, hash, _, _, _, b := B.IdPubComplete(pk); M.Assert(b, 100)
 		list, ok2 := B.JLPub(pk)
 		if ok2 {
 			jb, lb, ok2 = B.JLPubLNext(&list); M.Assert(ok2, 100)
 		}
 		for ok2 {
-			mTime, time, b := B.TimeOf(jb); M.Assert(b, 101)
-			e, _, _ := t.SearchIns(&event{date: time, mTime: mTime, uidL: nil, number: 0})
+			_, time, b := B.TimeOf(jb); M.Assert(b, 101)
+			e, _, _ := t.SearchIns(&event{date: time, block: jb, idL: nil, number: 0})
 			ev := e.Val().(*event)
-			uidL := &uidList{next: ev.uidL, in: true, uid: uid}
-			ev.uidL = uidL
+			ev.idL = &idList{next: ev.idL, in: true, id: hash}
 			ev.number++
 			if lb != B.HasNotLeaved {
-				mTime, time, b = B.TimeOf(lb); M.Assert(b, 102)
-				e, _, _ = t.SearchIns(&event{date: time, mTime: mTime, uidL: nil, number: 0})
+				_, time, b = B.TimeOf(lb); M.Assert(b, 102)
+				e, _, _ = t.SearchIns(&event{date: time, block: lb, idL: nil, number: 0})
 				ev := e.Val().(*event)
-				uidL := &uidList{next: ev.uidL, in: false, uid: uid}
-				ev.uidL = uidL
+				ev.idL = &idList{next: ev.idL, in: false, id: hash}
 				ev.number--
 			}
 			jb, lb, ok2 = B.JLPubLNext(&list)
 		}
-		pk, ok = B.JLNextPubkey(false, &ir)
+		pk, ok = B.JLNextPubkey(false, &pst)
 	}
 	counts = make(events, t.NumberOfElems())
 	n := 0; i := -1
@@ -201,29 +125,12 @@ func doCount (from, to int64, json bool) (counts events, j J.Json) {
 		counts[k].number += counts[k - 1].number
 	}
 	counts = counts[i:n]
-	if !json {
-		return
-	}
-	mk := J.NewMaker()
-	mk.StartObject()
-	listEvents(counts, mk)
-	mk.BuildField("events")
-	listBlock(mk)
-	mk.BuildObject()
-	j = mk.GetJson()
 	return
 }
 
 // Flux of members, event by event
-func doCountFlux (from, to, timeUnit int64, json bool) (countsR eventsR, j J.Json) {
-
-const (
-	
-	pointsNb = 80
-	degree = 2
-
-)
-	counts, _ := doCount(from, to, false)
+func doCountFlux (from, to, timeUnit int64) (countsR eventsR, counts events) {
+	counts = doCount(from, to)
 	dots := make(O.Dots, len(counts))
 	for i := 0; i < len(counts); i++ {
 		dots[i].SetXY(float64(counts[i].date) / float64(timeUnit), float64(counts[i].number))
@@ -231,55 +138,30 @@ const (
 	dotsD := O.Derive(dots, pointsNb, degree)
 	countsR = make(eventsR, len(counts))
 	for i := 0; i < len(counts); i++ {
-		countsR[i].date = counts[i].date
-		countsR[i].number = dotsD[i].Y()
+		countsR[i].block = counts[i].block
+		countsR[i].value = dotsD[i].Y()
 	}
-	if !json {
-		return
-	}
-	mk := J.NewMaker()
-	mk.StartObject()
-	listEventsR(countsR, mk)
-	mk.BuildField("eventsR")
-	mk.PushInteger(timeUnit)
-	mk.BuildField("time_unit")
-	listBlock(mk)
-	mk.BuildObject()
-	j = mk.GetJson()
 	return
 }
 
 	// Flux of first entries per member, event by event
-func doCountFluxPerMember (from, to, timeUnit int64, json bool) (countsR eventsR, j J.Json) {
-	countsR, _ = doCountFlux(from, to, timeUnit, false)
-	counts, _ := doCount(from, to, false)
+func doCountFluxPerMember (from, to, timeUnit int64) (countsR eventsR) {
+	countsR, counts := doCountFlux(from, to, timeUnit)
 	for c := 0; c < len(countsR); c++ {
-		countsR[c].number /= float64(counts[c].number)
+		countsR[c].value /= float64(counts[c].number)
 	}
-	if !json {
-		return
-	}
-	mk := J.NewMaker()
-	mk.StartObject()
-	listEventsR(countsR, mk)
-	mk.BuildField("eventsR")
-	mk.PushInteger(timeUnit)
-	mk.BuildField("time_unit")
-	listBlock(mk)
-	mk.BuildObject()
-	j = mk.GetJson()
 	return
 }
 
 	// Number of first entries, event by event
-func doFirstEntries (from, to int64, json bool) (fE events, j J.Json) {
+func doFirstEntries (from, to int64) (fE events) {
 	M.Assert(from <= to, 20)
-	var ir *BT.IndexReader
+	var pst *B.Position
 	t := A.New()
 	var jb, jb0 int32
-	pk, ok := B.JLNextPubkey(true, &ir)
+	pk, ok := B.JLNextPubkey(true, &pst)
 	for ok {
-		uid, b := B.IdPub(pk); M.Assert(b, 100)
+		_, _, hash, _, _, _, b := B.IdPubComplete(pk); M.Assert(b, 100)
 		list, ok2 := B.JLPub(pk)
 		if ok2 {
 			jb, _, ok2 = B.JLPubLNext(&list); M.Assert(ok2, 100)
@@ -287,14 +169,13 @@ func doFirstEntries (from, to int64, json bool) (fE events, j J.Json) {
 				jb0 = jb
 				jb, _, ok2 = B.JLPubLNext(&list)
 			}
-			mTime, time, b := B.TimeOf(jb0); M.Assert(b, 101)
-			e, _, _ := t.SearchIns(&event{date: time, mTime: mTime, uidL: nil, number: 0})
+			_, time, b := B.TimeOf(jb0); M.Assert(b, 101)
+			e, _, _ := t.SearchIns(&event{date: time, block: jb0, idL: nil, number: 0})
 			ev := e.Val().(*event)
-			uidL := &uidList{next: ev.uidL, in: true, uid: uid}
-			ev.uidL = uidL
+			ev.idL = &idList{next: ev.idL, in: true, id: hash}
 			ev.number++
 		}
-		pk, ok = B.JLNextPubkey(false, &ir)
+		pk, ok = B.JLNextPubkey(false, &pst)
 	}
 	fE = make(events, t.NumberOfElems())
 	n := 0; i := -1
@@ -313,30 +194,13 @@ func doFirstEntries (from, to int64, json bool) (fE events, j J.Json) {
 		fE[k].number += fE[k - 1].number
 	}
 	fE = fE[i:n]
-	if !json {
-		return;
-	}
-	mk := J.NewMaker()
-	mk.StartObject()
-	listEvents(fE, mk)
-	mk.BuildField("events")
-	listBlock(mk)
-	mk.BuildObject()
-	j = mk.GetJson()
 	return
 }
 
 // Flux of first entries, event by event
-func doFEFlux (from, to, timeUnit int64, json bool) (fER eventsR,  j J.Json) {
+func doFEFlux (from, to, timeUnit int64) (fER eventsR) {
 	
-	const (
-		
-		pointsNb = 80
-		degree = 2
-	
-	)
-	
-	fE, _ := doFirstEntries(from, to, false)
+	fE := doFirstEntries(from, to)
 	dots := make(O.Dots, len(fE))
 	for i := 0; i < len(fE); i++ {
 		dots[i].SetXY(float64(fE[i].date) / float64(timeUnit), float64(fE[i].number))
@@ -344,84 +208,58 @@ func doFEFlux (from, to, timeUnit int64, json bool) (fER eventsR,  j J.Json) {
 	dotsD := O.Derive(dots, pointsNb, degree)
 	fER = make(eventsR, len(fE))
 	for i := 0; i < len(fE); i++ {
-		fER[i].date = fE[i].date
-		fER[i].number = dotsD[i].Y()
+		fER[i].block = fE[i].block
+		fER[i].value = dotsD[i].Y()
 	}
-	if !json {
-		return;
-	}
-	mk := J.NewMaker()
-	mk.StartObject()
-	listEventsR(fER, mk)
-	mk.BuildField("eventsR")
-	mk.PushInteger(timeUnit)
-	mk.BuildField("time_unit")
-	listBlock(mk)
-	mk.BuildObject()
-	j = mk.GetJson()
 	return
 }
 
 // Flux of first entries per member, event by event
-func doFEFluxPerMember (from, to, timeUnit int64, json bool) (fER eventsR, j J.Json) {
-	fER, _ = doFEFlux(from, to, timeUnit, false)
-	counts, _ := doCount(from, to, false)
+func doFEFluxPerMember (from, to, timeUnit int64) (fER eventsR) {
+	fER = doFEFlux(from, to, timeUnit)
+	counts := doCount(from, to)
 	c := 0;
 	for f := 0; f < len(fER); f++ {
-		for c < len(counts) - 1 && counts[c + 1].date <= fER[f].date {
+		for c < len(counts) - 1 && counts[c + 1].block <= fER[f].block {
 			c++
 		}
-		fER[f].number /= float64(counts[c].number)
+		fER[f].value /= float64(counts[c].number)
 	}
-	if !json {
-		return
-	}
-	mk := J.NewMaker()
-	mk.StartObject()
-	listEventsR(fER, mk)
-	mk.BuildField("eventsR")
-	mk.PushInteger(timeUnit)
-	mk.BuildField("time_unit")
-	listBlock(mk)
-	mk.BuildObject()
-	j = mk.GetJson()
 	return
 }
 
 // Loss of members, event by event
-func doLoss (from, to int64, json bool) (losses events, j J.Json) {
+func doLoss (from, to int64) (losses events) {
 	M.Assert(from <= to, 20)
-	var ir *BT.IndexReader
+	var pst *B.Position
 	t := A.New()
 	var jb, lb int32
-	pk, ok := B.JLNextPubkey(true, &ir)
+	pk, ok := B.JLNextPubkey(true, &pst)
 	for ok {
-		uid, b := B.IdPub(pk); M.Assert(b, 100)
+		_, _, hash, _, _, _, b := B.IdPubComplete(pk); M.Assert(b, 100)
 		var ev0 *event
 		list, ok2 := B.JLPub(pk)
 		if ok2 {
 			jb, lb, ok2 = B.JLPubLNext(&list); M.Assert(ok2, 100)
 		}
 		for ok2 {
-			mTime, time, b := B.TimeOf(jb); M.Assert(b, 101)
-			e, _, _ := t.SearchIns(&event{date: time, mTime: mTime, uidL: nil, number: 0})
+			_, time, b := B.TimeOf(jb); M.Assert(b, 101)
+			e, _, _ := t.SearchIns(&event{date: time, block: jb, idL: nil, number: 0})
 			ev0 = e.Val().(*event)
-			uidL := &uidList{next: ev0.uidL, in: true, uid: uid}
-			ev0.uidL = uidL
+			ev0.idL = &idList{next: ev0.idL, in: true, id: hash}
 			ev0.number--
 			if lb != B.HasNotLeaved {
 				_, time, b := B.TimeOf(lb); M.Assert(b, 102)
-				e, _, _ := t.SearchIns(&event{date: time, number: 0})
+				e, _, _ := t.SearchIns(&event{date: time, block: lb, number: 0})
 				ev := e.Val().(*event)
-				uidL := &uidList{next: ev.uidL, in: false, uid: uid}
-				ev.uidL = uidL
+				ev.idL = &idList{next: ev.idL, in: false, id: hash}
 				ev.number++
 			}
 			jb, lb, ok2 = B.JLPubLNext(&list)
 		}
-		ev0.uidL = ev0.uidL.next
+		ev0.idL = ev0.idL.next
 		ev0.number++
-		pk, ok = B.JLNextPubkey(false, &ir)
+		pk, ok = B.JLNextPubkey(false, &pst)
 	}
 	losses = make(events, t.NumberOfElems())
 	n := 0; i := -1
@@ -439,30 +277,14 @@ func doLoss (from, to int64, json bool) (losses events, j J.Json) {
 	for k := 1; k < n; k++ {
 		losses[k].number += losses[k - 1].number
 	}
-	if !json {
-		return
-	}
-	mk := J.NewMaker()
-	mk.StartObject()
-	listEvents(losses, mk)
-	mk.BuildField("events")
-	listBlock(mk)
-	mk.BuildObject()
-	j = mk.GetJson()
+	losses = losses[i:n]
 	return
 }
 
 // Flux of losses, event by event
-func doLossFlux (from, to, timeUnit int64, json bool) (lossesR eventsR, j J.Json) {
+func doLossFlux (from, to, timeUnit int64) (lossesR eventsR) {
 	
-	const (
-		
-		pointsNb = 80
-		degree = 2
-	
-	)
-	
-	losses, _ := doLoss(from, to, false)
+	losses := doLoss(from, to)
 	dots := make(O.Dots, len(losses))
 	for i := 0; i < len(losses); i++ {
 		dots[i].SetXY(float64(losses[i].date) / float64(timeUnit), float64(losses[i].number))
@@ -470,193 +292,331 @@ func doLossFlux (from, to, timeUnit int64, json bool) (lossesR eventsR, j J.Json
 	dotsD := O.Derive(dots, pointsNb, degree)
 	lossesR = make(eventsR, len(losses))
 	for i := 0; i < len(losses); i++ {
-		lossesR[i].date = losses[i].date
-		lossesR[i].number = dotsD[i].Y()
+		lossesR[i].block = losses[i].block
+		lossesR[i].value = dotsD[i].Y()
 	}
-	if !json {
-		return
-	}
-	mk := J.NewMaker()
-	mk.StartObject()
-	listEventsR(lossesR, mk)
-	mk.BuildField("eventsR")
-	mk.PushInteger(timeUnit)
-	mk.BuildField("time_unit")
-	listBlock(mk)
-	mk.BuildObject()
-	j = mk.GetJson()
 	return
 }
 
 // Flux of losses per member, event by event
-func doLossFluxPerMember (from, to, timeUnit int64, json bool) (lossesR eventsR, j J.Json) {
-	lossesR, _ = doLossFlux(from, to, timeUnit, false)
-	counts, _ := doCount(from, to, false)
+func doLossFluxPerMember (from, to, timeUnit int64) (lossesR eventsR) {
+	lossesR = doLossFlux(from, to, timeUnit)
+	counts := doCount(from, to)
 	M.Assert(counts != nil && len(counts) == len(lossesR), 100)
 	for l := 0; l < len(lossesR); l++ {
-		lossesR[l].number /= float64(counts[l].number)
+		lossesR[l].value /= float64(counts[l].number)
 	}
-	if !json {
-		return
-	}
-	mk := J.NewMaker()
-	mk.StartObject()
-	listEventsR(lossesR, mk)
-	mk.BuildField("eventsR")
-	mk.PushInteger(timeUnit)
-	mk.BuildField("time_unit")
-	listBlock(mk)
-	mk.BuildObject()
-	j = mk.GetJson()
 	return
 }
 
-func (a *action) Name () string {
-	var s string
-	switch a.what {
-	case countA:
-		s = countName
-	case countFA:
-		s = countFName
-	case countFPMA:
-		s = countFPMName
-	case firstEntriesA:
-		s = firstEName
-	case fEFluxA:
-		s = fEFluxName
-	case fEFluxPerMemberA:
-		s = fEFluxPMName
-	case lossA:
-		s = lossName
-	case lossFluxA:
-		s = lossFluxName
-	case lossFluxPMA:
-		s = lossFluxPMName
+func getStartEnd (as *A.Tree) (start, end int64) {
+	var v G.Value
+	if G.GetValue(as, "start", &v) {
+		switch v := v.(type) {
+		case *G.IntValue:
+			start = v.Int
+		case *G.NullValue:
+			start = 0
+		default:
+			M.Halt(v, 100)
+		}
+	} else {
+		start = 0
 	}
-	return s
-}
-
-func (a *action) Activate () {
-	switch a.what {
-	case countA:
-		_, j := doCount(a.from, a.to, true)
-		G.Json(j, a.output)
-	case countFA:
-		_, j := doCountFlux(a.from, a.to, a.timeUnit, true)
-		G.Json(j, a.output)
-	case countFPMA:
-		_, j := doCountFluxPerMember(a.from, a.to, a.timeUnit, true)
-		G.Json(j, a.output)
-	case firstEntriesA:
-		_, j := doFirstEntries(a.from, a.to, true)
-		G.Json(j, a.output)
-	case fEFluxA:
-		_, j := doFEFlux(a.from, a.to, a.timeUnit, true)
-		G.Json(j, a.output)
-	case fEFluxPerMemberA:
-		_, j := doFEFluxPerMember(a.from, a.to, a.timeUnit, true)
-		G.Json(j, a.output)
-	case lossA:
-		_, j := doLoss(a.from, a.to, true)
-		G.Json(j, a.output)
-	case lossFluxA:
-		_, j := doLossFlux(a.from, a.to, a.timeUnit, true)
-		G.Json(j, a.output)
-	case lossFluxPMA:
-		_, j := doLossFluxPerMember(a.from, a.to, a.timeUnit, true)
-		G.Json(j, a.output)
+	if G.GetValue(as, "end", &v) {
+		switch v := v.(type) {
+		case *G.IntValue:
+			end = v.Int
+		case *G.NullValue:
+			end = M.MaxInt64
+		default:
+			M.Halt(v, 100)
+		}
+	} else {
+		end = M.MaxInt64
 	}
-}
+	return
+} //getStartEnd
 
-func count (from, to int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: countA, from: from, to: to, output: output}
-}
+func getTimeUnit (as *A.Tree) (timeUnit int64) {
+	const timeUnitDefault = 2629800 // s = 1 month
+	var v G.Value
+	if G.GetValue(as, "timeUnit", &v) {
+		switch v := v.(type) {
+		case *G.IntValue:
+			timeUnit = v.Int
+		case *G.NullValue:
+			timeUnit = timeUnitDefault
+		default:
+			M.Halt(v, 100)
+			return
+		}
+	} else {
+		timeUnit = timeUnitDefault
+	}
+	return
+} //getTimeUnit
 
-func countAll (output string, newAction chan<- B.Actioner, fields ...string) {
-	count(M.MinInt64, M.MaxInt64, output, newAction, fields...)
-}
+func countMinR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	min, _ := countLimits()
+	return GQ.Wrap(min)
+} //countMinR
 
-func countFlux (from, to, timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: countFA, from: from, to: to, timeUnit: timeUnit, output: output}
-}
+func countMaxR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	_, max := countLimits()
+	return GQ.Wrap(max)
+} //countMaxR
 
-func countFluxAll (timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	countFlux(M.MinInt64, M.MaxInt64, timeUnit, output, newAction, fields...)
-}
+func membersCountR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	l := G.NewListValue()
+	start, end := getStartEnd(argumentValues)
+	if start <= end {
+		for _, e := range doCount(start, end) {
+			l.Append(GQ.Wrap(e))
+		}
+	}
+	return l
+} //membersCountR
 
-func countFluxPerMember (from, to, timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: countFPMA, from: from, to: to, timeUnit: timeUnit, output: output}
-}
+func membersFluxR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	l := G.NewListValue()
+	start, end := getStartEnd(argumentValues)
+	timeUnit := getTimeUnit(argumentValues)
+	if start <= end && timeUnit > 0 {
+		countsR, _ := doCountFlux(start, end, timeUnit)
+		for _, f := range countsR {
+			l.Append(GQ.Wrap(f))
+		}
+	}
+	return l
+} //membersFluxR
 
-func countFluxPerMemberAll (timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	countFluxPerMember(M.MinInt64, M.MaxInt64, timeUnit, output, newAction, fields...)
-}
+func membersFluxPMR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	l := G.NewListValue()
+	start, end := getStartEnd(argumentValues)
+	timeUnit := getTimeUnit(argumentValues)
+	if start <= end && timeUnit > 0 {
+		for _, f := range doCountFluxPerMember(start, end, timeUnit) {
+			l.Append(GQ.Wrap(f))
+		}
+	}
+	return l
+} //membersFluxPMR
 
-func firstEntries (from, to int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: firstEntriesA, from: from, to: to, output: output}
-}
+func fECountR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	l := G.NewListValue()
+	start, end := getStartEnd(argumentValues)
+	if start <= end {
+		for _, e := range doFirstEntries(start, end) {
+			l.Append(GQ.Wrap(e))
+		}
+	}
+	return l
+} //fECountR
 
-func firstEntriesAll (output string, newAction chan<- B.Actioner, fields ...string) {
-	firstEntries(M.MinInt64, M.MaxInt64, output, newAction, fields...)
-}
+func fEFluxR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	l := G.NewListValue()
+	start, end := getStartEnd(argumentValues)
+	timeUnit := getTimeUnit(argumentValues)
+	if start <= end && timeUnit > 0 {
+		for _, f := range doFEFlux(start, end, timeUnit) {
+			l.Append(GQ.Wrap(f))
+		}
+	}
+	return l
+} //fEFluxR
 
-func fEFlux (from, to, timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: fEFluxA, from: from, to: to, timeUnit: timeUnit, output: output}
-}
+func fEFluxPMR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	l := G.NewListValue()
+	start, end := getStartEnd(argumentValues)
+	timeUnit := getTimeUnit(argumentValues)
+	if start <= end && timeUnit > 0 {
+		for _, f := range doFEFluxPerMember(start, end, timeUnit) {
+			l.Append(GQ.Wrap(f))
+		}
+	}
+	return l
+} //fEFluxPMR
 
-func fEFluxAll (timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	fEFlux(M.MinInt64, M.MaxInt64, timeUnit, output, newAction, fields...)
-}
+func lossCountR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	l := G.NewListValue()
+	start, end := getStartEnd(argumentValues)
+	if start <= end {
+		for _, e := range doLoss(start, end) {
+			l.Append(GQ.Wrap(e))
+		}
+	}
+	return l
+} //lossCountR
 
-func fEFluxPerMember (from, to, timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: fEFluxPerMemberA, from: from, to: to, timeUnit: timeUnit, output: output}
-}
+func lossFluxR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	l := G.NewListValue()
+	start, end := getStartEnd(argumentValues)
+	timeUnit := getTimeUnit(argumentValues)
+	if start <= end && timeUnit > 0 {
+		for _, f := range doLossFlux(start, end, timeUnit) {
+			l.Append(GQ.Wrap(f))
+		}
+	}
+	return l
+} //lossFluxR
 
-func fEFluxPerMemberAll (timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	fEFluxPerMember(M.MinInt64, M.MaxInt64, timeUnit, output, newAction, fields...)
-}
+func lossFluxPMR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	l := G.NewListValue()
+	start, end := getStartEnd(argumentValues)
+	timeUnit := getTimeUnit(argumentValues)
+	if start <= end && timeUnit > 0 {
+		for _, f := range doLossFluxPerMember(start, end, timeUnit) {
+			l.Append(GQ.Wrap(f))
+		}
+	}
+	return l
+} //lossFluxPMR
 
-func loss (from, to int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: lossA, from: from, to: to, output: output}
-}
+func eventIdListR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	l := G.NewListValue()
+	switch ev := GQ.Unwrap(rootValue, 0).(type) {
+	case event:
+		i := ev.idL
+		for i != nil {
+			l.Append(GQ.Wrap(i.in, i.id))
+			i = i.next
+		}
+	default:
+		M.Halt(ev, 100)
+		return nil
+	}
+	return l
+} //eventIdListR
 
-func lossAll (output string, newAction chan<- B.Actioner, fields ...string) {
-	loss(M.MinInt64, M.MaxInt64, output, newAction, fields...)
-}
+func eventBlockR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch ev := GQ.Unwrap(rootValue, 0).(type) {
+	case event:
+		return GQ.Wrap(ev.block)
+	default:
+		M.Halt(ev, 100)
+		return nil
+	}
+} //eventBlockR
 
-func lossFlux (from, to, timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: lossFluxA, from: from, to: to, timeUnit: timeUnit, output: output}
-}
+func eventNumberR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch ev := GQ.Unwrap(rootValue, 0).(type) {
+	case event:
+		return G.MakeIntValue(ev.number)
+	default:
+		M.Halt(ev, 100)
+		return nil
+	}
+} //eventNumberR
 
-func lossFluxAll (timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	lossFlux(M.MinInt64, M.MaxInt64, timeUnit, output, newAction, fields...)
-}
+func eventIdIdR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch id := GQ.Unwrap(rootValue, 1).(type) {
+	case B.Hash:
+		return GQ.Wrap(id)
+	default:
+		M.Halt(id, 100)
+		return nil
+	}
+} //eventIdIdR
 
-func lossFluxPerMember (from, to, timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: lossFluxPMA, from: from, to: to, timeUnit: timeUnit, output: output}
-}
+func eventIdInOutR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch in := GQ.Unwrap(rootValue, 0).(type) {
+	case bool:
+		return G.MakeBooleanValue(in)
+	default:
+		M.Halt(in, 100)
+		return nil
+	}
+} //eventIdInOutR
 
-func lossFluxPerMemberAll (timeUnit int64, output string, newAction chan<- B.Actioner, fields ...string) {
-	lossFluxPerMember(M.MinInt64, M.MaxInt64, timeUnit, output, newAction, fields...)
-}
+func fluxBlockR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch evR := GQ.Unwrap(rootValue, 0).(type) {
+	case eventR:
+		return GQ.Wrap(evR.block)
+	default:
+		M.Halt(evR, 100)
+		return nil
+	}
+} //fluxBlockR
+
+func fluxValueR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch evR := GQ.Unwrap(rootValue, 0).(type) {
+	case eventR:
+		return G.MakeFloat64Value(evR.value)
+	default:
+		M.Halt(evR, 100)
+		return nil
+	}
+} //fluxValueR
+
+func differParamsR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	old := GQ.Wrap(pointsNb, degree)
+	var v G.Value
+	if G.GetValue(argumentValues, "pointsNb", &v) {
+		switch v := v.(type) {
+		case *G.IntValue:
+			pointsNb = int(v.Int)
+		case *G.NullValue:
+		default:
+			M.Halt(v, 100)
+		}
+	}
+	if G.GetValue(argumentValues, "degree", &v) {
+		switch v := v.(type) {
+		case *G.IntValue:
+			degree = int(v.Int)
+		case *G.NullValue:
+		default:
+			M.Halt(v, 100)
+		}
+	}
+	return old
+} //differParamsR
+
+func differPointsNbR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch pN := GQ.Unwrap(rootValue, 0).(type) {
+	case int:
+		return G.MakeIntValue(pN)
+	default:
+		M.Halt(pN, 100)
+		return nil
+	}
+} //differPointsNbR
+
+func differDegreeR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch d := GQ.Unwrap(rootValue, 1).(type) {
+	case int:
+		return G.MakeIntValue(d)
+	default:
+		M.Halt(d, 100)
+		return nil
+	}
+} //differDegreeR
+
+func fixFieldResolvers (ts G.TypeSystem) {
+	ts.FixFieldResolver("Query", "countMin", countMinR)
+	ts.FixFieldResolver("Query", "countMax", countMaxR)
+	ts.FixFieldResolver("Query", "membersCount", membersCountR)
+	ts.FixFieldResolver("Query", "membersFlux", membersFluxR)
+	ts.FixFieldResolver("Query", "membersFluxPM", membersFluxPMR)
+	ts.FixFieldResolver("Query", "fECount", fECountR)
+	ts.FixFieldResolver("Query", "fEFlux", fEFluxR)
+	ts.FixFieldResolver("Query", "fEFluxPM", fEFluxPMR)
+	ts.FixFieldResolver("Query", "lossCount", lossCountR)
+	ts.FixFieldResolver("Query", "lossFlux", lossFluxR)
+	ts.FixFieldResolver("Query", "lossFluxPM", lossFluxPMR)
+	ts.FixFieldResolver("Event", "idList", eventIdListR)
+	ts.FixFieldResolver("Event", "block", eventBlockR)
+	ts.FixFieldResolver("Event", "number", eventNumberR)
+	ts.FixFieldResolver("EventId", "id", eventIdIdR)
+	ts.FixFieldResolver("EventId", "inOut", eventIdInOutR)
+	ts.FixFieldResolver("FluxEvent", "block", fluxBlockR)
+	ts.FixFieldResolver("FluxEvent", "value", fluxValueR)
+	ts.FixFieldResolver("Mutation", "changeDifferParams", differParamsR)
+	ts.FixFieldResolver("DifferParams", "pointsNb", differPointsNbR)
+	ts.FixFieldResolver("DifferParams", "degree", differDegreeR)
+} //fixFieldResolvers
 
 func init () {
-	G.AddAction(countName, count, G.Arguments{fromName, toName})
-	G.AddAction(countNameAll, countAll, G.Arguments{})
-	G.AddAction(countFName, countFlux, G.Arguments{fromName, toName, timeUnitName})
-	G.AddAction(countFNameAll, countFluxAll, G.Arguments{timeUnitName})
-	G.AddAction(countFPMName, countFluxPerMember, G.Arguments{fromName, toName, timeUnitName})
-	G.AddAction(countFPMNameAll, countFluxPerMemberAll, G.Arguments{timeUnitName})
-	G.AddAction(firstEName, firstEntries, G.Arguments{fromName, toName})
-	G.AddAction(firstENameAll, firstEntriesAll, G.Arguments{})
-	G.AddAction(fEFluxName, fEFlux, G.Arguments{fromName, toName, timeUnitName})
-	G.AddAction(fEFluxNameAll, fEFluxAll, G.Arguments{timeUnitName})
-	G.AddAction(fEFluxPMName, fEFluxPerMember, G.Arguments{fromName, toName, timeUnitName})
-	G.AddAction(fEFluxPMNameAll, fEFluxPerMemberAll, G.Arguments{timeUnitName})
-	G.AddAction(lossName, loss, G.Arguments{fromName, toName})
-	G.AddAction(lossNameAll, lossAll, G.Arguments{})
-	G.AddAction(lossFluxName, lossFlux, G.Arguments{fromName, toName, timeUnitName})
-	G.AddAction(lossFluxNameAll, lossFluxAll, G.Arguments{timeUnitName})
-	G.AddAction(lossFluxPMName, lossFluxPerMember, G.Arguments{fromName, toName, timeUnitName})
-	G.AddAction(lossFluxPMNameAll, lossFluxPerMemberAll, G.Arguments{timeUnitName})
+	fixFieldResolvers(GQ.TS())
 }

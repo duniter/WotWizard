@@ -14,44 +14,25 @@ package history
 
 import (
 	
+	A	"util/avl"
 	B	"duniter/blockchain"
-	G	"duniter/gqlReceiver"
-	J	"util/json"
+	G	"util/graphQL"
+	GQ	"duniter/gqlReceiver"
+	IS	"duniter/identitySearchList"
 	M	"util/misc"
-
-)
-
-const (
-	
-	historyName = "History"
-	
-	uidName = "Uid"
 
 )
 
 type (
 	
-	action struct {
-		id,
-		output string
-	}
-	
 	event struct {
 		next *event
-		block int
-		date int64
+		block int32
 	}
-	
-	Event struct {
-		Block int
-		Date int64
-	}
-	
-	History []Event
 
 )
 
-func BuildHistoryP (pubkey B.Pubkey) History {
+func buildHistory (pubkey B.Pubkey) *event {
 	var ev *event = nil
 	var jb, lb int32
 	n := 0
@@ -60,89 +41,68 @@ func BuildHistoryP (pubkey B.Pubkey) History {
 		jb, lb, ok = B.JLPubLNext(&list); M.Assert(ok, 100)
 	}
 	for ok {
-		var b bool
 		if lb != B.HasNotLeaved {
 			ev = &event{next: ev}
-			ev.block = int(lb)
-			ev.date, _, b = B.TimeOf(lb); M.Assert(b, 102)
+			ev.block = lb
 			n++
 		}
 		ev = &event{next: ev}
-		ev.block = int(jb)
-		ev.date, _, b = B.TimeOf(jb); M.Assert(b, 101)
+		ev.block = jb
 		n++
 		jb, lb, ok = B.JLPubLNext(&list)
 	}
-	evts := make(History, n)
-	n = 0
-	for ev != nil {
-		evts[n] = Event{Block: ev.block, Date: ev.date}
-		n++
-		ev = ev.next
+	return ev
+} //buildHistory
+
+func identityHistoryR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch hash := GQ.Unwrap(rootValue, 0).(type) {
+	case B.Hash:
+		l := G.NewListValue()
+		_, pub, _, _, _, inBC, _, ok := IS.Get(hash); M.Assert(ok, 100)
+		if inBC {
+			ev := buildHistory(pub)
+			in := true
+			for ev != nil {
+				l.Append(GQ.Wrap(in, ev.block))
+				in = !in
+				ev = ev.next
+			}
+		}
+		return l
+	case *G.NullValue:
+		return hash
+	default:
+		M.Halt(hash, 100)
+		return nil
 	}
-	return evts
-}
+} //identityHistoryR
 
-func BuildHistoryI (id string) History {
-	if pk, ok := B.IdUid(id); ok {
-		return BuildHistoryP(pk)
+func historyEvInR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch in := GQ.Unwrap(rootValue, 0).(type) {
+	case bool:
+		return G.MakeBooleanValue(in)
+	default:
+		M.Halt(in, 100)
+		return nil
 	}
-	return nil
-}
+} //historyEvInR
 
-func BuildHistoryH (hash B.Hash) History {
-	if pk, ok := B.IdHash(hash); ok {
-		return BuildHistoryP(pk)
+func historyEvBlockR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch block := GQ.Unwrap(rootValue, 1).(type) {
+	case int32:
+		return GQ.Wrap(block)
+	default:
+		M.Halt(block, 100)
+		return nil
 	}
-	return nil
-}
+} //historyEvBlockR
 
-func listBlock (mk *J.Maker) {
-	mk.PushInteger(int64(B.LastBlock()))
-	mk.BuildField("block")
-	mk.PushInteger(B.Now())
-	mk.BuildField("now")
-}
-
-func listHistory (id string) J.Json {
-	evts := BuildHistoryI(id)
-	mk := J.NewMaker()
-	mk.StartObject()
-	mk.PushString(id)
-	mk.BuildField("uid")
-	in := true
-	mk.StartArray()
-	for _, ev := range evts {
-		mk.StartObject()
-		mk.PushBoolean(in)
-		in = !in
-		mk.BuildField("in")
-		mk.PushInteger(int64(ev.Block))
-		mk.BuildField("block")
-		mk.PushInteger(ev.Date)
-		mk.BuildField("date")
-		mk.BuildObject()
-	}
-	mk.BuildArray()
-	mk.BuildField("history")
-	listBlock(mk)
-	mk.BuildObject()
-	return mk.GetJson()
-}
-
-func (a *action) Name () string {
-	return historyName
-}
-
-func (a *action) Activate () {
-	j := listHistory(a.id)
-	G.Json(j, a.output)
-}
-
-func history (id, output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{id: id, output: output}
-}
+func fixFieldResolvers (ts G.TypeSystem) {
+	ts.FixFieldResolver("Identity", "history", identityHistoryR)
+	ts.FixFieldResolver("HistoryEvent", "in", historyEvInR)
+	ts.FixFieldResolver("HistoryEvent", "block", historyEvBlockR)
+} //fixFieldResolvers
 
 func init () {
-	G.AddAction(historyName, history, G.Arguments{uidName})
-}
+	fixFieldResolvers(GQ.TS())
+} //init

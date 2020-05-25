@@ -53,7 +53,18 @@ const (
 
 )
 
-var lg *log.Logger = log.New(os.Stderr, "", log.LstdFlags)
+type (
+
+	Set uint64
+
+)
+
+var (
+	
+	StdLg = log.New(os.Stderr, "", log.LstdFlags)
+	lg = StdLg
+
+)
 
 func SetLog (log *log.Logger) {
 	lg = log
@@ -168,26 +179,35 @@ func AbsF64 (a float64) float64 {
 	return a
 }
 
+func haltCommon (flag ... interface{}) {
+	lg.Output(3, "*** ERROR ***");
+	if len(flag) == 0 {
+		lg.Output(3, "Assert error")
+		panic("Assert error")
+	}
+	for _, f := range flag {
+		switch e := f.(type) {
+		case error:
+			lg.Output(3, e.Error())
+		case string:
+			lg.Output(3, e)
+		case int:
+			lg.Output(3, SC.Itoa(e))
+		default:
+			lg.Print(f)
+		}
+	}
+	panic(flag[len(flag) - 1])
+}
+
+
+func Halt (flag ... interface{}) {
+	haltCommon(flag ...)
+}
+
 func Assert (cond bool, flag ... interface{}) {
 	if !cond {
-		lg.Output(2, "*** ERROR ***");
-		if len(flag) == 0 {
-			lg.Output(2, "Assert error")
-			panic("Assert error")
-		}
-		for _, f := range flag {
-			switch e := f.(type) {
-			case error:
-				lg.Output(2, e.Error())
-			case string:
-				lg.Output(2, e)
-			case int:
-				lg.Output(2, SC.Itoa(e))
-			default:
-				lg.Print(f)
-			}
-		}
-		panic(flag[len(flag) - 1])
+		haltCommon(flag ...)
 	}
 }
 
@@ -219,4 +239,44 @@ func InstantClose (f *os.File) error {
 		return err
 	}
 	return os.Rename(hidden, showPath(hidden))
+}
+
+func MakeSet (values ... int) Set {
+	set := Set(0)
+	for _, val := range values {
+		set |= 1 << uint(val)
+	}
+	return set
+}
+
+func FullSet () Set {
+	return Set(MaxUint64)
+}
+
+func EmptySet () Set {
+	return Set(0)
+}
+
+func Inter (set1, set2 Set) Set {
+	return set1 & set2
+}
+
+func Union (set1, set2 Set) Set {
+	return set1 | set2
+}
+
+func SymDiff (set1, set2 Set) Set {
+	return set1 ^ set2
+}
+
+func Diff (set1, set2 Set) Set {
+	return set1 &^ set2
+}
+
+func Add (set Set, value int) Set {
+	return set | 1 << uint(value)
+}
+
+func In (value int, set Set) bool {
+	return 1 << uint(value) & set != 0
 }

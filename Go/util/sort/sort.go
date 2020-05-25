@@ -40,7 +40,6 @@ package sort
 		g *alea.Generator
 	
 	func (f TF) BinSearch (min, max int, target *int) {
-		
 		i := min; j := max + 1
 		for i < j {
 			k := (i + j) / 2
@@ -50,28 +49,45 @@ package sort
 				j = k
 			}
 		}
-		if (j <= max) && !f.Less(j, *target) && !f.Less(*target, j) {
+		if j <= max && !f.Less(j, *target) && !f.Less(*target, j) {
 			*target = j
 		}
 	}
 	
-	func (s TS) insertion (l, r int) {
-		
-		for i := l + 1; i <= r; i++ {
-			for j := i; (j > l) && s.Less(j, j - 1); j-- {
-				s.Swap(j, j - 1)
+	func (f TF) BinSearchNext (min, max int, target *int) {
+		i := min; j := max + 1
+		for i < j {
+			k := (i + j) / 2
+			if f.Less(k, *target) {
+				i = k + 1
+			} else {
+				j = k
+			}
+		}
+		if j <= max {
+			if !f.Less(j, *target) {
+				*target = j
+			} else {
+				*target = j + 1
 			}
 		}
 	}
 	
 	func (s TS) QuickSort (min, max int) {
 		
-		const
-			maxIns = 24
+		insertion := func (l, r int) {
+			for i := l + 1; i <= r; i++ {
+				for j := i; (j > l) && s.Less(j, j - 1); j-- {
+					s.Swap(j, j - 1)
+				}
+			}
+		}
+		
+		const maxIns = 24
 		
 		for {
 			if max - min < maxIns {
-				s.insertion(min, max)
+				insertion(min, max)
 				break
 			}
 			p0 := int(g.IntRand(int64(min), int64(max) + 1))
@@ -115,7 +131,6 @@ package sort
 	}
 	
 	func init () {
-		
 		g = alea.New();
 	}
 

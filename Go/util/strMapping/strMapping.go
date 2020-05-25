@@ -121,6 +121,7 @@ func (m *mapScan) scan () bool {
 		}
 		key := s[:n]
 		val := s[p:]
+		M.Assert(key != "" && val != "", s, 100)
 		m.rac.insert(key, val)
 	}
 	return m.s.Err() == nil
@@ -136,6 +137,9 @@ func initDico (base string) bool {
 		link = linkFile
 	}
 	rc, ok := link(base, lang)
+	if !ok {
+		rc, ok = link(base, "")
+	}
 	if !ok {
 		return false
 	}
@@ -193,6 +197,7 @@ func SetLStr (base string, lS LinkStrings) {
 }
 
 func init () {
+	Reinit("en")
 	name := F.Join(wd, strMappingDir, languageName)
 	f, err := os.Open(name)
 	if err == nil {

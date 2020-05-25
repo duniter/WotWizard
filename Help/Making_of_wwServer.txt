@@ -1,12 +1,12 @@
 How to build wwServer from sources?
 
 1) We suppose that you've already installed go and that your go workspace is "$HOME/go" (see golang.org/doc/install).
+	
+2) Copy the content of github.com/duniter/WotWizard/Go into $HOME/go/src.
 
-2) Install github.com/mattn/go-sqlite3 (see https://github.com/mattn/go-sqlite3)
+3) Install github.com/mattn/go-sqlite3 (see https://github.com/mattn/go-sqlite3) with the command:
 
 	$go get github.com/mattn/go-sqlite3
-	
-3) Copy the content of github.com/duniter/WotWizard/Go into $HOME/go/src.
 
 4) Open a terminal in $HOME/go/src/duniter/wwServer and execute:
 

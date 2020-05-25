@@ -18,9 +18,6 @@ import (
 	
 	B	"duniter/blockchain"
 	BA	"duniter/basic"
-	BT	"util/gbTree"
-	G	"duniter/gqlReceiver"
-	J	"util/json"
 	M	"util/misc"
 	N	"util/netStressD"
 		"math"
@@ -29,9 +26,6 @@ import (
 )
 
 const (
-
-	allName = "CentralitiesAll"
-	oneName = "CentralitiesOne"
 	
 	updateName = "Centralities"
 	
@@ -44,17 +38,8 @@ const (
 
 type (
 	
-	action struct {
-		what int
-		uid,
-		output string
-	}
-	
-	updateA struct {
-	}
-	
 	netT struct {
-		ir *BT.IndexReader
+		ir *B.Position
 	}
 	
 	nodeT struct {
@@ -215,84 +200,13 @@ func doCountOne (p B.Pubkey) float64 {
 	return allOnes.os[l].c
 }
 
-func list () J.Json {
-	centers, centersId := doCount()
-	mk := J.NewMaker()
-	mk.StartObject()
-	mk.StartArray()
-	if centers != nil {
-		for i := 0; i < len(centers); i++ {
-			mk.StartObject()
-			mk.PushString(centers[i].id)
-			mk.BuildField("id")
-			mk.PushFloat(centers[i].c)
-			mk.BuildField("c")
-			mk.BuildObject()
-		}
-	}
-	mk.BuildArray()
-	mk.BuildField("centrals")
-	mk.StartArray()
-	if centersId != nil {
-		for i := 0; i < len(centersId); i++ {
-			mk.StartObject()
-			mk.PushString(centersId[i].id)
-			mk.BuildField("id")
-			mk.PushFloat(centersId[i].c)
-			mk.BuildField("c")
-			mk.BuildObject()
-		}
-	}
-	mk.BuildArray()
-	mk.BuildField("centrals_byId")
-	mk.PushInteger(int64(B.LastBlock()))
-	mk.BuildField("block")
-	mt := B.Now()
-	mk.PushInteger(mt)
-	mk.BuildField("now")
-	mk.BuildObject()
-	return mk.GetJson()
-}
-
-func listOne (uid string) J.Json {
-	pubkey, ok := B.IdUid(uid); M.Assert(ok, 20)
-	mk := J.NewMaker()
-	mk.StartObject()
-	mk.PushString(uid)
-	mk.BuildField("uid")
-	mk.PushFloat(doCountOne(pubkey))
-	mk.BuildField("central")
-	mk.PushInteger(int64(B.LastBlock()))
-	mk.BuildField("block")
-	mt := B.Now()
-	mk.PushInteger(mt)
-	mk.BuildField("now")
-	mk.BuildObject()
-	return mk.GetJson()
-}
-
 func CountOne (p B.Pubkey) float64 {
 	return doCountOne(p)
 }
 
-func (a *action) Name () string {
-	var s string
-	switch a.what {
-	case allAction:
-		s = allName
-	case oneAction:
-		s = oneName
-	}
-	return s
-}
-
-func (a *action) Activate () {
-	switch a.what {
-	case allAction:
-		G.Json(list(), a.output)
-	case oneAction:
-		G.Json(listOne(a.uid), a.output)
-	}
+func Count () (centers, centersId centrals) {
+	centers, centersId = doCount()
+	return 
 }
 
 func countAllOnes (net *N.Net) *onesSort {
@@ -346,14 +260,6 @@ func recordUpdate (... interface{}) {
 	mustUpdate <- true
 }
 
-func allA (output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: allAction, output: output}
-}
-
-func oneA (uid, output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: oneAction, uid: uid, output: output}
-}
-
 func init () {
 	mustU := make(chan bool)
 	askAll := make(chan bool)
@@ -363,6 +269,4 @@ func init () {
 	getAllOnes = getAll
 	go updateManager(mustU, askAll, getAll)
 	B.AddUpdateProc(updateName, recordUpdate)
-	G.AddAction(allName, allA, G.Arguments{})
-	G.AddAction(oneName, oneA, G.Arguments{oneUidName})
 }

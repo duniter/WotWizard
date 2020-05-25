@@ -12,6 +12,12 @@ You should have received a copy of the GNU General Public License along with thi
 
 package wotWizard
 
+/**************************************************************************************
+Bug : Dans calcRec, si la date de passage d'un dossier devient supérieure à la date limite d'une de ses certifications, il faut en tenir compte : enlever la certification, recalculer PrincCertif, etc...
+
+Bug: Si une certification est active et une autre, du même certificateur, est en piscine, elles sont comptées pour deux dans FillFile.
+***************************************************************************************/
+
 // For versions 1.4+ of Duniter
 // This version suppose equiprobable all external certifications (toward a non-member identity) which are concurrent at the same date, and process concurrent internal certifications (toward an already-member identity) afterwards
 
@@ -22,6 +28,8 @@ import (
 	BA	"duniter/basic"
 	M	"util/misc"
 	S	"duniter/sandbox"
+		"math"
+		"time"
 		"unsafe"
 
 )
@@ -34,6 +42,8 @@ const (
 
 type (
 	
+	Uid *string
+	Hash *B.Hash
 	Pubkey *B.Pubkey
 	
 	// Internal certification, or dossier of external certifications toward the same identity
@@ -48,7 +58,8 @@ type (
 	Certif struct {
 		date, // Entry date
 		limit int64 // Expiration date
-		From, To string
+		From, To Uid
+		ToH Hash
 		fromP Pubkey
 	}
 	
@@ -57,7 +68,8 @@ type (
 		date, // Entry date
 		MinDate, // Minimum date: last membership application + msPeriod
 		limit int64 // Expiration date
-		Id string // Certified identity
+		Id Uid // Certified identity
+		Hash Hash
 		pub Pubkey
 		PrincCertif int // Rank of the certification whose entry date gives the entry date of the dossier (1 <= PrincCertif <= len(Certifs)
 		ProportionOfSentries float64 // Proportion of sentries reachable through B.pars.stepMax steps
@@ -85,6 +97,7 @@ type (
 	
 	// AVL trees of Propagation are used in the main CalcPermutations procedure; trees of Propagation are sorted by Id(s) first and then by Date(s)
 	Propagation struct {
+		Hash B.Hash
 		Id string // uid of a candidate
 		Date int64 // A possible date of her entry
 		After bool // After = true if this entry can occur at the date Date or after (uncertainty due to incomplete computation)
@@ -285,18 +298,17 @@ func (pub1 *pubSet) Compare (pub2 A.Comparer) A.Comp {
 // Copy procedures for Propagation and InvProp
 
 func (p *PropDate) Copy () A.Copier {
-	return &PropDate{Id: p.Id, Date: p.Date, Proba: p.Proba}
+	q := new(PropDate); *q = *p
+	return q
 }
 
 func (p *PropName) Copy () A.Copier {
-	return &PropName{Id: p.Id, Date: p.Date, Proba: p.Proba}
+	q := new(PropName); *q = *p
+	return q
 }
 
 // Copy f and return its copy; the copy is shallow for elements of ranks less than deepFrom, and deep afterwards; size is the size of the copy
 func copyFile (f File, deepFrom int, size *int64) File {
-	if f == nil {
-		return nil
-	}
 	l := len(f)
 	M.Assert(deepFrom <= l, 20)
 	g := make(File, l)
@@ -316,19 +328,15 @@ func copyFile (f File, deepFrom int, size *int64) File {
 			*d = *cd
 			*size += int64(unsafe.Sizeof(*d))
 			g[i] = d
-			if cd.Certifs == nil {
-				d.Certifs = nil
-			} else {
-				h := make(File, len(cd.Certifs))
-				*size += int64(unsafe.Sizeof(h)) + int64(len(cd.Certifs)) * int64(unsafe.Sizeof(h[0]))
-				for j := 0; j < len(cd.Certifs); j++ {
-					c := new(Certif)
-					*c = *cd.Certifs[j].(*Certif)
-					*size += int64(unsafe.Sizeof(*c))
-					h[j] = c
-				}
-				d.Certifs = h
+			h := make(File, len(cd.Certifs))
+			*size += int64(unsafe.Sizeof(h)) + int64(len(cd.Certifs)) * int64(unsafe.Sizeof(h[0]))
+			for j := 0; j < len(cd.Certifs); j++ {
+				c := new(Certif)
+				*c = *cd.Certifs[j].(*Certif)
+				*size += int64(unsafe.Sizeof(*c))
+				h[j] = c
 			}
+			d.Certifs = h
 		}
 	}
 	return g
@@ -370,24 +378,22 @@ func fixCertNextDate (p B.Pubkey) (d int64) {
 
 // Fix the disponibility dates of the elements of f, always after the current date
 func fileDates (f File) {
-	if f != nil {
-		for i := 0; i < len(f); i++ {
-			switch cd := f[i].(type) {
-			case *Dossier:
-				if cd.Certifs == nil {
-					cd.date = 0
-				} else {
-					cd.date = cd.Certifs[cd.PrincCertif - 1].(*Certif).date
-				}
-				cd.date = M.Max64(cd.date, cd.MinDate)
-				if cd.date > cd.limit {
-					cd.date = BA.Never
-				}
-			default:
+	for i := 0; i < len(f); i++ {
+		switch cd := f[i].(type) {
+		case *Dossier:
+			if len(cd.Certifs) == 0 {
+				cd.date = 0
+			} else {
+				cd.date = cd.Certifs[cd.PrincCertif - 1].(*Certif).date
 			}
+			cd.date = M.Max64(cd.date, cd.MinDate)
+			if cd.date > cd.limit {
+				cd.date = BA.Never
+			}
+		default:
 		}
 	}
-}
+} //fileDates
 
 // Sort, by insertion, the end of f, starting at position i0; all the dates must have been fixed before
 func sortAll (f File, i0, critical int) (modif bool) {
@@ -409,43 +415,39 @@ func sortAll (f File, i0, critical int) (modif bool) {
 			case *Dossier:
 				ok = cd02.PrincCertif < int(B.Pars().SigQty) || cd01.date < cd02.date
 			case *Certif:
-				ok = cd01.date < cd02.date || cd01.date == cd02.date && (*cd01.fromP < *cd02.fromP || *cd01.fromP == *cd02.fromP && cd01.To < cd02.To)
+				ok = cd01.date < cd02.date || cd01.date == cd02.date && (*cd01.fromP < *cd02.fromP || *cd01.fromP == *cd02.fromP && *cd01.To < *cd02.To)
 			}
 		}
 		return ok
 	}
 	
 	modif = false
-	if f != nil {
-		for i := i0 + 1; i < len(f); i++ {
-			j := i; cdx := f[j]
-			for j > i0 && less(cdx, f[j - 1]) { // No sentinel; inefficient
-				f[j] = f[j - 1]
-				j--
-				modif = modif || j == critical
-			}
-			f[j] = cdx
+	for i := i0 + 1; i < len(f); i++ {
+		j := i; cdx := f[j]
+		for j > i0 && less(cdx, f[j - 1]) { // No sentinel; inefficient
+			f[j] = f[j - 1]
+			j--
+			modif = modif || j == critical
 		}
+		f[j] = cdx
 	}
 	return
-}
+} //sortAll
 
 // Sort the end of f, starting at position i0; the dates of all Certification(s) must have been fixed before, but not those of Dossier(s); if afterNow, the disponibility dates are put after the current date
 func sortFile (f File, i0 int) {
-	if f != nil {
-		for i := i0; i < len(f); i++ {
-			switch cd := f[i].(type) {
-			case *Dossier:
-				if sortAll(cd.Certifs, 0, cd.PrincCertif - 1) {
-					cd.PrincCertif = calcPrinc(cd.Certifs)
-				}
-			default:
+	for i := i0; i < len(f); i++ {
+		switch cd := f[i].(type) {
+		case *Dossier:
+			if sortAll(cd.Certifs, 0, cd.PrincCertif - 1) {
+				cd.PrincCertif = calcPrinc(cd.Certifs)
 			}
+		default:
 		}
-		fileDates(f)
-		sortAll(f, i0, 0)
 	}
-}
+	fileDates(f)
+	sortAll(f, i0, 0)
+} //sortFile
 
 // Update the list of sentries and the distance rule test at each step? Too long execution time!
 // Simulate the entry of f[step] in the blockchain and update all f[i] with i > step
@@ -455,7 +457,7 @@ func propagate (f *File, step int) {
 		for i := i0; i < len(*f); i++ {
 			switch cd := (*f)[i].(type) {
 			case *Certif:
-				if cd.From == uid {
+				if *cd.From == uid {
 					if newDate > cd.limit {
 						cd.date = BA.Never
 					} else {
@@ -467,7 +469,7 @@ func propagate (f *File, step int) {
 				for j > 0 {
 					j--
 					c := cd.Certifs[j].(*Certif)
-					if c.From == uid {
+					if *c.From == uid {
 						if newDate > M.Min64(cd.limit, c.limit) {
 							c.date = BA.Never
 						} else {
@@ -478,7 +480,7 @@ func propagate (f *File, step int) {
 				}
 			}
 		}
-	}
+	} //incDates
 	
 	// propagate
 	// If two newcomers has the same id or the same pubkey, only the one that comes first can enter the WoT
@@ -490,7 +492,7 @@ func propagate (f *File, step int) {
 			for ok && j < step {
 				switch cd2 := (*f)[j].(type) {
 				case *Dossier:
-					ok = cd2.Id != cd.Id && *cd2.pub != *cd.pub
+					ok = *cd2.Id != *cd.Id && *cd2.pub != *cd.pub
 				default:
 				}
 				j++
@@ -512,12 +514,12 @@ func propagate (f *File, step int) {
 	if step < len(*f) && (*f)[step].Date() != BA.Never {
 		switch cd := (*f)[step].(type) {
 		case *Certif:
-			incDates(cd.From, cd.date + int64(B.Pars().SigPeriod), step + 1)
+			incDates(*cd.From, cd.date + int64(B.Pars().SigPeriod), step + 1)
 		case *Dossier:
 			j := 0
 			// All certifs with the same date as cd must lead to updates and certifs with a date less than cd.date + B.pars.avgGenTime have more than 50% probability to be inserted in the same block and, so, must lead to update too
 			for j < cd.PrincCertif || j < len(cd.Certifs) && cd.Certifs[j].(*Certif).date < cd.date + int64(B.Pars().AvgGenTime) {
-				incDates(cd.Certifs[j].(*Certif).From, cd.date + int64(B.Pars().SigPeriod), step + 1);
+				incDates(*cd.Certifs[j].(*Certif).From, cd.date + int64(B.Pars().SigPeriod), step + 1);
 				j++
 			}
 			nc := len(cd.Certifs) - j
@@ -542,7 +544,7 @@ func propagate (f *File, step int) {
 		}
 		sortFile(*f, step + 1)
 	}
-}
+} //propagate
 
 // Sort by selection
 func sortPubList (c **pubList) {
@@ -606,7 +608,7 @@ func notTooFar (c **pubList, n int) (needed int, proportionOfSentries float64, o
 }
 
 // WotWizard main procedure; return in sets all the elements of type Set, i.e. all the possible permutations in the order of entries of the Dossier(s) in f, along with their probabilities
-func CalcPermutations (f File) (*A.Tree, bool) {
+func CalcPermutations (f File) *A.Tree {
 
 	// Put into n.sets the set containing, as unique element, the list of entries in n.f
 	evaluate := func (n *node) {
@@ -615,7 +617,7 @@ func CalcPermutations (f File) (*A.Tree, bool) {
 		for i := 0; i < len(n.f); i++ {
 			switch cd := n.f[i].(type) {
 			case *Dossier:
-				_, b, _ := set.T.SearchIns(&Propagation{Id: cd.Id, Date: cd.date, After: i >= n.step && (cd.date != BA.Never)}); M.Assert(!b, 100)
+				_, b, _ := set.T.SearchIns(&Propagation{Hash: *cd.Hash, Id: *cd.Id, Date: cd.date, After: i >= n.step && (cd.date != BA.Never)}); M.Assert(!b, 100)
 			default:
 			}
 		}
@@ -706,79 +708,71 @@ func CalcPermutations (f File) (*A.Tree, bool) {
 	}
 	
 	// CalcPermutations
-	if f != nil {
-		ok = true
-		sets := calcRec(f)
-		M.Assert(sets != nil, 60)
-		return sets, true
-	}
-	return nil, false 
+	ok = true
+	sets := calcRec(f)
+	M.Assert(sets != nil, 60)
+	return sets
 }
 
 // Merge the Set(s) returned by CalcPermutations and combine their probabilities; return the list of entries sorted by date(s) (occurDate with elements of type PropDate) or by id(s) (occurName with elements of type PropName)
-func CalcEntries (f File) (permutations int, occurDate, occurName *A.Tree, ok bool) {
-	var sets *A.Tree
-	permutations = 0
-	if sets, ok = CalcPermutations(f); ok {
-		
-		permutations = sets.NumberOfElems()
-		
-		// Computing of Propagation(s) with their proba(s)
-		now := B.Now()
-		occur := A.New()
-		e := sets.Next(nil)
-		for e != nil {
-			s := e.Val().(*Set)
-			ee := s.T.Next(nil)
-			for ee != nil {
-				p := ee.Val().(*Propagation)
-				p.Date = M.Max64(p.Date, now)
-				p.Proba = 0.
-				eee, _, _ := occur.SearchIns(p)
-				p = eee.Val().(*Propagation)
-				p.Proba += s.Proba
-				ee = s.T.Next(ee)
-			}
-			e = sets.Next(e)
+func CalcEntries (f File) (sets, occurDate, occurName *A.Tree) {
+	sets = CalcPermutations(f)
+	
+	// Computing of Propagation(s) with their proba(s)
+	now := B.Now()
+	occur := A.New()
+	e := sets.Next(nil)
+	for e != nil {
+		s := e.Val().(*Set)
+		ee := s.T.Next(nil)
+		for ee != nil {
+			p := ee.Val().(*Propagation)
+			p.Date = M.Max64(p.Date, now)
+			p.Proba = 0.
+			eee, _, _ := occur.SearchIns(p)
+			p = eee.Val().(*Propagation)
+			p.Proba += s.Proba
+			ee = s.T.Next(ee)
 		}
-		
-		// For each uid, with increasing date(s), gather all Propagation(s) following a Propagation with After = true together
-		var pAfter *Propagation
-		id := ""
-		e = occur.Next(nil)
-		for e != nil {
-			ee := occur.Next(e)
-			p := e.Val().(*Propagation)
-			if p.Id != id {
-				id = p.Id
-				pAfter = nil
-			}
-			if pAfter == nil && p.After {
-				pAfter = p
-			} else if pAfter != nil {
-				pAfter.Proba += p.Proba
-				b := occur.Delete(p); M.Assert(b, 100)
-			}
-			e = ee
+		e = sets.Next(e)
+	}
+	
+	// For each uid, with increasing date(s), gather all Propagation(s) following a Propagation with After = true together
+	var pAfter *Propagation
+	id := ""
+	e = occur.Next(nil)
+	for e != nil {
+		ee := occur.Next(e)
+		p := e.Val().(*Propagation)
+		if p.Id != id {
+			id = p.Id
+			pAfter = nil
 		}
-		
-		// Propagation -> PropDate
-		occurDate = A.New()
-		e = occur.Next(nil)
-		for e != nil {
-			p := e.Val().(*Propagation)
-			_, b, _ := occurDate.SearchIns(&PropDate{Id: p.Id, Date: p.Date, After: p.After, Proba: p.Proba}); M.Assert(!b, 101)
-			e = occur.Next(e)
+		if pAfter == nil && p.After {
+			pAfter = p
+		} else if pAfter != nil {
+			pAfter.Proba += p.Proba
+			b := occur.Delete(p); M.Assert(b, 100)
 		}
-		
-		// PropDate -> PropName
-		occurName = A.New()
-		e = occurDate.Next(nil)
-		for e != nil {
-			p := e.Val().(*PropDate)
-			_, b, _ := occurName.SearchIns(&PropName{Id: p.Id, Date: p.Date, After: p.After, Proba: p.Proba}); M.Assert(!b, 102)
-			e = occurDate.Next(e)
-		}
+		e = ee
+	}
+	
+	// Propagation -> PropDate
+	occurDate = A.New()
+	e = occur.Next(nil)
+	for e != nil {
+		p := e.Val().(*Propagation)
+		_, b, _ := occurDate.SearchIns(&PropDate{Hash: p.Hash, Id: p.Id, Date: p.Date, After: p.After, Proba: p.Proba}); M.Assert(!b, 101)
+		e = occur.Next(e)
+	}
+	
+	// PropDate -> PropName
+	occurName = A.New()
+	e = occurDate.Next(nil)
+	for e != nil {
+		p := e.Val().(*PropDate)
+		_, b, _ := occurName.SearchIns(&PropName{Hash: p.Hash, Id: p.Id, Date: p.Date, After: p.After, Proba: p.Proba}); M.Assert(!b, 102)
+		e = occurDate.Next(e)
 	}
 	return
 }
@@ -821,14 +815,15 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 	var el *A.Elem
 	toHash, ok := S.IdNextHash(true, &el)
 	for ok { // For all identity hash in sandbox
-		idInBC, to, _, exp2, b := S.IdHash(toHash); M.Assert(b, 100)
+		idInBC, to, _, _, exp2, b := S.IdHash(toHash); M.Assert(b, 100)
 		var minDate int64 = 0
 		bb := !idInBC
 		if !bb {
-			var (member bool; app, exp int64)
+			var (member bool; app int32; exp int64)
 			_, member, _, _, app, exp, bb = B.IdPubComplete(to)
 			if bb {
-				minDate = app + int64(B.Pars().MsPeriod)
+				appTi, _, b := B.TimeOf(app); M.Assert(b, 101)
+				minDate = appTi + int64(B.Pars().MsPeriod)
 				bb = !member && exp >= 0 && exp2 > minDate
 			}
 		}
@@ -840,9 +835,9 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 				for {
 					from, _, okP := posB.CertNextPos()
 					if okP {
-						_, b, _, _, _, _, bb = B.IdPubComplete(from)
+						_, member, _, _, _, _, bb := B.IdPubComplete(from)
 						var posBF B.CertPos
-						bb = bb && b && (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
+						bb = bb && member && (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
 						if bb {
 							_, exp, b := B.Cert(from, to); M.Assert(b, 101)
 							bb = exp > minDate
@@ -861,11 +856,11 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 				for {
 					from, toHash, okP := pos.CertNextPos()
 					if okP {
-						_, b, _, _, _, _, bb = B.IdPubComplete(from)
+						_, member, _, _, _, _, bb := B.IdPubComplete(from)
 						var posBF B.CertPos
-						bb = bb && b && (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
+						bb = bb && member && (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
 						if bb {
-							_, exp, b := S.Cert(from, toHash); M.Assert(b, 102)
+							_, _, exp, b := S.Cert(from, toHash); M.Assert(b, 102)
 							date := fixCertNextDate(from)
 							if M.Max64(date, minDate) <= exp { // Not-expired certification
 								nbCertifs++
@@ -884,54 +879,51 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 			}
 			if bb {
 				dNb++
-				d := &Dossier{MinDate: minDate, PrincCertif: princCertif, ProportionOfSentries: proportionOfSentries, pub: new(B.Pubkey)}
+				d := &Dossier{MinDate: minDate, PrincCertif: princCertif, ProportionOfSentries: proportionOfSentries, Id: new(string), Hash: new(B.Hash), pub: new(B.Pubkey)}
 				l.next = new(cdList); l = l.next
 				l.cd = d
 				var idInBC bool
-				idInBC, *d.pub, d.Id, d.limit, b = S.IdHash(toHash); M.Assert(b, 103)
-				if nbCertifs == 0 {
-					d.Certifs = nil
-				} else {
-					d.Certifs = make(File, nbCertifs)
-					j := 0
-					if idInBC {
-						from, to, okP := posBI.CertNextPos()
-						for okP {
-							_, b, _, _, _, _, bb := B.IdPubComplete(from)
-							var posBF B.CertPos
-							bb = bb && b &&(!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
-							if bb {
-								_, exp, b := B.Cert(from, to); M.Assert(b, 104)
-								if exp > minDate {
-									c := &Certif{date: BA.Already, limit: exp}
-									c.fromP = new(B.Pubkey); *c.fromP = from
-									c.From, b = B.IdPub(from); M.Assert(b, 105)
-									d.Certifs[j] = c
-									j++
-								}
-							}
-							from, to, okP = posBI.CertNextPos()
-						}
-					}
-					from, toHash, okP := posI.CertNextPos()
+				idInBC, *d.pub, *d.Id, _, d.limit, b = S.IdHash(toHash); M.Assert(b, 103)
+				*d.Hash = toHash
+				d.Certifs = make(File, nbCertifs)
+				j := 0
+				if idInBC {
+					from, to, okP := posBI.CertNextPos()
 					for okP {
-						_, b, _, _, _, _, bb := B.IdPubComplete(from)
+						_, member, _, _, _, _, bb := B.IdPubComplete(from)
 						var posBF B.CertPos
-						bb = bb && b &&  (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
+						bb = bb && member &&(!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
 						if bb {
-							_, exp, b := S.Cert(from, toHash); M.Assert(b, 106)
-							date := fixCertNextDate(from)
-							if M.Max64(date, minDate) <= exp {
-								useful.SearchIns(&pubSet{p: from})
-								c := &Certif{date: date, limit: exp}
+							_, exp, b := B.Cert(from, to); M.Assert(b, 104)
+							if exp > minDate {
+								c := &Certif{date: BA.Already, limit: exp, From: new(string), To: d.Id, ToH: d.Hash}
 								c.fromP = new(B.Pubkey); *c.fromP = from
-								c.From, b = B.IdPub(from); M.Assert(b, 107)
+								*c.From, b = B.IdPub(from); M.Assert(b, 105)
 								d.Certifs[j] = c
 								j++
 							}
 						}
-						from, toHash, okP = posI.CertNextPos()
+						from, to, okP = posBI.CertNextPos()
 					}
+				}
+				from, toHash, okP := posI.CertNextPos()
+				for okP {
+					_, b, _, _, _, _, bb := B.IdPubComplete(from)
+					var posBF B.CertPos
+					bb = bb && b &&  (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
+					if bb {
+						_, _, exp, b := S.Cert(from, toHash); M.Assert(b, 106)
+						date := fixCertNextDate(from)
+						if M.Max64(date, minDate) <= exp {
+							useful.SearchIns(&pubSet{p: from})
+							c := &Certif{date: date, limit: exp, From: new(string), To: d.Id, ToH: d.Hash}
+							c.fromP = new(B.Pubkey); *c.fromP = from
+							*c.From, b = B.IdPub(from); M.Assert(b, 107)
+							d.Certifs[j] = c
+							j++
+						}
+					}
+					from, toHash, okP = posI.CertNextPos()
 				}
 			}
 		}
@@ -950,18 +942,19 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 	for ok {
 		from, toHash, ok2 := pos.CertNextPos()
 		for ok2 {
-			to, exp, b := S.Cert(from, toHash); M.Assert(b, 109)
-			uid, b, _, _, _, _, bb := B.IdPubComplete(to)
+			to, _, exp, b := S.Cert(from, toHash); M.Assert(b, 109)
+			uid, member, _, _, _, _, bb := B.IdPubComplete(to)
 			var posBF B.CertPos
-			bb = bb && b && (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
+			bb = bb && member && (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
 			if bb {
 				date := fixCertNextDate(from)
 				// Si la certif n'est pas encore passée au dernier bloc alors qu'elle aurait dû passer à ce bloc ou avant, il y a peu de chance qu'elle passe plus tard et il vaut mieux l'enlever ; il faut aussi l'enlever si elle a dépassé sa date limite ; peut-être inutile maintenant
 				if date <= exp && date > mt {
 					cNb++
 					if _, b, _ := useful.Search(&pubSet{p: from}); b { // Keep only certifications whose sender is also a sender of a certification in SandBox in a dossier
-						c := &Certif{fromP: &from, To: uid, limit: exp, date: date}
-						c.From, b = B.IdPub(from); M.Assert(b, 110)
+						c := &Certif{fromP: &from, To: &uid, ToH: new(B.Hash), limit: exp, date: date, From: new(string)}
+						*c.From, b = B.IdPub(from); M.Assert(b, 110)
+						*c.ToH = toHash
 						cNbU++
 						l.next = new(cdList); l = l.next
 						l.cd = c
@@ -974,7 +967,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 	}
 	l.next = nil; cdL = cdL.next
 	if dNb == 0 {
-		f = nil
+		f = make(File, 0)
 	} else {
 		f = make(File, dNb + cNbU)
 		i := 0;
@@ -989,10 +982,31 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 }
 
 // Calculate the current set of entries, sorted by dates (occur) and by names (invOccur)
-func BuildEntries () (f File, permutations, cNb, dNb int, occurDate, occurName *A.Tree, ok bool) {
+func BuildEntries () (f File, cNb, dNb int, permutations, occurDate, occurName *A.Tree, duration int64) {
+	
+	byDate := func (tId *A.Tree) *A.Tree {
+		tD :=A.New()
+		e := tId.Next(nil)
+		for e != nil {
+			p := e.Val().(*Propagation)
+			_, b, _ := tD.SearchIns(&PropDate{Hash: p.Hash, Id: p.Id, Date: p.Date, After: p.After}); M.Assert(!b, 101)
+			e = tId.Next(e)
+		}
+		return tD
+	} //byDate
+	
+	//BuildEntries
+	ti := time.Now()
 	f, cNb, dNb = FillFile(int(B.Pars().SigQty))
 	n := int64(0)
-	permutations, occurDate, occurName, ok = CalcEntries(copyFile(f, 0, &n))
+	permutations, occurDate, occurName = CalcEntries(copyFile(f, 0, &n))
+	e := permutations.Next(nil)
+	for e != nil {
+		s := e.Val().(*Set)
+		s.T = byDate(s.T)
+		e = permutations.Next(e)
+	}
+	duration = int64(math.Round(time.Since(ti).Seconds()))
 	return
 }
 

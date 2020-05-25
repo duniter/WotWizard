@@ -38,6 +38,7 @@ type (
 		hash Hash // Needed in sandbox: key of identities
 		pubkey Pubkey
 		uid string
+		bnb int32
 		expires_on int64
 	}
 	
@@ -57,6 +58,7 @@ type (
 		from,
 		to Pubkey
 		toHash Hash
+		bnb int32
 		expires_on int64
 	}
 	
@@ -80,6 +82,7 @@ type (
 		Hash Hash // Needed in sandbox: key of identities
 		Pubkey Pubkey
 		Uid string
+		Bnb int32
 		Expires_on int64
 	}
 	
@@ -87,6 +90,7 @@ type (
 		From,
 		To Pubkey
 		ToHash Hash
+		Bnb int32
 		Expires_on int64
 	}
 
@@ -189,13 +193,14 @@ func idHashId (hash Hash) *identity {
 }
 
 // hash -> identity
-func IdHash (hash Hash) (inBC bool, pubkey Pubkey, uid string, expires_on int64, ok bool) {
+func IdHash (hash Hash) (inBC bool, pubkey Pubkey, uid string, bnb int32, expires_on int64, ok bool) {
 	id := idHashId(hash)
 	ok = id != nil
 	if ok {
 		inBC = id.inBC
 		pubkey = id.pubkey
 		uid = id.uid
+		bnb = id.bnb
 		expires_on = id.expires_on
 	}
 	return
@@ -284,11 +289,12 @@ func certC (from Pubkey, toHash Hash) *certification {
 }
 
 // (Pubkey, Hash) -> certification
-func Cert (from Pubkey, toHash Hash) (to Pubkey, expires_on int64, ok bool) {
+func Cert (from Pubkey, toHash Hash) (to Pubkey, bnb int32, expires_on int64, ok bool) {
 	c := certC(from, toHash)
 	ok = c != nil
 	if ok {
 		to = c.to
+		bnb = c.bnb
 		expires_on = c.expires_on
 	}
 	return
@@ -411,18 +417,19 @@ func extractBlockId (buid string) Hash {
 // Scan the membership and the idty tables in the Duniter database and build idHashT, idPubT and idUidT; remove all items which reference a forked block
 func membershipIds (d *Q.DB) {
 	// Membership applications
-	rows, err := d.Query("SELECT m.idtyHash, m.membership, m.issuer, m.userid, m.expires_on FROM membership m INNER JOIN block b ON m.blockHash = b.hash WHERE NOT b.fork ORDER BY m.blockNumber ASC")
+	rows, err := d.Query("SELECT m.idtyHash, m.membership, m.issuer, m.number, m.userid, m.expires_on FROM membership m INNER JOIN block b ON m.blockHash = b.hash WHERE NOT b.fork ORDER BY m.blockNumber ASC")
 	M.Assert(err == nil, err, 100)
 	tr := A.New()
 	for rows.Next() {
 		var (
 			h Q.NullString
 			inOrOut,
-			pubkey,
+			pubkey string
+			bnb int32
 			uid string
 			expires_on int64
 		)
-		err = rows.Scan(&h, &inOrOut, &pubkey, &uid, &expires_on)
+		err = rows.Scan(&h, &inOrOut, &pubkey, &bnb, &uid, &expires_on)
 		M.Assert(err == nil, err, 101)
 		M.Assert(h.Valid, 102); hash := h.String
 		id := &identity{hash: Hash(hash), expires_on: 0}
@@ -432,6 +439,7 @@ func membershipIds (d *Q.DB) {
 			idH = e.Val().(*idHashE)
 			idH.pubkey = Pubkey(pubkey)
 			idH.uid = uid
+			idH.bnb = bnb
 			idH.expires_on = M.Max64(idH.expires_on, expires_on) // The last one is the good one 
 		} else { M.Assert(inOrOut == "OUT", 103) // Leaving
 			tr.Delete(idH)
@@ -444,7 +452,7 @@ func membershipIds (d *Q.DB) {
 		if p, ok := B.IdHash(idH.hash); ok { // If identity already in BC...
 			if uid, b, _, _, _, exp, ok := B.IdPubComplete(p); ok && !b && exp != BA.Revoked { // ... and if no more member but not revoked
 				M.Assert(uid == idH.uid, 112)
-				id := &identity{inBC: true, hash: idH.hash, pubkey: p, uid: uid, expires_on: M.Min64(M.Abs64(exp), idH.expires_on)}
+				id := &identity{inBC: true, hash: idH.hash, pubkey: p, uid: uid, bnb: idH.bnb, expires_on: M.Min64(M.Abs64(exp), idH.expires_on)}
 				_, b, _ = idHashT.SearchIns(&idHashE{identity: id}); M.Assert(!b, 104)
 			}
 		} else {
@@ -472,7 +480,7 @@ func membershipIds (d *Q.DB) {
 					M.Assert(err == nil, err, 108)
 					if !r {
 						M.Assert(Pubkey(pubkey) == idH.pubkey && uid == idH.uid, 113)
-						id := &identity{inBC: false, hash: idH.hash, pubkey: Pubkey(pubkey), uid: uid, expires_on: M.Min64(idH.expires_on, expires_on)}
+						id := &identity{inBC: false, hash: idH.hash, pubkey: Pubkey(pubkey), uid: uid, bnb: idH.bnb, expires_on: M.Min64(idH.expires_on, expires_on)}
 						_, b, _ := idHashT.SearchIns(&idHashE{identity: id}); M.Assert(!b, 109)
 					}
 				}
@@ -493,7 +501,7 @@ func membershipIds (d *Q.DB) {
 
 // Builds certFromT and certToT from the Duniter database; remove all certifications where block_hash is in a fork
 func certifications (d *Q.DB) {
-	rows, err := d.Query("SELECT [from], [to], target, expires_on FROM cert INNER JOIN block ON cert.block_hash = block.hash WHERE NOT block.fork")
+	rows, err := d.Query("SELECT [from], [to], target, block_number, expires_on FROM cert INNER JOIN block ON cert.block_hash = block.hash WHERE NOT block.fork")
 	M.Assert(err == nil, err, 100)
 	now := B.Now()
 	certFromT = A.New(); certToT = A.New()
@@ -502,9 +510,10 @@ func certifications (d *Q.DB) {
 			f,
 			t,
 			h string
+			bnb int32
 			e Q.NullInt64
 		)
-		err = rows.Scan(&f, &t, &h, &e)
+		err = rows.Scan(&f, &t, &h, &bnb, &e)
 		from := Pubkey(f)
 		to := Pubkey(t)
 		toHash := Hash(h)
@@ -512,7 +521,7 @@ func certifications (d *Q.DB) {
 		_, exp, cInBC := B.Cert(from, to)
 		_, member, hash, _, _, _, inBC := B.IdPubComplete(to)
 		if now <= expires_on && (idHashId(toHash) != nil || inBC && hash == toHash && member) && (!cInBC || expires_on - int64(B.Pars().SigWindow) > exp - int64(B.Pars().SigValidity) + int64(B.Pars().SigReplay)) {
-			c := &certification{from: from, to: to, toHash: toHash, expires_on: expires_on}
+			c := &certification{from: from, to: to, toHash: toHash, bnb: bnb, expires_on: expires_on}
 			var (e *A.Elem; ok bool)
 			
 			if e, ok, _ = certFromT.SearchIns(&certFromE{certification: c}); !ok {
@@ -539,7 +548,7 @@ func export () {
 	var el *A.Elem
 	h, ok := IdNextHash (true, &el)
 	for ok {
-		inBC, p, uid, exp, b := IdHash(h); M.Assert(b, 100)
+		inBC, p, uid, bnb, exp, b := IdHash(h); M.Assert(b, 100)
 		mk.StartObject()
 		mk.PushBoolean(inBC)
 		mk.BuildField("inBC")
@@ -549,6 +558,8 @@ func export () {
 		mk.BuildField("pubkey")
 		mk.PushString(uid)
 		mk.BuildField("uid")
+		mk.PushInteger(int64(bnb))
+		mk.BuildField("bnb")
 		mk.PushInteger(exp)
 		mk.BuildField("expires_on")
 		mk.BuildObject()
@@ -562,7 +573,7 @@ func export () {
 	for ok {
 		from, toHash, ok2 := pos.CertNextPos()
 		for ok2 {
-			to, exp, b := Cert(from, toHash); M.Assert(b, 101)
+			to, bnb, exp, b := Cert(from, toHash); M.Assert(b, 101)
 			mk.StartObject()
 			mk.PushString(string(from))
 			mk.BuildField("from")
@@ -570,6 +581,8 @@ func export () {
 			mk.BuildField("to")
 			mk.PushString(string(toHash))
 			mk.BuildField("toHash")
+			mk.PushInteger(int64(bnb))
+			mk.BuildField("bnb")
 			mk.PushInteger(exp)
 			mk.BuildField("expires_on")
 			mk.BuildObject()
@@ -581,12 +594,13 @@ func export () {
 	mk.BuildField("certifications")
 	mk.BuildObject()
 	f, err := os.Create(sBase); M.Assert(err == nil, err, 102)
-	J.Fprint(f, mk.GetJson())
+	mk.GetJson().Write(f)
 }
 
 func importSb (... interface{}) {
 	sd := new(SandboxData)
-	ok := J.ReadFile(sBase, sd); M.Assert(ok, 100)
+	j := J.ReadFile(sBase); M.Assert(j != nil, 100)
+	J.ApplyTo(j, sd)
 	idUidT = A.New()
 	idPubT = A.New()
 	idHashT = A.New()
@@ -594,7 +608,7 @@ func importSb (... interface{}) {
 	certToT = A.New()
 	if sd.Identities != nil {
 		for _, Id := range sd.Identities {
-			id := identity{inBC: Id.InBC, hash: Id.Hash, pubkey: Id.Pubkey, uid: Id.Uid, expires_on: Id.Expires_on}
+			id := identity{inBC: Id.InBC, hash: Id.Hash, pubkey: Id.Pubkey, uid: Id.Uid, bnb: Id.Bnb, expires_on: Id.Expires_on}
 			_, b, _ := idHashT.SearchIns(&idHashE{identity: &id}); M.Assert(!b, 101)
 			_, b, _ = idUidT.SearchIns(&idUidE{identity: &id}); M.Assert(!b, 102)
 			_, b, _ = idPubT.SearchIns(&idPubE{identity: &id}); M.Assert(!b, 103)
@@ -602,7 +616,7 @@ func importSb (... interface{}) {
 	}
 	if sd.Certifications != nil {
 		for _, C := range sd.Certifications {
-			c := certification{from: C.From, to: C.To, toHash: C.ToHash, expires_on: C.Expires_on}
+			c := certification{from: C.From, to: C.To, toHash: C.ToHash, bnb: C.Bnb, expires_on: C.Expires_on}
 			var (e *A.Elem; b bool)
 			if e, b, _ = certFromT.SearchIns(&certFromE{certification: &c}); !b {
 				e.Val().(*certFromE).list  = A.New()

@@ -17,27 +17,18 @@ import (
 	A	"util/avl"
 	B	"duniter/blockchain"
 	BA	"duniter/basic"
-	G	"duniter/gqlReceiver"
-	J	"util/json"
+	G	"util/graphQL"
+	GQ	"duniter/gqlReceiver"
 	M	"util/misc"
 	U	"util/sets2"
 	
 )
 
-const (
-	
-	sentriesName = "Sentries"
-
-)
-
 type (
-	
-	action struct {
-		output string
-	}
 	
 	uid struct {
 		uid string
+		hash B.Hash
 	}
 
 )
@@ -47,52 +38,35 @@ func (i1 *uid) Compare (i2 A.Comparer) A.Comp {
 	return BA.CompP(i1.uid, ii2.uid)
 }
 
-func list () J.Json {
-	m := J.NewMaker()
-	m.StartObject()
-	m.PushInteger(int64(B.SentryTreshold()))
-	m.BuildField("threshold")
+func sentryTR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	return G.MakeIntValue(B.SentryTreshold())
+} //sentryTR
+
+func sentriesR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	l := G.NewListValue()
 	ids := A.New()
 	var is = new(U.SetIterator)
 	pubkey, ok := B.NextSentry(true, &is)
 	for ok {
 		var b bool
 		id := new(uid)
-		id.uid, b = B.IdPub(pubkey); M.Assert(b, 100)
+		id.uid, _, id.hash, _, _, _, b = B.IdPubComplete(pubkey); M.Assert(b, 100)
 		_, b, _ = ids.SearchIns(id); M.Assert(!b, 101)
 		pubkey, ok = B.NextSentry(false, &is)
 	}
-	m.StartArray()
 	e := ids.Next(nil)
 	for e != nil {
-		m.StartObject()
-		m.PushString(e.Val().(*uid).uid)
-		m.BuildField("name")
-		m.BuildObject()
+		l.Append(GQ.Wrap(e.Val().(*uid).hash))
 		e = ids.Next(e)
 	}
-	m.BuildArray()
-	m.BuildField("sentries")
-	m.PushInteger(int64(B.LastBlock()))
-	m.BuildField("block")
-	m.PushInteger(B.Now())
-	m.BuildField("now")
-	m.BuildObject()
-	return m.GetJson()
-}
+	return l
+} //sentriesR
 
-func (a *action) Name () string {
-	return sentriesName
-}
-
-func (a *action) Activate () {
-	G.Json(list(), a.output)
-}
-
-func do (output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{output: output}
-}
+func fixFieldResolvers (ts G.TypeSystem) {
+	ts.FixFieldResolver("Query", "sentryTreshold", sentryTR)
+	ts.FixFieldResolver("Query", "sentries", sentriesR)
+} //fixFieldResolvers
 
 func init () {
-	G.AddAction(sentriesName, do, G.Arguments{})
-}
+	fixFieldResolvers(GQ.TS())
+} //init

@@ -68,6 +68,14 @@ package alea
 		return min + int64(float64(max - min) * g.Random())
 	}
 	
+	// Generates a new unsigned integer number between min (included) and max (excluded)
+	func (g *Generator) UintRand (min, max uint64) uint64 {
+		if min > max {
+			min, max = max, min
+		}
+		return min + uint64(float64(max - min) * g.Random())
+	}
+	
 	// Generates a new pseudo-random real number x with gaussian (normal) deviates. Probability distribution p(x) = 1 / sqrt(2 * pi) * exp(-x^2 / 2). Box-Muller method.
 	func (g *Generator) GaussRand () float64 {
 		var
@@ -119,6 +127,10 @@ package alea
 	
 	func IntRand (min, max int64) int64 {
 		return gen.IntRand (min, max)
+	}
+	
+	func UintRand (min, max uint64) uint64 {
+		return gen.UintRand (min, max)
 	}
 	
 	func GaussRand () float64 {

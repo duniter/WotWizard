@@ -344,8 +344,16 @@ type (
 	
 	}
 	
-	Compilation struct {	// A compilation
-		Compilationer
+	Compilation interface {
+		Error (pos, line, col int, msg string)
+		Compile (co *Compiler, lockIfError bool) bool
+		LockIfError (lock bool)
+		Lock ()
+		StopCompil ()
+	}
+	
+	compilation struct {	// A compilation
+		comper Compilationer
 		compil *Compiler
 		ensEtatLex,
 		ensEtatCom ensEtatsTab
@@ -374,7 +382,11 @@ type (
 		ReadInt () int32	// Reads next integer in the binary file built by module BabelBabel
 	}
 	
-	Directory struct {	// Compiler factory
+	Directory interface {	// Compiler factory
+		ReadCompiler () *Compiler
+	}
+	
+	directory struct {	// Standard Directory
 		Directorier
 	}
 
@@ -391,9 +403,9 @@ func (o *objetCO) err () bool {
 	return o.errO
 }
 
-func NewCompilation (c Compilationer) *Compilation {
-	comp := new(Compilation)
-	comp.Compilationer = c
+func NewCompilation (c Compilationer) Compilation {
+	comp := new(compilation)
+	comp.comper = c
 	return comp
 }
 
@@ -401,15 +413,19 @@ func NewCompilation (c Compilationer) *Compilation {
 
 // Handling of lexical errors 
 
-func (c *Compilation) erreurLex (n, li, co, p int, r ... rune) {
+func (c *compilation) Error (pos, line, col int, msg string) {
+	c.comper.Error(pos, line, col, msg)
+}
+
+func (c *compilation) erreurLex (n, li, co, p int, r ... rune) {
 	
 	err := func (mes string, r ... rune) {
 		if !c.stopCompil {
-			mes = c.Map(mes)
+			mes = c.comper.Map(mes)
 			if r != nil {
 				mes += " (" + string(r[0]) + ")"
 			}
-			c.Error(p, li, co, mes)
+			c.comper.Error(p, li, co, mes)
 			c.yAErreurI = true
 		}
 	}
@@ -423,11 +439,11 @@ func (c *Compilation) erreurLex (n, li, co, p int, r ... rune) {
 
 // Handling of syntactic errors 
 
-func (c *Compilation) erreurSynt (li, co, p int, s string) {
+func (c *compilation) erreurSynt (li, co, p int, s string) {
 	if !c.stopCompil {
-		s0 := c.Map("Cor")
-		s1 := c.Map("Cexpected")
-		s2 := c.Map("Cread")
+		s0 := c.comper.Map("Cor")
+		s1 := c.comper.Map("Cexpected")
+		s2 := c.comper.Map("Cread")
 		com := c.compil
 		aSy := com.actionSynt[c.pile.etat]
 		b := aSy.actions[aSy.nbT - 1].quoi != erreurS
@@ -473,7 +489,7 @@ func (c *Compilation) erreurSynt (li, co, p int, s string) {
 		}
 		mes = mes + " " + s1
 		//mes = strings.Title(mes)
-		c.Error(p, li, co, mes)
+		c.comper.Error(p, li, co, mes)
 		c.yAErreurI = true
 	}
 }
@@ -483,7 +499,7 @@ func (c *Compilation) erreurSynt (li, co, p int, s string) {
 // Beginning of lexical part 
 
 // DFA which detects ends of lines 
-func (c *Compilation) autoEOL () {
+func (c *compilation) autoEOL () {
 	c.pos++
 	c.colonne++
 	loop:
@@ -515,14 +531,14 @@ func (c *Compilation) autoEOL () {
 	}
 }
 
-func (c *Compilation) initLex () {
+func (c *compilation) initLex () {
 	c.arret = false
-	c.forward = c.Pos()
+	c.forward = c.comper.Pos()
 	c.ligne = 1
 	c.colonne = 0
 	c.pos = 0
 	c.etatEOL = 0
-	c.cCour, c.cLen = c.Read()
+	c.cCour, c.cLen = c.comper.Read()
 	c.autoEOL()
 }
 
@@ -540,18 +556,18 @@ func excl (ens *uint64, i int) {
 
 // Lexical analyzer 
 
-func avance (c *Compilation, err1 *bool) {
+func avance (c *compilation, err1 *bool) {
 	*err1 = false
 	c.arret = c.cCour == EOF1 || c.cCour == EOF2
 	c.forward += c.cLen
 	if !c.arret {
-		c.cCour, c.cLen = c.Read()
+		c.cCour, c.cLen = c.comper.Read()
 		c.autoEOL()
 	}
 	return
 }
 
-func corrige (c *Compilation, lexBegin int, err1 *bool) {
+func corrige (c *compilation, lexBegin int, err1 *bool) {
 	if !c.arret && c.forward == lexBegin {
 		avance(c, err1)
 	}
@@ -598,7 +614,7 @@ func vide (e *ensEtatT) {
 	}
 }
 
-func suit (c *Compilation, ensEtat *ensEtats, depart, prof, position int, ch rune, cL int, stop bool, eL etatsLexT, ensTab ensEtatsTab) bool {
+func suit (c *compilation, ensEtat *ensEtats, depart, prof, position int, ch rune, cL int, stop bool, eL etatsLexT, ensTab ensEtatsTab) bool {
 	b := false
 	arrete := stop
 	etatCour := 0
@@ -643,21 +659,21 @@ func suit (c *Compilation, ensEtat *ensEtats, depart, prof, position int, ch run
 		arrete = ch == EOF1 || ch == EOF2
 		position += cL
 		if !arrete {
-			ch, cL = c.Read()
+			ch, cL = c.comper.Read()
 		}
 	}
 	vide(&ensEtat[etatCour])
 	return b
 }
 
-func complete (c *Compilation, e *ensEtatT, prof, position int, ch rune, cL int, stop bool, eL etatsLexT, ensTab ensEtatsTab) {
+func complete (c *compilation, e *ensEtatT, prof, position int, ch rune, cL int, stop bool, eL etatsLexT, ensTab ensEtatsTab) {
 	i := 0
 	n, ok := valEtat(e, i)
 	for ok {
 		for j := 0; j < eL[n].nbEps; j++ {
 			if !estDans(e, eL[n].transL[j].(*gotoLexT).goTo) && suit(c, &ensTab[prof], eL[n].transL[j].(*gotoLexT).transit, prof, position, ch, cL, stop, eL, ensTab) {
 				if !stop {
-					c.SetPos(position + cL)
+					c.comper.SetPos(position + cL)
 					c.cCour, c.cLen = ch, cL
 				}
 				pousseL(e, eL[n].transL[j].(*gotoLexT).goTo)
@@ -668,7 +684,7 @@ func complete (c *Compilation, e *ensEtatT, prof, position int, ch rune, cL int,
 	}
 }
 
-func tourne (c *Compilation, nT int, eL etatsLexT, ensEtat *ensEtats, ensTab ensEtatsTab, inC bool, err1 *bool) (tok, li, co, p, lexBegin int, err bool) {
+func tourne (c *compilation, nT int, eL etatsLexT, ensEtat *ensEtats, ensTab ensEtatsTab, inC bool, err1 *bool) (tok, li, co, p, lexBegin int, err bool) {
 	var (
 		chE rune
 		cLE int
@@ -750,7 +766,7 @@ func tourne (c *Compilation, nT int, eL etatsLexT, ensEtat *ensEtats, ensTab ens
 				c.forward = lexEnd
 				c.arret = arrE
 				if !arrE {
-					c.SetPos(lexEnd + cLE)
+					c.comper.SetPos(lexEnd + cLE)
 					c.cCour, c.cLen = chE, cLE
 				}
 				c.ligne = liE
@@ -803,7 +819,7 @@ func tourne (c *Compilation, nT int, eL etatsLexT, ensEtat *ensEtats, ensTab ens
 	return
 }
 
-func inComment (c *Compilation, err1 *bool) (tok, lexBegin int) {
+func inComment (c *compilation, err1 *bool) (tok, lexBegin int) {
 	const nbToksCom = 3
 	profComment := 1
 	for {
@@ -823,21 +839,21 @@ func inComment (c *Compilation, err1 *bool) (tok, lexBegin int) {
 	return
 }
 
-func (c *Compilation) lex () (p, li, co int, valStr string, valUt, err bool, tok int) {
+func (c *compilation) lex () (p, li, co int, valStr string, valUt, err bool, tok int) {
 	err1 := false
 	tok, li, co, p, lexBegin, err := tourne(c, c.compil.nbToksLex, c.compil.etatsLex, &c.ensEtatLex[0], c.ensEtatLex, false, &err1)
 	if c.compil.toksLex[tok].valUt {
 		valUt = true
 		lVal := c.forward - lexBegin
-		c.SetPos(lexBegin)
+		c.comper.SetPos(lexBegin)
 		valStr = ""
 		var (ch rune; cL int)
 		for j := 0; j < lVal; j += cL {
-			ch, cL = c.Read()
+			ch, cL = c.comper.Read()
 			valStr += string(ch)
 		}
 		if !c.arret {
-			c.SetPos(c.forward + c.cLen)
+			c.comper.SetPos(c.forward + c.cLen)
 		}
 	} else {
 		valUt = false
@@ -872,7 +888,7 @@ func videPile (pile **pileT) {
 	*pile = nil
 }
 
-func (c *Compilation) initSynt () {
+func (c *compilation) initSynt () {
 	c.pile = &pileT{etat: 0}
 }
 
@@ -901,7 +917,7 @@ func initErr (nbA int) (a ObjectsList) {
 	return
 }
 
-func agit (c *Compilation, o *Object) {
+func agit (c *compilation, o *Object) {
 	loop:
 	for {
 		var (
@@ -944,7 +960,7 @@ func agit (c *Compilation, o *Object) {
 				)
 				ok := !c.yAErreurE
 				if ok {
-					obj, a, ok = c.Execution(aS.fonc, aS.nbPars, oo.params)
+					obj, a, ok = c.comper.Execution(aS.fonc, aS.nbPars, oo.params)
 				}
 				var oR objetRef
 				if obj != nil {
@@ -974,7 +990,7 @@ func agit (c *Compilation, o *Object) {
 	}
 }
 
-func (c *Compilation) execute (nSynt int, gauche ObjectsList) {
+func (c *compilation) execute (nSynt int, gauche ObjectsList) {
 	
 	trouve := func (prof int) ObjectsList {
 		if prof == 0 {
@@ -1046,7 +1062,7 @@ func (c *Compilation) execute (nSynt int, gauche ObjectsList) {
 
 // Parser 
 
-func (c *Compilation) synt () {
+func (c *compilation) synt () {
 	var (
 		
 		com *Compiler
@@ -1196,31 +1212,31 @@ func (c *Compilation) synt () {
 
 // End of syntaxic part
 
-func NewDirectory (d Directorier) *Directory {
-	dir := new(Directory)
+func NewDirectory (d Directorier) Directory {
+	dir := new(directory)
 	dir.Directorier = d
 	return dir
 }
 
-func (d *Directory) readInt () int {
+func (d *directory) readInt () int {
 	return int(d.ReadInt())
 }
 
-func (d *Directory) readByte () int8 {
+func (d *directory) readByte () int8 {
 	return int8(d.ReadInt())
 }
 
-func (d *Directory) readBool () bool {
+func (d *directory) readBool () bool {
 	i := d.ReadInt()
 	if !(i == 0 || i == 1) {panic(0)}
 	return i == 1
 }
 
-func (d *Directory) readChar () rune {
+func (d *directory) readChar () rune {
 	return rune(d.ReadInt())
 }
 
-func (d *Directory) readString () (s string) {
+func (d *directory) readString () (s string) {
 	s = ""
 	c := d.readChar()
 	for c != eOS {
@@ -1232,7 +1248,7 @@ func (d *Directory) readString () (s string) {
 	
 // Reads a compiler, i.e. the binary file built by module BabelBabel. 
 
-func (d *Directory) ReadCompiler () *Compiler {
+func (d *directory) ReadCompiler () *Compiler {
 	
 	lisEtatsRedLex := func  (nE int) (eL etatsLexT) {
 		eL = make(etatsLexT, nE)
@@ -1374,7 +1390,7 @@ func (d *Directory) ReadCompiler () *Compiler {
 	return c
 }
 
-func (c *Compilation) Compile (co *Compiler, lockIfError bool) bool {
+func (c *compilation) Compile (co *Compiler, lockIfError bool) bool {
 	
 	// Start of a compilation co is the compiler used (must be loaded before) lockIfError: if true, inhibits the later calls of the Execution method when a lexical or syntactic error has occurred the boolean result indicates whether all is ok or not. 
 	
@@ -1507,20 +1523,20 @@ func (o *Object) ObjTermSon (sonNum int) *Object {
 
 // During a compilation, modifies the value of the lockIfError parameter of the Compile method. 
 
-func (c *Compilation) LockIfError (lock bool) {
+func (c *compilation) LockIfError (lock bool) {
 	c.bSE = lock
 }
 
 // Activates a serious semantic error: hard functions are no more called.
 
-func (c *Compilation) Lock () {
+func (c *compilation) Lock () {
 	c.yAErreurE = true
 	c.yAEuErreur = true
 }
 
 // Stops compilation at once. 
 
-func (c *Compilation) StopCompil () {
+func (c *compilation) StopCompil () {
 	c.Lock()
 	c.stopCompil = true
 }

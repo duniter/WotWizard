@@ -20,9 +20,6 @@ import (
 	B	"duniter/blockchain"
 	BA	"duniter/basic"
 	C	"duniter/centralities"
-	G	"duniter/gqlReceiver"
-	H	"duniter/history"
-	J	"util/json"
 	M	"util/misc"
 	S	"duniter/sandbox"
 		"strings"
@@ -32,43 +29,23 @@ import (
 
 const (
 	
-	findName = "IdSearchFind";
-	fixName = "IdSearchFix";
-	
-	findHintName = "Hint"
-	findOldName = "OldMembers"
-	findMemName = "Members"
-	findFutName = "FutureMembers"
-	
-	fixHashName = "Hash"
-	fixDistName = "Distance"
-	fixQualName = "Quality"
-	fixCentrName = "Centrality"
-	
-	findA = iota
-	fixA
+	Revoked = iota
+	Missing
+	Member
+	Newcomer
 
 )
 
 type (
 	
-	action struct {
-		what int
-		output,
-		hint string
-		hash B.Hash
-		b1, b2, b3 bool
-	}
+	StatusList []int
 	
-	idET struct {
+	IdET struct {
 		uid string
-		hash B.Hash
+		Hash B.Hash
+		Status int
 		limit int64
-		future,
-		active bool
 	}
-	
-	certifiersT []B.Pubkey
 	
 	expSort struct {
 		exp []int64
@@ -78,155 +55,162 @@ type (
 
 func (e *expSort) Less (i, j int) bool {
 	return e.exp[i] < e.exp[j]
-}
+} //Less
 
 func (e *expSort) Swap (i, j int) {
 	exp := e.exp[i]; e.exp[i] = e.exp[j]; e.exp[j] = exp
-}
+} //Swap
 
-func (i1 *idET) Compare (i2 A.Comparer) A.Comp {
-	ii2 := i2.(*idET)
+func (i1 *IdET) Compare (i2 A.Comparer) A.Comp {
+	ii2 := i2.(*IdET)
 	b := BA.CompP(i1.uid, ii2.uid)
 	if b != A.Eq {
 		return b
 	}
-	if i1.future && !ii2.future {
+	if i1.Status == Newcomer && ii2.Status != Newcomer {
 		return A.Lt
 	}
-	if !i1.future && ii2.future {
+	if i1.Status != Newcomer && ii2.Status == Newcomer {
 		return A.Gt
 	}
-	if i1.hash < ii2.hash {
+	if i1.Hash < ii2.Hash {
 		return A.Lt
 	}
-	if i1.hash > ii2.hash {
+	if i1.Hash > ii2.Hash {
 		return A.Gt
 	}
 	return A.Eq
-}
+} //Compare
 
-func doFind (hint string, old, mem, fut bool) J.Json {
-	t := A.New()
-	set := A.New()
+func getStatus (inBC, active bool, exp int64) (status int) {
+	if active {
+		status = Member
+	} else if exp == BA.Revoked {
+		status = Revoked
+	} else if inBC {
+		status = Missing
+	} else {
+		status = Newcomer
+	}
+	return
+} //getStatus
+
+func Find (hint string, sl StatusList) (nR, nM, nA, nF int, ids *A.Tree) { //IdET
+	
+	getFlags := func (sl StatusList) M.Set {
+		set := M.MakeSet()
+		for _, s := range sl {
+			set = M.Add(set, s)
+		}
+		return set
+	} //getFlags
+	
+	incNbs :=func (status int, nR, nM, nA, nF *int) {
+		switch status {
+		case Revoked:
+			*nR++
+		case Missing:
+			*nM++
+		case Member:
+			*nA++
+		case Newcomer:
+			*nF++
+		}
+	} //incNbs
+	
+	//Find
+	asked := getFlags(sl)
+	ids = A.New() //IdET
+	set := A.New() //IdET
 	hintD := BA.ToDown(hint)
 	ir := B.IdPosUid(hintD)
-	nO := 0; nA := 0
-	uid, ok := B.IdNextUid(false, &ir)
-	for ok {
-		ok = BA.Prefix(hintD, BA.ToDown(uid))
-		var (active bool; hash B.Hash)
+	nR = 0; nM = 0; nA = 0; nF = 0
+	uid, okL := B.IdNextUid(false, &ir)
+	for okL {
+		ok := BA.Prefix(hintD, BA.ToDown(uid))
+		var (active bool; hash B.Hash; exp int64)
 		if ok {
-			_, active, hash, _, _, _, ok = B.IdUidComplete(uid)
-		}
-		if ok {
-			_, b, _ := set.SearchIns(&idET{uid: uid, hash: hash}); M.Assert(!b, 100)
-			if active {
-				nA++
-			} else {
-				nO++
+			_, active, hash, _, _, exp, ok = B.IdUidComplete(uid); M.Assert(ok, 100)
+			_, b, _ := set.SearchIns(&IdET{uid: uid, Hash: hash}); M.Assert(!b, 101)
+			status := getStatus(true, active, exp)
+			incNbs(status, &nR, &nM, &nA, &nF)
+			if M.In(status, asked) {
+				_, b, _ := ids.SearchIns(&IdET{uid: uid, Hash: hash, Status: status}); M.Assert(!b, 102)
 			}
-			if (old && !active) || (mem && active) {
-				_, b, _ := t.SearchIns(&idET{uid: uid, hash: hash, future: false, active: active}); M.Assert(!b, 101)
-			}
-			uid, ok = B.IdNextUid(false, &ir)
 		}
+		uid, okL = B.IdNextUid(false, &ir)
 	}
 	if len(hint) <= B.PubkeyLen {
 		ir := B.IdPosPubkey(B.Pubkey(hint))
-		p, ok := B.IdNextPubkey(false, &ir)
-		for ok {
-			ok = strings.Index(string(p), hint) == 0
-			var (uid string; active bool; hash B.Hash)
+		p, okL := B.IdNextPubkey(false, &ir)
+		for okL {
+			ok := strings.Index(string(p), hint) == 0
+			var (uid string; active bool; hash B.Hash; exp int64)
 			if ok {
-				uid, active, hash, _, _, _, ok = B.IdPubComplete(p)
-			}
-			if ok {
-				idE := &idET{uid: uid, hash: hash, future: false, active: active}
-				if _, b, _ := set.Search(idE); !b {
-					if active {
-						nA++
-					} else {
-						nO++
-					}
+				uid, active, hash, _, _, exp, ok = B.IdPubComplete(p); M.Assert(ok, 103)
+				status := getStatus(true, active, exp)
+				if _, b, _ := set.Search(&IdET{uid: uid, Hash: hash}); !b {
+					incNbs(status, &nR, &nM, &nA, &nF)
 				}
-				if old && !active || mem && active {
-					t.SearchIns(idE)
+				if M.In(status, asked) {
+					ids.SearchIns(&IdET{uid: uid, Hash: hash, Status: status})
 				}
-				p, ok = B.IdNextPubkey(false, &ir)
 			}
+			p, okL = B.IdNextPubkey(false, &ir)
 		}
 	}
-	nF := 0
 	el := S.IdPosUid(hintD)
-	uid, hash, ok := S.IdNextUid(false, &el)
-	for ok {
-		ok = BA.Prefix(hintD, BA.ToDown(uid))
+	uid, hash, okL := S.IdNextUid(false, &el)
+	for okL {
+		ok := BA.Prefix(hintD, BA.ToDown(uid))
 		if ok {
-			set.SearchIns(&idET{uid: uid, hash: hash})
-			nF++
-			if fut {
-				_, b, _ := t.SearchIns(&idET{uid: uid, hash: hash, future: true, active: false}); M.Assert(!b, 103)
+			set.SearchIns(&IdET{uid: uid, Hash: hash})
+			_, inBC := B.IdHash(hash)
+			active := inBC
+			if active {
+				_, active, _, _, _, _, ok = B.IdUidComplete(uid); M.Assert(ok, 104)
 			}
-			uid, hash, ok = S.IdNextUid(false, &el)
+			status := getStatus(inBC, active, 0)
+			if !inBC {
+				incNbs(status, &nR, &nM, &nA, &nF)
+			}
+			if M.In(status, asked) {
+				ids.SearchIns(&IdET{uid: uid, Hash: hash, Status: status})
+			}
 		}
+		uid, hash, okL = S.IdNextUid(false, &el)
 	}
 	if len(hint) <= B.PubkeyLen {
 		el := S.IdPosPubkey(B.Pubkey(hint))
-		p, hash, ok := S.IdNextPubkey(false, &el)
-		for ok {
-			ok = strings.Index(string(p), hint) == 0
-			var uid string
+		p, hash, okL := S.IdNextPubkey(false, &el)
+		for okL {
+			ok := strings.Index(string(p), hint) == 0
 			if ok {
-				_, _, uid, _, ok = S.IdHash(hash)
-			}
-			if ok  {
-				idE := &idET{uid: uid, hash: hash, future: true, active: false}
-				if _, b, _ := set.Search(idE); !b {
-					nF++
+				_, inBC := B.IdHash(hash)
+				active := inBC
+				if active {
+					_, active, _, _, _, _, ok = B.IdPubComplete(p); M.Assert(ok, 105)
 				}
-				if fut {
-					t.SearchIns(idE)
+				status := getStatus(inBC, active, 0)
+				var uid string
+				_, _, uid, _, _, ok = S.IdHash(hash); M.Assert(ok, 106)
+				if _, b, _ := set.Search(&IdET{uid: uid, Hash: hash}); !b {
+					incNbs(status, &nR, &nM, &nA, &nF)
 				}
-				p, hash, ok = S.IdNextPubkey(false, &el)
+				if M.In(status, asked) {
+					ids.SearchIns(&IdET{uid: uid, Hash: hash, Status: status})
+				}
 			}
+			p, hash, okL = S.IdNextPubkey(false, &el)
 		}
 	}
-	mk := J.NewMaker()
-	mk.StartObject()
-	mk.PushInteger(int64(nO))
-	mk.BuildField("nb_old")
-	mk.PushInteger(int64(nA))
-	mk.BuildField("nb_member")
-	mk.PushInteger(int64(nF))
-	mk.BuildField("nb_future")
-	mk.StartArray()
-	e := t.Next(nil)
-	for e != nil {
-		idE := e.Val().(*idET)
-		mk.StartObject()
-		mk.PushString(idE.uid)
-		mk.BuildField("uid")
-		mk.PushString(string(idE.hash))
-		mk.BuildField("hash")
-		mk.PushBoolean(idE.future)
-		mk.BuildField("future")
-		mk.PushBoolean(idE.active)
-		mk.BuildField("active")
-		mk.BuildObject()
-		e = t.Next(e)
-	}
-	mk.BuildArray()
-	mk.BuildField("ids")
-	mk.BuildObject()
-	return mk.GetJson()
-}
+	return
+} //Find
 
-func certs (mk *J.Maker, h S.Hash, pubkey B.Pubkey, inBC bool) (certifiers certifiersT) {
-	mk.StartObject()
-	mk.StartObject()
-	t := A.New()
-	sentNb := 0
-	sentFNb := 0
+func SentCerts (h S.Hash, pubkey B.Pubkey, inBC bool) (sentNb, sentFNb int, certified *A.Tree) { //*IdET
+	certified = A.New()
+	sentNb = 0
+	sentFNb = 0
 	var posB B.CertPos
 	if inBC {
 		okB := B.CertFrom(pubkey, &posB)
@@ -238,18 +222,18 @@ func certs (mk *J.Maker, h S.Hash, pubkey B.Pubkey, inBC bool) (certifiers certi
 		if okS {
 			sentFNb = posS.CertPosLen()
 		}
-		var (from, to B.Pubkey)
+		var from, to B.Pubkey
 		if okB {
 			from, to, okB = posB.CertNextPos()
 		}
 		for okB {
-			idE := new(idET)
+			idE := new(IdET)
 			uid, _, hash, _, _, _, b := B.IdPubComplete(to); M.Assert(b, 100)
 			idE.uid = uid
-			idE.hash = hash
-			idE.future = false
+			idE.Hash = hash
+			idE.Status = Member // Status of the certification (Newcomer or Member)
 			_, idE.limit, b = B.Cert(from, to); M.Assert(b, 101)
-			_, b, _ = t.SearchIns(idE); M.Assert(!b, 102)
+			_, b, _ = certified.SearchIns(idE); M.Assert(!b, 102)
 			from, to, okB = posB.CertNextPos()
 		}
 		var toH B.Hash
@@ -257,67 +241,33 @@ func certs (mk *J.Maker, h S.Hash, pubkey B.Pubkey, inBC bool) (certifiers certi
 			from, toH, okS = posS.CertNextPos()
 		}
 		for okS {
-			idE := new(idET)
-			idE.hash = toH
+			idE := new(IdET)
+			idE.Hash = toH
 			var b bool
-			to, idE.limit, b = S.Cert(from, toH)
+			to, _, idE.limit, b = S.Cert(from, toH)
 			if b {
 				idE.uid, b = B.IdPub(to)
 				if !b {
-					_, _, idE.uid, _, b = S.IdHash(toH)
+					_, _, idE.uid, _, _, b = S.IdHash(toH)
 				}
 			}
 			M.Assert(b, 103)
-			idE.future = true
-			_, b, _ = t.SearchIns(idE); M.Assert(!b, 104)
+			idE.Status = Newcomer
+			certified.SearchIns(idE)
 			from, toH, okS = posS.CertNextPos()
 		}
 	}
-	mk.PushInteger(int64(sentNb))
-	mk.BuildField("nb_member")
-	mk.PushInteger(int64(sentFNb))
-	mk.BuildField("nb_future")
-	mk.StartArray()
-	e := t.Next(nil)
-	for e != nil {
-		idE := e.Val().(*idET)
-		mk.StartObject()
-		mk.PushString(idE.uid);
-		mk.BuildField("uid");
-		mk.PushInteger(idE.limit);
-		mk.BuildField("limit");
-		mk.PushBoolean(idE.future);
-		mk.BuildField("future");
-		mk.BuildObject()
-		e = t.Next(e)
-	}
-	mk.BuildArray()
-	mk.BuildField("partners")
-	mk.StartArray()
-	if inBC {
-		uid, b := B.IdPub(pubkey); M.Assert(b, 105)
-		cert := B.AllCertified(uid)
-		if cert != nil {
-			for _, c := range cert {
-				mk.StartObject()
-				mk.PushString(c)
-				mk.BuildField("cert")
-				mk.BuildObject()
-			}
-		}
-	}
-	mk.BuildArray()
-	mk.BuildField("all_partners")
-	mk.BuildObject()
-	mk.BuildField("sent_certs")
-	
-	mk.StartObject()
-	t = A.New()
+	return
+} //SentCerts
+
+func RecCerts (h S.Hash, pubkey B.Pubkey, inBC bool) (recNb, recFNb int, rCertsLimit int64, certifiers *A.Tree, certifiersA B.PubkeysT) { //*IdET
+	certifiers = A.New()
+	var posB B.CertPos
 	okB := inBC
 	if okB {
 		okB = B.CertTo(pubkey, &posB)
 	}
-	recNb := 0
+	recNb = 0
 	if okB {
 		recNb = posB.CertPosLen()
 	}
@@ -330,11 +280,11 @@ func certs (mk *J.Maker, h S.Hash, pubkey B.Pubkey, inBC bool) (certifiers certi
 	} else {
 		okS = S.CertTo(h, &posS)
 	}
-	recFNb := 0
+	recFNb = 0
 	if okS {
 		recFNb = posS.CertPosLen() // À corriger : Enlever les émetteurs qui ne sont plus membres
 	}
-	certifiers = make(certifiersT, recNb + recFNb)
+	certifiersA = make(B.PubkeysT, recNb + recFNb)
 	var (es expSort; ts = sort.TS{Sorter: &es})
 	if recNb >= int(B.Pars().SigQty) {
 		es.exp = make([]int64, recNb);
@@ -347,17 +297,17 @@ func certs (mk *J.Maker, h S.Hash, pubkey B.Pubkey, inBC bool) (certifiers certi
 		from, to, okB = posB.CertNextPos()
 	}
 	for okB {
-		certifiers[i] = from
-		idE := new(idET)
+		certifiersA[i] = from
+		idE := new(IdET)
 		uid, _, hash, _, _, _, b := B.IdPubComplete(from); M.Assert(b, 106)
 		idE.uid = uid
-		idE.hash = hash
-		idE.future = false
+		idE.Hash = hash
+		idE.Status = Member
 		_, idE.limit, b = B.Cert(from, to); M.Assert(b, 107)
 		if es.exp != nil {
 			es.exp[i] = idE.limit
 		}
-		_, b, _ = t.SearchIns(idE); M.Assert(!b, 108)
+		_, b, _ = certifiers.SearchIns(idE); M.Assert(!b, 108)
 		i++
 		from, to, okB = posB.CertNextPos()
 	}
@@ -365,81 +315,39 @@ func certs (mk *J.Maker, h S.Hash, pubkey B.Pubkey, inBC bool) (certifiers certi
 		from, toH, okS = posS.CertNextPos()
 	}
 	for okS {
-		certifiers[i] = from // À corriger : vérifier que from est toujours membre et sinon ajouter une croix à côté du rond
+		certifiersA[i] = from // À corriger : vérifier que from est toujours membre et sinon ajouter une croix à côté du rond
 		i++
-		idE := new(idET)
-		var b bool
-		idE.uid, b = B.IdPub(from); M.Assert(b, 109)
-		idE.hash = toH
-		idE.future = true
-		_, idE.limit, b = S.Cert(from, toH, ); M.Assert(b, 110)
-		_, b, _ = t.SearchIns(idE); M.Assert(!b, 111)
+		idE := new(IdET)
+		var (b bool; hash B.Hash)
+		idE.uid, _, hash, _, _, _, b = B.IdPubComplete(from); M.Assert(b, 109)
+		idE.Hash = hash
+		idE.Status = Newcomer
+		_, _, idE.limit, b = S.Cert(from, toH, ); M.Assert(b, 110)
+		_, b, _ = certifiers.SearchIns(idE)
 		from, toH, okS = posS.CertNextPos()
 	}
-	mk.PushInteger(int64(recNb))
-	mk.BuildField("nb_member")
-	mk.PushInteger(int64(recFNb))
-	mk.BuildField("nb_future")
-	mk.StartArray()
-	e = t.Next(nil)
-	for e != nil {
-		idE := e.Val().(*idET)
-		mk.StartObject()
-		mk.PushString(idE.uid);
-		mk.BuildField("uid");
-		mk.PushInteger(idE.limit);
-		mk.BuildField("limit");
-		mk.PushBoolean(idE.future);
-		mk.BuildField("future");
-		mk.BuildObject()
-		e = t.Next(e)
-	}
-	mk.BuildArray()
-	mk.BuildField("partners")
-	mk.StartArray()
-	if inBC {
-		uid, b := B.IdPub(pubkey); M.Assert(b, 112)
-		cert := B.AllCertifiers(uid)
-		if cert != nil {
-			for _, c := range cert {
-				mk.StartObject()
-				mk.PushString(c)
-				mk.BuildField("cert")
-				mk.BuildObject()
-			}
-		}
-	}
-	mk.BuildArray()
-	mk.BuildField("all_partners")
-	mk.BuildObject()
-	mk.BuildField("received_certs")
-	rCertsLimit := int64(- 1)
+	rCertsLimit = int64(- 1)
 	if es.exp != nil {
 		ts.QuickSort(0, recNb - 1)
 		rCertsLimit = es.exp[recNb - int(B.Pars().SigQty)]
 	}
-	mk.PushInteger(rCertsLimit)
-	mk.BuildField("received_certs_limit")
-	mk.BuildObject()
 	return
-}
+} //RecCerts
 
-func get (hash S.Hash) (uid string, pubkey B.Pubkey, block int32, blockDate, limitDate int64, h H.History, inBC, member, ok bool) {
+func Get (hash S.Hash) (uid string, pubkey B.Pubkey, block, application int32, limitDate int64, inBC, member, ok bool) {
 	pubkey, inBC = B.IdHash(hash)
 	ok = false
 	if inBC {
-		uid, member, _, block, _, limitDate, ok = B.IdPubComplete(pubkey); M.Assert(ok, 100);
-		blockDate, _, ok = B.TimeOf(block); M.Assert(ok, 101)
-	} else if _, pubkey, uid, limitDate, ok = S.IdHash(hash); ok {
+		uid, member, _, block, application, limitDate, ok = B.IdPubComplete(pubkey); M.Assert(ok, 100);
+	} else if _, pubkey, uid, _, limitDate, ok = S.IdHash(hash); ok {
 		member = false
 		block = - 1
-		blockDate = - 1
+		application = -1
 	}
-	h = H.BuildHistoryP(pubkey)
 	return
-}
+} //Get
 
-func notTooFar (p B.Pubkey, member bool, certifiers []B.Pubkey) (proportionOfSentries float64, ok bool) {
+func NotTooFar (p B.Pubkey, member bool, certifiers B.PubkeysT) (proportionOfSentries float64, ok bool) {
 	n := 0
 	if certifiers != nil {
 		n = len(certifiers)
@@ -454,7 +362,7 @@ func notTooFar (p B.Pubkey, member bool, certifiers []B.Pubkey) (proportionOfSen
 		ok = false
 		return
 	}
-	certs := make([]B.Pubkey, n)
+	certs := make(B.PubkeysT, n)
 	if member {
 		certs[0] = p
 	}
@@ -467,9 +375,9 @@ func notTooFar (p B.Pubkey, member bool, certifiers []B.Pubkey) (proportionOfSen
 	proportionOfSentries = B.PercentOfSentries(certs)
 	ok = proportionOfSentries >= B.Pars().Xpercent
 	return
-}
+} //NotTooFar
 
-func fixCertNextDate (member bool, p B.Pubkey) (date int64, passed bool) {
+func FixCertNextDate (member bool, p B.Pubkey) (date int64, passed bool) {
 	passed = member
 	if member {
 		date = 0
@@ -489,152 +397,20 @@ func fixCertNextDate (member bool, p B.Pubkey) (date int64, passed bool) {
 		date = - 1
 	}
 	return
-}
+} //FixCertNextDate
 
-func calcQuality (p B.Pubkey) (quality float64) {
+func CalcQuality (p B.Pubkey) (quality float64) {
 	pubs := make(B.PubkeysT, 1)
 	pubs[0] = p
 	quality = B.PercentOfSentries(pubs)
 	return
-}
+} //CalcQuality
 
-func calcCentrality (p B.Pubkey, inBC bool) (centrality float64) {
+func CalcCentrality (p B.Pubkey, inBC bool) (centrality float64) {
 	if inBC {
 		centrality = C.CountOne(p)
 	} else {
 		centrality = 0.
 	}
 	return
-}
-
-func doFix (hash S.Hash, calcDist, calcQual, calcCentr bool) J.Json {
-	mk := J.NewMaker()
-	mk.StartObject()
-	if uid, pubkey, block, blockDate, limitDate, history, inBC, member, ok := get(hash); ok {
-		mk.StartObject()
-		mk.PushString(string(hash))
-		mk.BuildField("hash")
-		mk.PushString(uid)
-		mk.BuildField("uid")
-		mk.PushString(string(pubkey))
-		mk.BuildField("pubkey")
-		mk.PushInteger(int64(block))
-		mk.BuildField("block")
-		mk.PushInteger(blockDate)
-		mk.BuildField("blockDate")
-		mk.PushInteger(limitDate)
-		mk.BuildField("limitDate")
-		mk.PushBoolean(member)
-		mk.BuildField("member")
-		sentry := member && B.IsSentry(pubkey)
-		mk.PushBoolean(sentry)
-		mk.BuildField("sentry")
-		availability, passed := fixCertNextDate(member, pubkey)
-		mk.PushInteger(availability)
-		mk.BuildField("availability")
-		mk.PushBoolean(passed)
-		mk.BuildField("passed")
-		in := true
-		mk.StartArray()
-		for _, ev := range history {
-			mk.StartObject()
-			mk.PushBoolean(in)
-			in = !in
-			mk.BuildField("in")
-			mk.PushInteger(int64(ev.Block))
-			mk.BuildField("block")
-			mk.PushInteger(ev.Date)
-			mk.BuildField("date")
-			mk.BuildObject()
-		}
-		mk.BuildArray()
-		mk.BuildField("history")
-		certifiers := certs(mk, hash, pubkey, inBC)
-		mk.BuildField("certifications")
-		if calcDist {
-			distance, distanceOK := notTooFar(pubkey, member, certifiers)
-			mk.PushFloat(distance)
-			mk.PushBoolean(distanceOK)
-		} else {
-			mk.PushFloat(0)
-			mk.PushBoolean(false)
-		}
-		mk.Swap()
-		mk.BuildField("distance")
-		mk.Swap()
-		mk.BuildField("distance_ok")
-		if calcQual {
-			mk.PushFloat(calcQuality(pubkey))
-		} else {
-			mk.PushFloat(0.)
-		}
-		mk.BuildField("quality")
-		if calcCentr {
-			mk.PushFloat(calcCentrality(pubkey, inBC))
-		} else {
-			mk.PushFloat(0.)
-		}
-		mk.BuildField("centrality")
-		mk.BuildObject()
-	} else {
-		mk.PushNull()
-	}
-	mk.BuildField("res")
-	mk.BuildObject()
-	return mk.GetJson()
-}
-
-func (a *action) Name () string {
-	var s string
-	switch a.what {
-	case findA:
-		s = findName
-	case fixA:
-		s = fixName
-	}
-	return s
-}
-
-func (a *action) Activate () {
-	switch a.what {
-	case findA:
-		G.Json(doFind(a.hint, a.b1, a.b2, a.b3), a.output)
-	case fixA:
-		G.Json(doFix(a.hash, a.b1, a.b2, a.b3), a.output)
-	}
-}
-
-func find (hint, output string, newAction chan<- B.Actioner, fields ...string) {
-	a := &action{what: findA, output: output, hint: hint, b1: false, b2: false, b3: false}
-	for _, f := range fields {
-		switch f {
-		case findOldName:
-			a.b1 = true
-		case findMemName:
-			a.b2 = true
-		case findFutName:
-			a.b3 = true
-		}
-	}
-	newAction <- a
-}
-
-func fix (hash string, output string, newAction chan<- B.Actioner, fields ...string) {
-	a := &action{what: fixA, output: output, hash: B.Hash(hash), b1: false, b2: false, b3: false}
-	for _, f := range fields {
-		switch f {
-		case fixDistName:
-			a.b1 = true
-		case fixQualName:
-			a.b2 = true
-		case fixCentrName:
-			a.b3 = true
-		}
-	}
-	newAction <- a
-}
-
-func init () {
-	G.AddAction(findName, find, G.Arguments{findHintName})
-	G.AddAction(fixName, fix, G.Arguments{fixHashName})
-}
+} //CalcCentrality

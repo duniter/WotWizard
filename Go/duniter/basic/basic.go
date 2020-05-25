@@ -199,6 +199,7 @@ func setLog () {
 	M.SetLog(Lg)
 }
 
+// À vérifier : Est-ce que l'option -du fonctionne bien ?
 func setDuniterPath () {
 	
 	storeDuniBase := func (du string) {

@@ -14,33 +14,20 @@ package certifications
 
 import (
 	
+	A	"util/avl"
 	B	"duniter/blockchain"
-	BA	"duniter/basic"
-	BT	"util/gbTree"
-	G	"duniter/gqlReceiver"
-	J	"util/json"
+	G	"util/graphQL"
+	GQ	"duniter/gqlReceiver"
 	M	"util/misc"
-	S	"util/sort"
-		"math"
+	S	"duniter/sandbox"
+	/*
+	"fmt"
+	*/
 
 )
 
-const (
-	
-	fromName = "CertificationsFrom"
-	toName = "CertificationsTo"
-	
-	fromAction = iota
-	toAction
-
-)
-
+/*
 type (
-	
-	action struct {
-		what int
-		output string
-	}
 	
 	dist = []int
 	
@@ -91,181 +78,127 @@ func moments (d dist) (mean, sDev float64, nb, median int) {
 	}
 	return
 }
+*/
 
-func listMoments (d dist, m *J.Maker) {
-	mean, sDev, nb, median := moments(d)
-	m.StartObject()
-	m.PushInteger(int64(nb))
-	m.BuildField("number")
-	m.PushFloat(mean)
-	m.BuildField("mean")
-	m.PushInteger(int64(median))
-	m.BuildField("median")
-	m.PushFloat(sDev)
-	m.BuildField("standard_deviation")
-	m.StartArray()
-	for i := 0; i < len(d); i++ {
-		m.PushInteger(int64(d[i]))
+func rCertsCertsR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch list := GQ.Unwrap(rootValue, 0).(type) {
+	case *G.ListValue:
+		return list
+	default:
+		M.Halt(list, 100)
+		return nil
 	}
-	m.BuildArray()
-	m.BuildField("distribution")
-	m.BuildObject()
-	m.BuildField("statistics")
-}
+} //rCertsCertsR
 
-func listFrom () J.Json {
-	var (r *BT.IndexReader; pos B.CertPos)
-	m := 0
-	ok := B.CertNextFrom(true, &pos, &r)
-	for ok {
-		m = M.Max(m, pos.CertPosLen())
-		ok = B.CertNextFrom(false, &pos, &r)
-	}
-	d := make(dist, m + 1)
-	var (cs certSort; ts = S.TS{Sorter: &cs}; block int32)
-	mk := J.NewMaker()
-	mk.StartObject()
-	mk.StartArray()
-	uid, ok := B.IdNextUid(true, &r)
-	for ok {
-		from, b := B.IdUid(uid); M.Assert(b, 100)
-		q := 0
-		mk.StartObject()
-		mk.PushString(uid)
-		mk.BuildField("from")
-		if B.CertFrom(from, &pos) {
-			cs.c = make(certifs, pos.CertPosLen())
-			_, to, okP := pos.CertNextPos()
-			for okP {
-				block, cs.c[q].exp, b = B.Cert(from, to); M.Assert(b, 101)
-				cs.c[q].id, b = B.IdPub(to); M.Assert(b, 102)
-				cs.c[q].created, _, _ = B.TimeOf(block)
-				q++
-				_, to, okP = pos.CertNextPos()
-			}
+func rCertsLimitR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch limit := GQ.Unwrap(rootValue, 1).(type) {
+	case int64:
+		if limit < 0 {
+			return G.MakeNullValue()
 		}
-		d[q]++
-		mk.StartArray()
-		if q > 0 {
-			ts.QuickSort(0, q - 1)
-			for q := 0; q < len(cs.c); q++ {
-				mk.StartObject()
-				mk.PushString(cs.c[q].id)
-				mk.BuildField("uid")
-				mk.PushInteger(cs.c[q].created)
-				mk.BuildField("created")
-				mk.PushInteger(cs.c[q].exp)
-				mk.BuildField("expired")
-				mk.BuildObject()
-			}
-		}
-		mk.BuildArray()
-		mk.BuildField("to")
-		mk.BuildObject()
-		uid, ok = B.IdNextUid(false, &r)
+		return G.MakeInt64Value(limit)
+	default:
+		M.Halt(limit, 100)
+		return nil
 	}
-	mk.BuildArray()
-	mk.BuildField("data")
-	listMoments(d, mk)
-	mk.PushInteger(int64(B.LastBlock()))
-	mk.BuildField("block")
-	mk.PushInteger(B.Now());
-	mk.BuildField("now");
-	mk.BuildObject()
-	return mk.GetJson()
-}
+} //rCertsLimitR
 
-func listTo () J.Json {
-	var (r *BT.IndexReader; pos B.CertPos)
-	m := 0;
-	ok := B.CertNextTo(true, &pos, &r)
-	for ok {
-		m = M.Max(m, pos.CertPosLen())
-		ok = B.CertNextTo(false, &pos, &r)
+func certFromR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch from := GQ.Unwrap(rootValue, 0).(type) {
+	case B.Hash:
+		return GQ.Wrap(from)
+	default:
+		M.Halt(from, 100)
+		return nil
 	}
-	d := make(dist, m + 1)
-	var (cs certSort; ts = S.TS{Sorter: &cs}; block int32)
-	mk := J.NewMaker()
-	mk.StartObject()
-	mk.StartArray()
-	uid, ok := B.IdNextUid(true, &r)
-	for ok {
-		to, b := B.IdUid(uid); M.Assert(b, 100)
-		q := 0;
-		mk.StartObject()
-		mk.PushString(uid)
-		mk.BuildField("to")
-		if B.CertTo(to, &pos) {
-			cs.c = make(certifs, pos.CertPosLen())
-			from, _, okP := pos.CertNextPos()
-			for okP {
-				block, cs.c[q].exp, b = B.Cert(from, to); M.Assert(b, 101)
-				cs.c[q].id, b = B.IdPub(from); M.Assert(b, 102)
-				cs.c[q].created, _, _ = B.TimeOf(block)
-				q++
-				from, _, okP = pos.CertNextPos()
-			}
-		}
-		d[q]++
-		mk.StartArray()
-		if q > 0 {
-			ts.QuickSort(0, q - 1);
-			for q := 0; q < len(cs.c); q++ {
-				mk.StartObject()
-				mk.PushString(cs.c[q].id)
-				mk.BuildField("uid")
-				mk.PushInteger(cs.c[q].created)
-				mk.BuildField("created")
-				mk.PushInteger(cs.c[q].exp)
-				mk.BuildField("expired")
-				mk.BuildObject()
-			}
-		}
-		mk.BuildArray()
-		mk.BuildField("from")
-		mk.BuildObject()
-		uid, ok = B.IdNextUid(false, &r)
+} //certFromR
+
+func certToR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch to := GQ.Unwrap(rootValue, 1).(type) {
+	case B.Hash:
+		return GQ.Wrap(to)
+	default:
+		M.Halt(to, 100)
+		return nil
 	}
-	mk.BuildArray()
-	mk.BuildField("data")
-	listMoments(d, mk)
-	mk.PushInteger(int64(B.LastBlock()))
-	mk.BuildField("block")
-	mk.PushInteger(B.Now());
-	mk.BuildField("now");
-	mk.BuildObject()
-	return mk.GetJson()
-}
+} //certToR
 
-func (a *action) Name () string {
-	var s string
-	switch a.what {
-	case fromAction:
-		s = fromName
-	case toAction:
-		s = toName
+func certPendingR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch pending := GQ.Unwrap(rootValue, 2).(type) {
+	case bool:
+		return G.MakeBooleanValue(pending)
+	default:
+		M.Halt(pending, 100)
+		return nil
 	}
-	return s
-}
+} //certPendingR
 
-func (a *action) Activate () {
-	switch a.what {
-	case fromAction:
-		G.Json(listFrom(), a.output)
-	case toAction:
-		G.Json(listTo(), a.output)
+func certBlockR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	var (from, to B.Pubkey; toH B.Hash; idInBC bool)
+	switch hash := GQ.Unwrap(rootValue, 0).(type) {
+	case B.Hash:
+		from, idInBC = B.IdHash(hash); M.Assert(idInBC, 100)
+	default:
+		M.Halt(hash, 100)
+		return nil
 	}
-}
+	switch hash := GQ.Unwrap(rootValue, 1).(type) {
+	case B.Hash:
+		toH = hash
+		to, idInBC = B.IdHash(hash)
+	default:
+		M.Halt(hash, 100)
+		return nil
+	}
+	var block int32
+	ok := false
+	if idInBC {
+		block, _, ok = B.Cert(from, to)
+	}
+	if !ok {
+		_, block, _, ok = S.Cert(from, toH); M.Assert(ok, 103)
+	}
+	return GQ.Wrap(block)
+} //certBlockR
 
-func from (output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: fromAction, output: output}
-}
+func certExpR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	var (from, to B.Pubkey; toH B.Hash; idInBC bool)
+	switch hash := GQ.Unwrap(rootValue, 0).(type) {
+	case B.Hash:
+		from, idInBC = B.IdHash(hash); M.Assert(idInBC, 100)
+	default:
+		M.Halt(hash, 100)
+		return nil
+	}
+	switch hash := GQ.Unwrap(rootValue, 1).(type) {
+	case B.Hash:
+		toH = hash
+		to, idInBC = B.IdHash(hash)
+	default:
+		M.Halt(hash, 100)
+		return nil
+	}
+	var exp int64
+	ok := false
+	if idInBC {
+		_, exp, ok = B.Cert(from, to)
+	}
+	if !ok {
+		_, _, exp, ok = S.Cert(from, toH); M.Assert(ok, 103)
+	}
+	return G.MakeInt64Value(exp)
+} //certExpR
 
-func to (output string, newAction chan<- B.Actioner, fields ...string) {
-	newAction <- &action{what: toAction, output: output}
-}
+func fixFieldResolvers (ts G.TypeSystem) {
+	ts.FixFieldResolver("Received_Certifications", "certifications", rCertsCertsR)
+	ts.FixFieldResolver("Received_Certifications", "limit", rCertsLimitR)
+	ts.FixFieldResolver("Certification", "from", certFromR)
+	ts.FixFieldResolver("Certification", "to", certToR)
+	ts.FixFieldResolver("Certification", "pending", certPendingR)
+	ts.FixFieldResolver("Certification", "block", certBlockR)
+	ts.FixFieldResolver("Certification", "expires_on", certExpR)
+} //fixFieldResolvers
 
 func init () {
-	G.AddAction(fromName, from, G.Arguments{})
-	G.AddAction(toName, to, G.Arguments{})
-}
+	fixFieldResolvers(GQ.TS())
+} //init

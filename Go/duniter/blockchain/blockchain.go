@@ -42,11 +42,14 @@ const (
 	driver = "sqlite3";
 	
 	syncName = "updating.txt";
-	syncDelay = 15 * time.Second
+	syncDelay = 15 * time.Second // Waiting time of Duniter after its creation of syncName
 	verifyPeriod = 2 * time.Second // Minimum delay between two verifications of the presence of syncName
-	checkPeriod = 200 * time.Millisecond
-	secureDelay = 2 * time.Second
-	addDelay = 5 * time.Second
+	/*
+	checkPeriod = 200 * time.Millisecond // Delay between two verifications of the end of update
+	*/
+	checkPeriod = 2 * time.Second // Delay between two verifications of the end of update
+	secureDelay = 2 * time.Second // Security delay before the end of syncDelay
+	addDelay = 5 * time.Second // Increment of syncDelay when approching the end and update is not finished
 	
 	// Default path to the Duniter database
 	duniBaseDef = "$HOME/.config/duniter/duniter_default/wotwizard-export.db"
@@ -261,6 +264,8 @@ const (
 
 type (
 	
+	Position = B.IndexReader
+	
 	// Chained list of the operations to be undone before every update
 	undoListT struct {
 		dataType byte
@@ -314,8 +319,8 @@ type (
 		uid string
 		member bool
 		hash Hash
-		block_number int32 // Where the identity is written
-		application, // Date of last membership application (joiners, actives, leavers)
+		block_number, // Where the identity is written
+		application int32 // block of last membership application (joiners, actives, leavers)
 		expires_on int64
 		certifiers, // Index of all certifiers uid, old or present, of this identity ; B.String -> nothing
 		certified B.FilePos // Index of all uid, old or present, certified by this identity ; B.String -> nothing
@@ -410,7 +415,7 @@ type (
 	}
 	
 	CertPos struct {
-		posT *B.IndexReader
+		posT *Position
 	}
 	
 	// member, members, membersFind: Distance Rule
@@ -469,6 +474,7 @@ var (
 	lg = BA.Lg
 	
 	pars Parameters // Duniter parameters
+	parsJ J.Json
 	
 	mutex = new(sync.RWMutex)
 	mutexCmds = new(sync.RWMutex)
@@ -628,7 +634,7 @@ func (id *identity) Read (r *B.Reader) {
 	id.member = r.InBool()
 	id.hash = Hash(r.InString())
 	id.block_number = r.InInt32()
-	id.application = r.InInt64()
+	id.application = r.InInt32()
 	id.expires_on = r.InInt64()
 	id.certifiers = r.InFilePos()
 	id.certified = r.InFilePos()
@@ -641,7 +647,7 @@ func (id *identity) Write (w *B.Writer) {
 	w.OutBool(id.member)
 	w.OutString(string(id.hash))
 	w.OutInt32(id.block_number)
-	w.OutInt64(id.application)
+	w.OutInt32(id.application)
 	w.OutInt64(id.expires_on)
 	w.OutFilePos(id.certifiers)
 	w.OutFilePos(id.certified)
@@ -938,6 +944,10 @@ func System () string {
 	return system
 }
 
+func DPars () string {
+	return dPars
+}
+
 func Work () string {
 	return work
 }
@@ -958,6 +968,10 @@ func Pars () *Parameters {
 	p := new(Parameters)
 	*p = pars
 	return p
+}
+
+func ParsJ () J.Json {
+	return parsJ
 }
 
 // Cmds
@@ -1073,10 +1087,10 @@ func closeB () {
 
 // Block number -> times
 func TimeOf (bnb int32) (mTime, time int64, ok bool) {
-	ir := timeT.NewReader()
-	ok = ir.Search(&intKey{ref: bnb})
+	pst := timeT.NewReader()
+	ok = pst.Search(&intKey{ref: bnb})
 	if ok {
-		t := timeMan.ReadData(ir.ReadValue()).(*timeTy)
+		t := timeMan.ReadData(pst.ReadValue()).(*timeTy)
 		mTime = t.mTime
 		time = t.time
 	}
@@ -1085,10 +1099,10 @@ func TimeOf (bnb int32) (mTime, time int64, ok bool) {
 
 // Pubkey -> joining and leaving blocks (leavingBlock == HasNotLeaved if no leaving block)
 func JLPub (pubkey Pubkey) (list B.FilePos, ok bool) {
-	ir := joinAndLeaveT.NewReader()
-	ok = ir.Search(&pubKey{ref: pubkey})
+	pst := joinAndLeaveT.NewReader()
+	ok = pst.Search(&pubKey{ref: pubkey})
 	if ok {
-		list = joinAndLeaveMan.ReadData(ir.ReadValue()).(*joinAndLeave).list
+		list = joinAndLeaveMan.ReadData(pst.ReadValue()).(*joinAndLeave).list
 	}
 	return
 }
@@ -1111,11 +1125,11 @@ func JLLen () int {
 }
 
 // Browse all joinAndLeave's pubkeys step by step
-func JLNextPubkey (first bool, ir **B.IndexReader) (pubkey Pubkey, ok bool) {
+func JLNextPubkey (first bool, pst **Position) (pubkey Pubkey, ok bool) {
 	if first {
-		*ir = joinAndLeaveT.NewReader()
+		*pst = joinAndLeaveT.NewReader()
 	}
-	r := *ir
+	r := *pst
 	r.Next()
 	ok = r.PosSet()
 	if ok {
@@ -1126,20 +1140,20 @@ func JLNextPubkey (first bool, ir **B.IndexReader) (pubkey Pubkey, ok bool) {
 
 // Pubkey -> uid
 func IdPub (pubkey Pubkey) (uid string, ok bool) {
-	ir := idPubT.NewReader()
-	ok = ir.Search(&pubKey{ref: pubkey})
+	pst := idPubT.NewReader()
+	ok = pst.Search(&pubKey{ref: pubkey})
 	if ok {
-		uid = idMan.ReadData(ir.ReadValue()).(*identity).uid
+		uid = idMan.ReadData(pst.ReadValue()).(*identity).uid
 	}
 	return
 }
 
 // Pubkey -> uid of member
 func IdPubM (pubkey Pubkey) (uid string, ok bool) {
-	ir := idPubT.NewReader()
-	ok = ir.Search(&pubKey{ref: pubkey})
+	pst := idPubT.NewReader()
+	ok = pst.Search(&pubKey{ref: pubkey})
 	if  ok{
-		id := idMan.ReadData(ir.ReadValue()).(*identity)
+		id := idMan.ReadData(pst.ReadValue()).(*identity)
 		ok = id.member
 		if ok {
 			uid = id.uid
@@ -1149,11 +1163,11 @@ func IdPubM (pubkey Pubkey) (uid string, ok bool) {
 }
 
 // Pubkey -> identity
-func IdPubComplete (pubkey Pubkey) (uid string, member bool, hash Hash, block_number int32, application, expires_on int64, ok bool) {
-	ir := idPubT.NewReader()
-	ok = ir.Search(&pubKey{ref: pubkey})
+func IdPubComplete (pubkey Pubkey) (uid string, member bool, hash Hash, block_number, application int32, expires_on int64, ok bool) {
+	pst := idPubT.NewReader()
+	ok = pst.Search(&pubKey{ref: pubkey})
 	if ok {
-		id := idMan.ReadData(ir.ReadValue()).(*identity)
+		id := idMan.ReadData(pst.ReadValue()).(*identity)
 		uid = id.uid
 		member = id.member
 		hash = id.hash
@@ -1166,20 +1180,20 @@ func IdPubComplete (pubkey Pubkey) (uid string, member bool, hash Hash, block_nu
 
 // uid -> identity
 func IdUid (uid string) (pubkey Pubkey, ok bool) {
-	ir := idUidT.NewReader()
-	ok = ir.Search(&B.String{C: uid})
+	pst := idUidT.NewReader()
+	ok = pst.Search(&B.String{C: uid})
 	if ok {
-		pubkey = idMan.ReadData(ir.ReadValue()).(*identity).pubkey
+		pubkey = idMan.ReadData(pst.ReadValue()).(*identity).pubkey
 	}
 	return
 }
 
 // uid -> Pubkey of member
 func IdUidM (uid string) (pubkey Pubkey, ok bool) {
-	ir := idUidT.NewReader()
-	ok = ir.Search(&B.String{C: uid})
+	pst := idUidT.NewReader()
+	ok = pst.Search(&B.String{C: uid})
 	if ok {
-		id := idMan.ReadData(ir.ReadValue()).(*identity)
+		id := idMan.ReadData(pst.ReadValue()).(*identity)
 		ok = id.member
 		if ok {
 			pubkey = id.pubkey
@@ -1189,11 +1203,11 @@ func IdUidM (uid string) (pubkey Pubkey, ok bool) {
 }
 
 // uid -> identity
-func IdUidComplete (uid string) (pubkey Pubkey, member bool, hash Hash, block_number int32, application, expires_on int64, ok bool) {
-	ir := idUidT.NewReader()
-	ok = ir.Search(&B.String{C: uid})
+func IdUidComplete (uid string) (pubkey Pubkey, member bool, hash Hash, block_number, application int32, expires_on int64, ok bool) {
+	pst := idUidT.NewReader()
+	ok = pst.Search(&B.String{C: uid})
 	if ok {
-		id := idMan.ReadData(ir.ReadValue()).(*identity)
+		id := idMan.ReadData(pst.ReadValue()).(*identity)
 		pubkey = id.pubkey
 		member = id.member
 		hash = id.hash
@@ -1206,10 +1220,10 @@ func IdUidComplete (uid string) (pubkey Pubkey, member bool, hash Hash, block_nu
 
 // Hash -> pubkey
 func IdHash (hash Hash) (pub Pubkey, ok bool) {
-	ir := idHashT.NewReader()
-	ok = ir.Search(&hashKey{ref: hash})
+	pst := idHashT.NewReader()
+	ok = pst.Search(&hashKey{ref: hash})
 	if ok {
-		pub = idMan.ReadData(ir.ReadValue()).(*identity).pubkey
+		pub = idMan.ReadData(pst.ReadValue()).(*identity).pubkey
 	}
 	return
 }
@@ -1225,19 +1239,19 @@ func IdLenM () int {
 }
 
 // Position next identity's pubkey for IdNextPubkey
-func IdPosPubkey (pubkey Pubkey) *B.IndexReader {
-	ir := idPubT.NewReader()
-	_ = ir.Search(&pubKey{ref: pubkey})
-	ir.Previous()
-	return ir
+func IdPosPubkey (pubkey Pubkey) *Position {
+	pst := idPubT.NewReader()
+	_ = pst.Search(&pubKey{ref: pubkey})
+	pst.Previous()
+	return pst
 }
 
 // Browse all identity's pubkeys step by step
-func IdNextPubkey (first bool, ir **B.IndexReader) (pubkey Pubkey, ok bool) {
+func IdNextPubkey (first bool, pst **Position) (pubkey Pubkey, ok bool) {
 	if first {
-		*ir = idPubT.NewReader()
+		*pst = idPubT.NewReader()
 	}
-	r := *ir
+	r := *pst
 	r.Next()
 	ok = r.PosSet()
 	if ok {
@@ -1247,11 +1261,11 @@ func IdNextPubkey (first bool, ir **B.IndexReader) (pubkey Pubkey, ok bool) {
 }
 
 // Browse all members' pubkeys step by step
-func IdNextPubkeyM (first bool, ir **B.IndexReader) (pubkey Pubkey, ok bool) {
+func IdNextPubkeyM (first bool, pst **Position) (pubkey Pubkey, ok bool) {
 	if first {
-		*ir = idPubT.NewReader()
+		*pst = idPubT.NewReader()
 	}
-	r := *ir
+	r := *pst
 	for {
 		r.Next()
 		ok = r.PosSet()
@@ -1268,19 +1282,19 @@ func IdNextPubkeyM (first bool, ir **B.IndexReader) (pubkey Pubkey, ok bool) {
 }
 
 // Position next identity's uid for IdNextUid
-func IdPosUid (uid string) *B.IndexReader {
-	ir := idUidT.NewReader()
-	ir.Search(&B.String{C: uid})
-	ir.Previous()
-	return ir
+func IdPosUid (uid string) *Position {
+	pst := idUidT.NewReader()
+	pst.Search(&B.String{C: uid})
+	pst.Previous()
+	return pst
 }
 
 // Browse all identity's uid(s) lexicographically step by step
-func IdNextUid (first bool, ir **B.IndexReader) (uid string, ok bool) {
+func IdNextUid (first bool, pst **Position) (uid string, ok bool) {
 	if first {
-		*ir = idUidT.NewReader()
+		*pst = idUidT.NewReader()
 	}
-	r := *ir
+	r := *pst
 	r.Next()
 	ok = r.PosSet()
 	if ok {
@@ -1290,11 +1304,11 @@ func IdNextUid (first bool, ir **B.IndexReader) (uid string, ok bool) {
 }
 
 // Browse all members' uid(s) lexicographically step by step
-func IdNextUidM (first bool, ir **B.IndexReader) (uid string, ok bool) {
+func IdNextUidM (first bool, pst **Position) (uid string, ok bool) {
 	if first {
-		*ir = idUidT.NewReader()
+		*pst = idUidT.NewReader()
 	}
-	r := *ir
+	r := *pst
 	for {
 		r.Next()
 		ok = r.PosSet()
@@ -1329,10 +1343,10 @@ func Cert (from, to Pubkey) (bnb int32, expires_on int64, ok bool) {
 // Pubkey -> head of sub-index
 func CertFrom (from Pubkey, pos *CertPos) (ok bool) {
 	M.Assert(pos != nil, 20)
-	ir := certFromT.NewReader()
-	ok = ir.Search(&pubKey{ref: from})
+	pst := certFromT.NewReader()
+	ok = pst.Search(&pubKey{ref: from})
 	if ok {
-		pos.posT = database.OpenIndex(ir.ReadValue(), pubKeyMan, pubKeyFac).NewReader()
+		pos.posT = database.OpenIndex(pst.ReadValue(), pubKeyMan, pubKeyFac).NewReader()
 	} else {
 		pos.posT = nil
 	}
@@ -1342,10 +1356,10 @@ func CertFrom (from Pubkey, pos *CertPos) (ok bool) {
 // Pubkey -> head of sub-index
 func CertTo (to Pubkey, pos *CertPos) (ok bool) {
 	M.Assert(pos != nil, 20)
-	ir := certToT.NewReader()
-	ok = ir.Search(&pubKey{ref: to})
+	pst := certToT.NewReader()
+	ok = pst.Search(&pubKey{ref: to})
 	if ok {
-		pos.posT = database.OpenIndex(certToForkMan.ReadData(ir.ReadValue()).(*certToFork).byPub, pubKeyMan, pubKeyFac).NewReader()
+		pos.posT = database.OpenIndex(certToForkMan.ReadData(pst.ReadValue()).(*certToFork).byPub, pubKeyMan, pubKeyFac).NewReader()
 	} else {
 		pos.posT = nil
 	}
@@ -1355,10 +1369,10 @@ func CertTo (to Pubkey, pos *CertPos) (ok bool) {
 // Pubkey -> head of sub-index
 func CertToByExp (to Pubkey, pos *CertPos) (ok bool) {
 	M.Assert(pos != nil, 20)
-	ir := certToT.NewReader()
-	ok = ir.Search(&pubKey{ref: to})
+	pst := certToT.NewReader()
+	ok = pst.Search(&pubKey{ref: to})
 	if ok {
-		pos.posT = database.OpenIndex(certToForkMan.ReadData(ir.ReadValue()).(*certToFork).byExp, certKTimeMan, filePosKeyFac).NewReader()
+		pos.posT = database.OpenIndex(certToForkMan.ReadData(pst.ReadValue()).(*certToFork).byExp, certKTimeMan, filePosKeyFac).NewReader()
 	} else {
 		pos.posT = nil
 	}
@@ -1378,11 +1392,11 @@ func (pos *CertPos) CertPosLen () int {
 func (pos *CertPos) CertNextPos () (from, to Pubkey, ok bool) {
 	ok = pos.posT != nil
 	if ok {
-		ir := pos.posT
-		ir.Next()
-		ok = ir.PosSet()
+		pst := pos.posT
+		pst.Next()
+		ok = pst.PosSet()
 		if ok {
-			c := certMan.ReadData(ir.ReadValue()).(*certification)
+			c := certMan.ReadData(pst.ReadValue()).(*certification)
 			from = c.from
 			to = c.to
 		}
@@ -1390,14 +1404,22 @@ func (pos *CertPos) CertNextPos () (from, to Pubkey, ok bool) {
 	return
 }
 
+// Position next sub-index to pubKey for CertNextFrom
+func CertPosFrom (pubkey Pubkey) *Position {
+	pst := certFromT.NewReader()
+	_ = pst.Search(&pubKey{ref: pubkey})
+	pst.Previous()
+	return pst
+}
+
 // Browse all sub-indexes step by step in the lexicographic order of the from Pubkey
-func CertNextFrom (first bool, pos *CertPos, ir **B.IndexReader) (ok bool) {
+func CertNextFrom (first bool, pos *CertPos, pst **Position) (ok bool) {
 	M.Assert(pos != nil, 20)
-	M.Assert(ir != nil, 21)
+	M.Assert(pst != nil, 21)
 	if first {
-		*ir = certFromT.NewReader()
+		*pst = certFromT.NewReader()
 	}
-	r := *ir
+	r := *pst
 	M.Assert(r != nil, 22)
 	r.Next()
 	ok = r.PosSet()
@@ -1409,14 +1431,22 @@ func CertNextFrom (first bool, pos *CertPos, ir **B.IndexReader) (ok bool) {
 	return
 }
 
+// Position next sub-index to pubKey for CertNextTo
+func CertPosTo (pubkey Pubkey) *Position {
+	pst := certToT.NewReader()
+	_ = pst.Search(&pubKey{ref: pubkey})
+	pst.Previous()
+	return pst
+}
+
 // Browse all sub-indexes step by step in the lexicographic order of the to Pubkey
-func CertNextTo (first bool, pos *CertPos, ir **B.IndexReader) (ok bool) {
+func CertNextTo (first bool, pos *CertPos, pst **Position) (ok bool) {
 	M.Assert(pos != nil, 20)
-	M.Assert(ir != nil, 21)
+	M.Assert(pst != nil, 21)
 	if first {
-		*ir = certToT.NewReader()
+		*pst = certToT.NewReader()
 	}
-	r := *ir
+	r := *pst
 	M.Assert(r != nil, 22)
 	r.Next()
 	ok = r.PosSet()
@@ -1429,13 +1459,13 @@ func CertNextTo (first bool, pos *CertPos, ir **B.IndexReader) (ok bool) {
 }
 
 // Browse all sub-indexes step by step in the lexicographic order of the to Pubkey
-func CertNextToByExp (first bool, pos *CertPos, ir **B.IndexReader) (ok bool) {
+func CertNextToByExp (first bool, pos *CertPos, pst **Position) (ok bool) {
 	M.Assert(pos != nil, 20)
-	M.Assert(ir != nil, 21)
+	M.Assert(pst != nil, 21)
 	if first {
-		*ir = certToT.NewReader()
+		*pst = certToT.NewReader()
 	}
-	r := *ir
+	r := *pst
 	M.Assert(r != nil, 22)
 	r.Next()
 	ok = r.PosSet()
@@ -1448,46 +1478,46 @@ func CertNextToByExp (first bool, pos *CertPos, ir **B.IndexReader) (ok bool) {
 }
 
 func AllCertifiers (to string) StringArr {
-	ir := idUidT.NewReader()
-	if !ir.Search(&B.String{C: to}) {
-		return nil
+	pst := idUidT.NewReader()
+	if !pst.Search(&B.String{C: to}) {
+		return make(StringArr, 0)
 	}
-	id := idMan.ReadData(ir.ReadValue()).(*identity)
+	id := idMan.ReadData(pst.ReadValue()).(*identity)
 	if id.certifiers == B.BNil {
-		return nil
+		return make(StringArr, 0)
 	}
 	ind := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac)
 	from := make(StringArr, ind.NumberOfKeys())
-	ir = ind.NewReader()
-	ir.Next()
+	pst = ind.NewReader()
+	pst.Next()
 	i := 0
-	for ir.PosSet() {
-		from[i] = ir.CurrentKey().(*B.String).C
+	for pst.PosSet() {
+		from[i] = pst.CurrentKey().(*B.String).C
 		i++
-		ir.Next()
+		pst.Next()
 	}
 	M.Assert(i == len(from), 60)
 	return from
 }
 
 func AllCertified (from string) StringArr {
-	ir := idUidT.NewReader()
-	if !ir.Search(&B.String{C: from}) {
-		return nil
+	pst := idUidT.NewReader()
+	if !pst.Search(&B.String{C: from}) {
+		return make(StringArr, 0)
 	}
-	id := idMan.ReadData(ir.ReadValue()).(*identity)
+	id := idMan.ReadData(pst.ReadValue()).(*identity)
 	if id.certified == B.BNil {
-		return nil
+		return make(StringArr, 0)
 	}
 	ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac)
 	to := make(StringArr, ind.NumberOfKeys())
-	ir = ind.NewReader()
-	ir.Next()
+	pst = ind.NewReader()
+	pst.Next()
 	i := 0
-	for ir.PosSet() {
-		to[i] = ir.CurrentKey().(*B.String).C
+	for pst.PosSet() {
+		to[i] = pst.CurrentKey().(*B.String).C
 		i++
-		ir.Next()
+		pst.Next()
 	}
 	M.Assert(i == len(to), 60)
 	return to
@@ -1665,7 +1695,8 @@ func paramsUpdt (d *Q.DB) {
 // Cmds
 // Extract Duniter parameters from JSON file
 func params () {
-	ok := J.ReadFile(dPars, &pars); M.Assert(ok, 100)
+	parsJ = J.ReadFile(dPars); M.Assert(parsJ != nil, 100)
+	J.ApplyTo(parsJ, &pars)
 }
 
 // Updt
@@ -1689,13 +1720,13 @@ func removeCertifiersCertified (withList bool, idRef B.FilePos, id *identity) {
 	idU1 := &B.String{C: id.uid}
 	
 	if id.certifiers != B.BNil {
-		ir := idUidT.NewReader()
+		pst := idUidT.NewReader()
 		c1 := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac).NewReader()
 		c1.Next()
 		for c1.PosSet() {
 			idU2 := c1.CurrentKey().(*B.String)
-			b := ir.Search(idU2); M.Assert(b, idU2.C, 100)
-			id2Ref := ir.ReadValue()
+			b := pst.Search(idU2); M.Assert(b, idU2.C, 100)
+			id2Ref := pst.ReadValue()
 			id2 := idMan.ReadData(id2Ref).(*identity)
 			M.Assert(id2.certified != B.BNil, 101)
 			ind := database.OpenIndex(id2.certified, uidKeyMan, uidKeyFac)
@@ -1714,13 +1745,13 @@ func removeCertifiersCertified (withList bool, idRef B.FilePos, id *identity) {
 	}
 	
 	if id.certified != B.BNil {
-		ir := idUidT.NewReader()
+		pst := idUidT.NewReader()
 		c1 := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac).NewReader()
 		c1.Next()
 		for c1.PosSet() {
 			idU2 := c1.CurrentKey().(*B.String)
-			b := ir.Search(idU2); M.Assert(b, idU2.C, 103)
-			id2Ref := ir.ReadValue()
+			b := pst.Search(idU2); M.Assert(b, idU2.C, 103)
+			id2Ref := pst.ReadValue()
 			id2 := idMan.ReadData(id2Ref).(*identity)
 			M.Assert(id2.certifiers != B.BNil, 104)
 			ind := database.OpenIndex(id2.certifiers, uidKeyMan, uidKeyFac)
@@ -1741,12 +1772,12 @@ func removeCertifiersCertified (withList bool, idRef B.FilePos, id *identity) {
 
 // Updt
 func revokeId (withList bool, p Pubkey) {
-	ir := idPubT.NewReader()
-	b := ir.Search(&pubKey{ref: p}); M.Assert(b, p, 100)
-	idRef := ir.ReadValue()
+	pst := idPubT.NewReader()
+	b := pst.Search(&pubKey{ref: p}); M.Assert(b, p, 100)
+	idRef := pst.ReadValue()
 	id := idMan.ReadData(idRef).(*identity)
 	if withList {
-		idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: id.application}
+		idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: int64(id.application)}
 		undoList = undoListMan.WriteAllocateData(idL)
 	}
 	id.expires_on = BA.Revoked
@@ -1773,7 +1804,7 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 		id.pubkey = Pubkey(scanS(ss, ':', &i))
 		skipS(ss, ':', &i)
 		s := scanS(ss, '-', &i); n, err := C.Atoi(s); M.Assert(err == nil, err, 100)
-		id.application, _, b = TimeOf(int32(nb)); M.Assert(b, nb, 101)
+		id.application = int32(nb)
 		id.expires_on, _, b = TimeOf(int32(n)); M.Assert(b, n, 102)
 		id.expires_on += int64(pars.MsValidity)
 		skipS(ss, ':', &i)
@@ -1818,7 +1849,7 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 			b = iwH.SearchIns(idH); M.Assert(b, idH.ref, 109)
 			M.Assert(iwH.ReadValue() == idRef, 110)
 			if withList {
-				idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: oldId.expires_on, aux2: oldId.application}
+				idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: oldId.expires_on, aux2: int64(oldId.application)}
 				undoList = undoListMan.WriteAllocateData(idL)
 			}
 		} else {
@@ -1869,10 +1900,10 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 		id := idMan.ReadData(idRef).(*identity)
 		M.Assert(id.member, 115)
 		if withList {
-			idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: id.application}
+			idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: int64(id.application)}
 			undoList = undoListMan.WriteAllocateData(idL)
 		}
-		id.application, _, b = TimeOf(int32(nb)); M.Assert(b, nb, 116)
+		id.application = int32(nb)
 		id.expires_on, _, b = TimeOf(int32(n)); M.Assert(b, n, 117)
 		id.expires_on += int64(pars.MsValidity)
 		idMan.WriteData(idRef, id)
@@ -1892,10 +1923,10 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 		idRef := iwP.ReadValue()
 		id := idMan.ReadData(idRef).(*identity)
 		if withList {
-			idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: id.application}
+			idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: int64(id.application)}
 			undoList = undoListMan.WriteAllocateData(idL)
 		}
-		id.application, _, b = TimeOf(int32(nb)); M.Assert(b, nb, 119)
+		id.application = int32(nb)
 		id.expires_on = - M.Abs64(id.expires_on) // id.expires_on < 0 if leaving
 		idMan.WriteData(idRef, id)
 	}
@@ -1948,7 +1979,7 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 		}
 		if id.expires_on != BA.Revoked {
 			if withList {
-				idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: id.application}
+				idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: int64(id.application)}
 				undoList = undoListMan.WriteAllocateData(idL)
 			}
 			if id.expires_on >= 0 { // !leaving
@@ -2200,7 +2231,7 @@ func removeSecureGap () {
 				// Undo the identity.expires_on update
 				id := idMan.ReadData(l.ref).(*identity)
 				id.expires_on = l.aux
-				id.application = l.aux2
+				id.application = int32(l.aux2)
 				idMan.WriteData(l.ref, id)
 			}
 			case leaveList: {
@@ -2209,9 +2240,9 @@ func removeSecureGap () {
 				id.member = true
 				idMan.WriteData(l.ref, id)
 				idLenM++
-				ir := joinAndLeaveT.NewReader()
-				b := ir.Search(&pubKey{ref: id.pubkey}); M.Assert(b, 107)
-				jlRef := ir.ReadValue()
+				pst := joinAndLeaveT.NewReader()
+				b := pst.Search(&pubKey{ref: id.pubkey}); M.Assert(b, 107)
+				jlRef := pst.ReadValue()
 				jl := joinAndLeaveMan.ReadData(jlRef).(*joinAndLeave)
 				jlL := joinAndLeaveLMan.ReadData(jl.list).(*joinAndLeaveL)
 				M.Assert(jlL.leavingBlock != HasNotLeaved, 108)
@@ -2229,14 +2260,14 @@ func removeSecureGap () {
 				c := certMan.ReadData(l.ref).(*certification)
 				iwT := certTimeT.Writer()
 				b := iwT.Erase(&filePosKey{ref: l.ref}); M.Assert(b, 111)
-				ir := idPubT.NewReader()
+				pst := idPubT.NewReader()
 				p := new(pubKey)
 				if B.FilePos(l.aux) == B.BNil {
 					removeCert(c, l.ref)
 					u := new(B.String)
 					p.ref = c.from
-					b = ir.Search(p); M.Assert(b, 112)
-					idRef := ir.ReadValue()
+					b = pst.Search(p); M.Assert(b, 112)
+					idRef := pst.ReadValue()
 					id := idMan.ReadData(idRef).(*identity)
 					u.C, b = IdPub(c.to); M.Assert(b, 113)
 					ind := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac)
@@ -2247,8 +2278,8 @@ func removeSecureGap () {
 						idMan.WriteData(idRef, id)
 					}
 					p.ref = c.to
-					b = ir.Search(p); M.Assert(b, 115)
-					idRef = ir.ReadValue()
+					b = pst.Search(p); M.Assert(b, 115)
+					idRef = pst.ReadValue()
 					id = idMan.ReadData(idRef).(*identity)
 					u.C, b = IdPub(c.from); M.Assert(b, 116)
 					ind = database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac)
@@ -2356,15 +2387,15 @@ func SentryTreshold () int {
 func calculateSentries (... interface{}) {
 	members.len = IdLen()
 	members.m = make(membersT, members.len + 1)
-	var (ir *B.IndexReader; pos CertPos)
+	var (pst *Position; pos CertPos)
 	i := 0
-	p, ok := IdNextPubkey(true, &ir)
+	p, ok := IdNextPubkey(true, &pst)
 	for ok {
 		M.Assert(i == 0 || p > members.m[i - 1].p, 100)
 		members.m[i].p = p
 		members.m[i].links = U.NewSet()
 		i++
-		p, ok = IdNextPubkey(false, &ir)
+		p, ok = IdNextPubkey(false, &pst)
 	}
 	M.Assert(i == members.len, 101)
 	for i = 0; i < members.len; i++ {
@@ -2383,13 +2414,13 @@ func calculateSentries (... interface{}) {
 	if n == 0 {
 		return
 	}
-	p, ok = IdNextPubkeyM(true, &ir)
+	p, ok = IdNextPubkeyM(true, &pst)
 	for ok {
 		if CertFrom(p, &pos) && pos.CertPosLen() >= n && CertTo(p, &pos) && pos.CertPosLen() >= n {
 			e, b := findMemberNum(p); M.Assert(b, 103)
 			sentriesS.Incl(e)
 		}
-		p, ok = IdNextPubkeyM(false, &ir)
+		p, ok = IdNextPubkeyM(false, &pst)
 	}
 	
 	poST = A.New()
@@ -2509,7 +2540,8 @@ func exportParameters () {
 	lg.Println("Exporting money parameters")
 	f, err := os.Create(dPars); M.Assert(err == nil, err, 100)
 	defer f.Close()
-	ok := J.FprintJsonOf(f, &pars); M.Assert(ok, 101)
+	j := J.BuildJsonFrom(&pars); M.Assert(j != nil, 101)
+	j.Write(f)
 	lg.Println("Money parameters exported")
 }
 
@@ -2678,7 +2710,7 @@ func showUpdated () {
 	m.BuildObject()
 	f, err := os.Create(status); M.Assert(err == nil, err, 100)
 	defer f.Close()
-	J.Fprint(f, m.GetJson())
+	m.GetJson().Write(f)
 }
 
 // Cmds
@@ -2773,7 +2805,7 @@ func Start (newAction <-chan Actioner) {
 	m.BuildObject()
 	f, err := os.Create(status); M.Assert(err == nil, err, 100)
 	defer f.Close()
-	J.Fprint(f, m.GetJson())
+	m.GetJson().Write(f)
 	saveBase()
 	openB()
 	stopProg := make(chan os.Signal, 1)
