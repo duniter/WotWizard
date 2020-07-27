@@ -1804,7 +1804,7 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 		id.pubkey = Pubkey(scanS(ss, ':', &i))
 		skipS(ss, ':', &i)
 		s := scanS(ss, '-', &i); n, err := C.Atoi(s); M.Assert(err == nil, err, 100)
-		id.application = int32(nb)
+		id.application = int32(n)
 		id.expires_on, _, b = TimeOf(int32(n)); M.Assert(b, n, 102)
 		id.expires_on += int64(pars.MsValidity)
 		skipS(ss, ':', &i)
@@ -1903,7 +1903,7 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 			idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: int64(id.application)}
 			undoList = undoListMan.WriteAllocateData(idL)
 		}
-		id.application = int32(nb)
+		id.application = int32(n)
 		id.expires_on, _, b = TimeOf(int32(n)); M.Assert(b, n, 117)
 		id.expires_on += int64(pars.MsValidity)
 		idMan.WriteData(idRef, id)
@@ -1915,6 +1915,8 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 		i++
 		idP := new(pubKey)
 		idP.ref = Pubkey(scanS(ss, ':', &i))
+		skipS(ss, ':', &i)
+		s := scanS(ss, '-', &i); n, err := C.Atoi(s); M.Assert(err == nil, err, 113)
 		skipS(ss, '"', &i)
 		if ss[i] != ']' {
 			i++
@@ -1926,7 +1928,7 @@ func identities (withList bool, ssJ, ssA, ssL, ssR, ssE string, nb int, d *Q.DB)
 			idL := &undoListT{next: undoList, typ: activeList, ref: idRef, aux: id.expires_on, aux2: int64(id.application)}
 			undoList = undoListMan.WriteAllocateData(idL)
 		}
-		id.application = int32(nb)
+		id.application = int32(n)
 		id.expires_on = - M.Abs64(id.expires_on) // id.expires_on < 0 if leaving
 		idMan.WriteData(idRef, id)
 	}
