@@ -43,7 +43,7 @@ package alea
 	var
 		gen *Generator
 	
-	// Generates a new pseudo-random real number x such that  (0 <= x < 1), with uniforme deviates.  (Period > 2 × 10^18). Ref.: Generator rand2, W. H. Press, S. A. Teukolsky, W. T. Vetterling, B. P. Flannery, Numerical Recipes, The Art of Scientific Computing, second edition, 1997.
+	// Generates a new pseudo-random real number x such that  (0 <= x < 1), with uniforme deviates.  (Period > 2 × 10^18). Ref.: Generator ran2, W. H. Press, S. A. Teukolsky, W. T. Vetterling, B. P. Flannery, Numerical Recipes, The Art of Scientific Computing, second edition, 1997.
 	func (g *Generator) Random () float64 {
 		var (
 			res float64

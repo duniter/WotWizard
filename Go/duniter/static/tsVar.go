@@ -101,8 +101,8 @@ type Mutation {
 	"'wwFileStop' erases the subscription for 'Subscription.wwFile'; do nothing if the subscription is not already installed"
 	wwFileStop: Void
 	
-	"'wwServerStop' erases the subscription for 'Subscription.wwResult'; do nothing if the subscription is not already installed"
-	wwServerStop: Void
+	"'wwResultStop' erases the subscription for 'Subscription.wwResult'; do nothing if the subscription is not already installed"
+	wwResultStop: Void
 	
 	"'memEndsStop' erases the subscription for 'Subscription.memEnds'; do nothing if the subscription is not already installed"
 	memEndsStop: Void
@@ -141,7 +141,7 @@ type Subscription {
 } #Subscription
 
 "WoT identity"
-type Identity { # B.Hash (hash)
+type Identity {
 	
 	"Public key"
 	pubkey: Pubkey!
@@ -251,7 +251,7 @@ input IdSearchInput {
 } #IdSearchInput
 
 "Result of 'Query.idSearch'"
-type IdSearchOutput { # int (revokedNb), int (missingNb), int (memberNb), *A.Tree (ids)
+type IdSearchOutput {
 	
 	"Number of REVOKED identities corresponding to 'IdSearchInput.hint'"
 	revokedNb: Int!
@@ -271,7 +271,7 @@ type IdSearchOutput { # int (revokedNb), int (missingNb), int (memberNb), *A.Tre
 } #IdSearchOutput
 
 "Certifications received by an identity"
-type Received_Certifications { # [Certification] (certifications), int64 (limit)
+type Received_Certifications {
 	
 	"List of all valid received certifications"
 	certifications: [Certification!]!
@@ -282,7 +282,7 @@ type Received_Certifications { # [Certification] (certifications), int64 (limit)
 } #received_Certifications
 
 "Certification sent by 'from' and received by 'to'"
-type Certification { # B.Hash (from), B.Hash (to), bool (pending)
+type Certification {
 	
 	"Sender"
 	from: Identity!
@@ -302,7 +302,7 @@ type Certification { # B.Hash (from), B.Hash (to), bool (pending)
 } #Certification
 
 "Result of distance rule evaluation"
-type Distance { # float64 (value), bool (dist_ok)
+type Distance {
 	
 	"Proportion of sentries reached in 'ParameterName.stepMax' steps or less (percent)"
 	value: Float!
@@ -313,7 +313,7 @@ type Distance { # float64 (value), bool (dist_ok)
 } #Distance
 
 "History of entries into the WoT and exits of an identity"
-type HistoryEvent { # bool (in), int32 (block)
+type HistoryEvent {
 	
 	"Entry?"
 	in: Boolean!
@@ -324,7 +324,7 @@ type HistoryEvent { # bool (in), int32 (block)
 } #HistoryEvent
 
 "Number & dates of a block"
-type Block { # int32 (number)
+type Block {
 	
 	"Block number"
 	number: Int!
@@ -338,7 +338,7 @@ type Block { # int32 (number)
 } #Block
 
 "Differentiation filter parameters"
-type DifferParams { # int (pointsNb), int (degree)
+type DifferParams {
 
 	"Number of points used by the filter"
 	pointsNb: Int!
@@ -349,7 +349,7 @@ type DifferParams { # int (pointsNb), int (degree)
 } #DifferParams
 
 "Set of internal certifications and membership application dossiers available in sandbox"
-type File { # W.File (certifs_dossiers), int (certNb), int (dossNb)
+type File {
 
 	"List of internal certifications and membership application dossiers"
 	certifs_dossiers: [CertifOrDossier!]!
@@ -366,17 +366,17 @@ type File { # W.File (certifs_dossiers), int (certNb), int (dossNb)
 union CertifOrDossier = MarkedDatedCertification | MarkedDossier
 
 "Inserted type used to distinguish 'DatedCertification'(s) and 'Dossier'(s) in 'CertifOrDossier'"
-type MarkedDatedCertification { # W.Certif
+type MarkedDatedCertification {
 	datedCertification: DatedCertification!
 } #MarkedDatedCertification
 
 "Inserted type used to distinguish 'DatedCertification'(s) and 'Dossier'(s) in 'CertifOrDossier'"
-type MarkedDossier { # W.Dossier
+type MarkedDossier {
 	dossier: Dossier!
 } #MarkedDossier
 
 "Certification in a 'File'"
-type DatedCertification { # W.Certif
+type DatedCertification {
 	
 	certification: Certification!
 	
@@ -386,7 +386,7 @@ type DatedCertification { # W.Certif
 } #DatedCertification
 
 "Newcomer's membership application dossier"
-type Dossier { # W.Dossier
+type Dossier {
 	
 	newcomer: Identity!
 	
@@ -408,7 +408,7 @@ type Dossier { # W.Dossier
 } #Dossier
 
 "Result of 'Query.wwResult'"
-type WWResult { # *A.Tree (permutations (*W.Set)), *A.Tree (occurDate (*W.PropDate)), *A.Tree (occurName (*W.PropName)), int64 (duration), int (dossiers_nb), int (certifs_nb)
+type WWResult {
 	
 	"Total time of computation, 'File' included"
 	computation_duration: Int!
@@ -434,7 +434,7 @@ type WWResult { # *A.Tree (permutations (*W.Set)), *A.Tree (occurDate (*W.PropDa
 } #WWResult
 
 "A permutation weighted by a probability"
-type WeightedPermutation { # *W.Set
+type WeightedPermutation {
 	
 	"Probability of occurrence"
 	proba: Float!
@@ -445,7 +445,7 @@ type WeightedPermutation { # *W.Set
 } #WeightedPermutation
 
 "An expected NEWCOMER's entry"
-type PermutationElem { # *W.PropDate
+type PermutationElem {
 	
 	id: Identity!
 	
@@ -458,7 +458,7 @@ type PermutationElem { # *W.PropDate
 } #PermutationElem
 
 "Forecast of a NEWCOMER's entry"
-type Forecast { # *W.PropDate
+type Forecast {
 	
 	id: Identity!
 	
@@ -474,7 +474,7 @@ type Forecast { # *W.PropDate
 } #Forecast
 
 "Entry or exit of an identity"
-type EventId { # bool (inOut), B.Hash (id)
+type EventId {
 	
 	id: Identity!
 	
@@ -484,7 +484,7 @@ type EventId { # bool (inOut), B.Hash (id)
 } #EventId
 
 "Entries and exits of identities happening in a block"
-type Event { # members.event
+type Event {
 	
 	"List of concerned identities"
 	idList: [EventId!]!
@@ -498,7 +498,7 @@ type Event { # members.event
 } #Event
 
 "An event with non-integer value, typically a flux of entries/exits"
-type FluxEvent { # members.eventR
+type FluxEvent {
 	
 	"Block where the event happens"
 	block: Block!
@@ -614,55 +614,6 @@ scalar Void
 
 "Int, Int64 or Float"
 scalar Number
-
-type Parameters { # Not used; for reference
-	"c: The relative growth of the UD every [dtReeval] period"
-	c: Float!
-	"dt: Time period between two UD"
-	dt: Int64!
-	"ud0: UD(0), i.e. initial Universal Dividend"
-	ud0: Int!
-	"sigPeriod: Minimum delay between two certifications of a same issuer"
-	sigPeriod: Int64!
-	"sigStock: Maximum quantity of active certifications made by member"
-	sigStock: Int!
-	"sigWindow: Maximum delay a certification can wait before being expired for non-writing"
-	sigWindow: Int64!
-	"sigValidity: Maximum age of an active certification"
-	sigValidity: Int64!
-	"sigReplay: Minimum delay before replaying a certification"
-	sigReplay: Int64!
-	"sigQty: Minimum quantity of signatures to be part of the WoT"
-	sigQty: Int!
-	"idtyWindow: Maximum delay an identity can wait before being expired for non-writing"
-	idtyWindow: Int64!
-	"msWindow: Maximum delay a membership can wait before being expired for non-writing"
-	msWindow: Int64!
-	"msPeriod: Minimum delay between 2 memberships of a same issuer"
-	msPeriod: Int64!
-	"xpercent: Minimum percent of sentries to reach to match the distance rule"
-	xpercent: Float!
-	"msValidity: Maximum age of an active membership"
-	msValidity: Int64!
-	"stepMax: Maximum distance between a WOT member and [xpercent] of sentries"
-	stepMax: Int!
-	"medianTimeBlocks: Number of blocks used for calculating median time"
-	medianTimeBlocks: Int!
-	"avgGenTime: The average time for writing 1 block (wished time)"
-	avgGenTime: Int64!
-	"dtDiffEval: The number of blocks required to evaluate again PoWMin value"
-	dtDiffEval: Int!
-	"percentRot: The percent of calculating members not excluded from the proof of work"
-	percentRot: Float!
-	"udTime0: Time of first UD"
-	udTime0: Int64!
-	"udReevalTime0: Time of first reevaluation of the UD"
-	udReevalTime0: Int64!
-	"dtReeval: Time period between two re-evaluation of the UD"
-	dtReeval: Int64!
-	"txWindow: Maximum delay a transaction can wait before being expired for non-writing"
-	txWindow: Int64!
-} #Parameters
 `
 
 )

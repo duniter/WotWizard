@@ -282,6 +282,8 @@ func certEndsR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value 
 	var (v G.Value; missingIncluded bool)
 	if G.GetValue(argumentValues, "missingIncluded", &v) {
 		switch v := v.(type) {
+		case *G.BooleanValue:
+			missingIncluded = v.Boolean
 		default:
 			M.Halt(v, 100)
 		}

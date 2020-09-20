@@ -162,12 +162,12 @@ func certBlockR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value
 } //certBlockR
 
 func certExpR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
-	var (from, to B.Pubkey; toH B.Hash; idInBC bool)
+	var (from, to B.Pubkey; toH B.Hash; idInBC, pending bool)
 	switch hash := GQ.Unwrap(rootValue, 0).(type) {
 	case B.Hash:
 		from, idInBC = B.IdHash(hash); M.Assert(idInBC, 100)
 	default:
-		M.Halt(hash, 100)
+		M.Halt(hash, 101)
 		return nil
 	}
 	switch hash := GQ.Unwrap(rootValue, 1).(type) {
@@ -175,16 +175,22 @@ func certExpR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
 		toH = hash
 		to, idInBC = B.IdHash(hash)
 	default:
-		M.Halt(hash, 100)
+		M.Halt(hash, 102)
 		return nil
 	}
-	var exp int64
-	ok := false
-	if idInBC {
-		_, exp, ok = B.Cert(from, to)
+	switch p := GQ.Unwrap(rootValue, 2).(type) {
+	case bool:
+		pending = p
+	default:
+		M.Halt(pending, 103)
+		return nil
 	}
-	if !ok {
-		_, _, exp, ok = S.Cert(from, toH); M.Assert(ok, 103)
+	var (exp int64; ok bool)
+	if pending {
+		_, _, exp, ok = S.Cert(from, toH)
+	}
+	if !pending || !ok {
+		_, exp, ok = B.Cert(from, to); M.Assert(ok, 104)
 	}
 	return G.MakeInt64Value(exp)
 } //certExpR

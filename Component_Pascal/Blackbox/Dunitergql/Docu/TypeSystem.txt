@@ -84,8 +84,8 @@ type Mutation {
 	"'wwFileStop' erases the subscription for 'Subscription.wwFile'; do nothing if the subscription is not already installed"
 	wwFileStop: Void
 	
-	"'wwServerStop' erases the subscription for 'Subscription.wwResult'; do nothing if the subscription is not already installed"
-	wwServerStop: Void
+	"'wwResultStop' erases the subscription for 'Subscription.wwResult'; do nothing if the subscription is not already installed"
+	wwResultStop: Void
 	
 	"'memEndsStop' erases the subscription for 'Subscription.memEnds'; do nothing if the subscription is not already installed"
 	memEndsStop: Void

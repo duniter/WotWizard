@@ -14,8 +14,6 @@ package wotWizard
 
 /**************************************************************************************
 Bug : Dans calcRec, si la date de passage d'un dossier devient supérieure à la date limite d'une de ses certifications, il faut en tenir compte : enlever la certification, recalculer PrincCertif, etc...
-
-Bug: Si une certification est active et une autre, du même certificateur, est en piscine, elles sont comptées pour deux dans FillFile.
 ***************************************************************************************/
 
 // For versions 1.4+ of Duniter
@@ -856,6 +854,15 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 				for {
 					from, toHash, okP := pos.CertNextPos()
 					if okP {
+						c := certs
+						for c != nil && *c.pub != from {
+							c = c.next
+						}
+						if c != nil {
+							continue
+						}
+					}
+					if okP {
 						_, member, _, _, _, _, bb := B.IdPubComplete(from)
 						var posBF B.CertPos
 						bb = bb && member && (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
@@ -906,21 +913,28 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 						from, to, okP = posBI.CertNextPos()
 					}
 				}
+				k := j
 				from, toHash, okP := posI.CertNextPos()
 				for okP {
-					_, b, _, _, _, _, bb := B.IdPubComplete(from)
-					var posBF B.CertPos
-					bb = bb && b &&  (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
-					if bb {
-						_, _, exp, b := S.Cert(from, toHash); M.Assert(b, 106)
-						date := fixCertNextDate(from)
-						if M.Max64(date, minDate) <= exp {
-							useful.SearchIns(&pubSet{p: from})
-							c := &Certif{date: date, limit: exp, From: new(string), To: d.Id, ToH: d.Hash}
-							c.fromP = new(B.Pubkey); *c.fromP = from
-							*c.From, b = B.IdPub(from); M.Assert(b, 107)
-							d.Certifs[j] = c
-							j++
+					i := 0
+					for i < k && *d.Certifs[i].(*Certif).fromP != from {
+						i++
+					}
+					if i >= k {
+						_, b, _, _, _, _, bb := B.IdPubComplete(from)
+						var posBF B.CertPos
+						bb = bb && b &&  (!B.CertFrom(from, &posBF) || posBF.CertPosLen() < int(B.Pars().SigStock))
+						if bb {
+							_, _, exp, b := S.Cert(from, toHash); M.Assert(b, 106)
+							date := fixCertNextDate(from)
+							if M.Max64(date, minDate) <= exp {
+								useful.SearchIns(&pubSet{p: from})
+								c := &Certif{date: date, limit: exp, From: new(string), To: d.Id, ToH: d.Hash}
+								c.fromP = new(B.Pubkey); *c.fromP = from
+								*c.From, b = B.IdPub(from); M.Assert(b, 107)
+								d.Certifs[j] = c
+								j++
+							}
 						}
 					}
 					from, toHash, okP = posI.CertNextPos()
@@ -979,7 +993,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 		sortFile(f, 0)
 	}
 	return
-}
+} //FillFile
 
 // Calculate the current set of entries, sorted by dates (occur) and by names (invOccur)
 func BuildEntries () (f File, cNb, dNb int, permutations, occurDate, occurName *A.Tree, duration int64) {

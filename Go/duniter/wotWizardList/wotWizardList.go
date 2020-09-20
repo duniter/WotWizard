@@ -40,10 +40,10 @@ func wwFileStopR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Valu
 	return nil
 } //wwFileStopR
 
-func wwServerStopR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+func wwResultStopR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
 	GQ.Unsubscribe("wwResult")
 	return nil
-} //wwServerStopR
+} //wwResultStopR
 
 func wwFileR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
 	var (v G.Value; full bool)
@@ -447,7 +447,7 @@ func fixFieldResolvers (ts G.TypeSystem) {
 	ts.FixFieldResolver("Subscription", "wwFile", wwFileR)
 	ts.FixFieldResolver("Subscription", "wwResult", wwResultR)
 	ts.FixFieldResolver("Mutation", "wwFileStop", wwFileStopR)
-	ts.FixFieldResolver("Mutation", "wwServerStop", wwServerStopR)
+	ts.FixFieldResolver("Mutation", "wwResultStop", wwResultStopR)
 } //fixFieldResolvers
 
 func fixStreamResolvers (ts G.TypeSystem) {
