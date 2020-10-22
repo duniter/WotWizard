@@ -78,23 +78,8 @@ type Query {
 
 type Mutation {
 	
-	"'nowStop' erases the subscription for 'Subscription.now'; do nothing if the subscription is not already installed"
-	nowStop: Void
-
-	"'wwFileStop' erases the subscription for 'Subscription.wwFile'; do nothing if the subscription is not already installed"
-	wwFileStop: Void
-	
-	"'wwResultStop' erases the subscription for 'Subscription.wwResult'; do nothing if the subscription is not already installed"
-	wwResultStop: Void
-	
-	"'memEndsStop' erases the subscription for 'Subscription.memEnds'; do nothing if the subscription is not already installed"
-	memEndsStop: Void
-	
-	"'missEndsStop' erases the subscription for 'Subscription.missEnds'; do nothing if the subscription is not already installed"
-	missEndsStop: Void
-	
-	"'certEndsStop' erases the subscription for 'Subscription.certEnds'; do nothing if the subscription is not already installed"
-	certEndsStop: Void
+	"'stopSubscription' erases the subscription whose name is 'name', which sends results at address 'returnAddr'; 'varVals' is a JSON object whose fields keys are the names of the variables (without '$') used in the subscription and whose fields values are their values"
+	stopSubscription (returnAddr: String!, name: String!, varVals: String): Void
 	
 	"changeDifferParams modifies two parameters of the differentiation process used in 'Query.membersFlux', 'Query.membersFluxPM', 'Query.fEFlux', 'Query.fEFluxPM', 'Query.lossFlux' and 'Query.lossFluxPM': 'pointsNb', the number of points over which the filter (Savitzky-Golay filter) is calculated, and 'degree',  the degree of the used polynomial (usually 2 or 4); do not change a parameter if absent or null. It returns the previous values of these two parameters."
 	changeDifferParams (pointsNb: Int, degree: Int): DifferParams!
@@ -103,22 +88,22 @@ type Mutation {
 
 type Subscription {
 	
-	"'now' installs or modifies a subscription for the update of 'Query.now' at every new block"
+	"'now' installs a subscription for the update of 'Query.now' at every new block"
 	now: Block!
 
-	"'wwFile' installs or modifies a subscription for the update of 'Query.wwFile' at every new block"
+	"'wwFile' installs a subscription for the update of 'Query.wwFile' at every new block"
 	wwFile (full: Boolean! = false): FileS!
 	
-	"'wwResult' installs or modifies a subscription for the update of 'Query.wwResult' at every new block"
+	"'wwResult' installs a subscription for the update of 'Query.wwResult' at every new block"
 	wwResult: WWResultS!
 	
-	"'memEnds' installs or modifies a subscription for the update of 'Query.memEnds' at every new block"
+	"'memEnds' installs a subscription for the update of 'Query.memEnds' at every new block"
 	memEnds (startFromNow: Int64, period: Int64): [Identity!]!
 	
-	"'missEnds' installs or modifies a subscription for the update of 'Query.missEnds' at every new block"
+	"'missEnds' installs a subscription for the update of 'Query.missEnds' at every new block"
 	missEnds (startFromNow: Int64, period: Int64): [Identity!]!
 	
-	"'certEnds' installs or modifies a subscription for the update of 'Query.certEnds' at every new block"
+	"'certEnds' installs a subscription for the update of 'Query.certEnds' at every new block"
 	certEnds (startFromNow: Int64, period: Int64, missingIncluded: Boolean! = true): [Identity!]!
 
 } #Subscription

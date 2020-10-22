@@ -1,0 +1,388 @@
+BABEL "babel/babel";
+{The effective grammar of Babel.}
+
+DEFINITION
+
+	lettre	= ["A"-"Z","a"-"z"] ;
+	chiffre	= ["0"-"9"] ;
+	hexa	= chiffre | ["A"-"F"];
+	special	= ["-","_"] ;
+	tabulation	= #9 ;
+
+COMMENT
+
+{ 1}"{" ,
+{ 2}"}" ;
+
+LEXICON
+
+{ 3}blancs	= (" "|tabulation|$)+ ;
+
+{ 4}chapeau	= "^" ;
+{ 5}crochetD	= "]" ;
+{ 6}crochetG 	= "[" ;
+{ 7}deux_points	= ":" ;
+{ 8}diese	= "#" ;
+{ 9}dollar	= "$" ;
+{10}egal	= "=" ;
+{11}etoile	= "*" ;
+{12}interro	= "?" ;
+{13}ou	= "|" ;
+{14}parD	= ")" ;
+{15}parG	= "(" ;
+{16}piqueD	= ">" ;
+{17}piqueG	= "<" ;
+{18}plus	= "+" ;
+{19}point	= "." ;
+{20}point-virgule	= ";" ;
+{21}slash	= "/" ;
+{22}tiret	= "-" ;
+{23}virgule	= "," ;
+
+{24}axiome	= "AXIOM" ;
+{25}babel	= "BABEL" ;
+{26}commentaire	= "COMMENT" ;
+{27}declaration	= "DECLARATION" ;
+{28}definition	= "DEFINITION" ;
+{29}grammaire	= "GRAMMAR" ;
+{30}lexique	= "LEXICON" ;
+{31}terminaison	= "ENDING" ;
+
+{32}chaine	= '"' [.^'"']* '"' | "'" [.^"'"]* "'" ;
+{33}identificateur	= lettre ( lettre | chiffre | special )* ;
+{34}nombre	= chiffre+ | chiffre hexa* "H" ;
+{35}non-terminal	= "_" identificateur ;
+
+ENDING
+
+	point ;
+
+DECLARATION
+
+{ 1}*	_action(lAct,res) ;
+{ 2}*	_affectation(act,aux) ;
+{ 3} 	_affectations(lAct) ;
+{ 4} 	_assoc(assoc) ;
+{ 5} 	_attribut(att,aux) ;
+{ 6} 	_attributsPossibles(lAtt) ;
+{ 7}*	_axiome(res,aux) ;
+{ 8} 	_chaine(chaine,aux) ;
+{ 9}*	_commentaire(res) ;
+{10}*	_declaration(res,aux) ;
+{11} 	_declarations ;
+{12}*	_defTok(res) ;
+{13} 	_defToks ;
+{14}*	_definition(res) ;
+{15} 	_definitions ;
+{16} 	_fonction(fonct,aux1,aux2,aux3) ;
+{17} 	_gramExp(gExp,aux1,aux2) ;
+{18} 	_lAttrib(lPar) ;
+{19} 	_lSpec(lCars) ;
+{20} 	_listeAttributs(lAtt) ;
+{21} 	_marque(m) ;
+{22} 	_numAtt(val) ;
+{23} 	_params(lPar) ;
+{24} 	_partieDeclaration(res) ;
+{25}*	_partieDefinition ;
+{26} 	_partieLexicale(res) ;
+{27}*	_partieSyntaxique ;
+{28} 	_precedence(prec,assoc) ;
+{29} 	_regExp(lExp) ;
+{30} 	_regFacteur(lExp,aux1,aux2,aux3,aux4) ;
+{31} 	_regSExp(lExp) ;
+{32} 	_regTerme(lExp) ;
+{33}*	_regle(res) ;
+{34} 	_regles ;
+{35} 	_specifications(void) ;
+{36} 	_spec(lCars) ;
+{37} 	_specs(lCars,aux1,aux2) ;
+{38} 	_syntaxe(res,aux) ;
+{39}*	_terminaison(res,aux) ;
+
+	nil	= # 1 ;
+	false	= # 2 ;
+	true	= # 3 ;
+	slash	= # 4 ;
+	ou	= # 5 ;
+	cat	= # 6 ;
+	star	= # 7 ;
+	eps	= # 8 ;
+	mult	= # 9 ;
+	catCha	= #10 ;
+	eOL	= #11 ;
+	creeCarL	= #12 ;
+	cons	= #13 ;
+	action	= #14 ;
+	fonction	= #15 ;
+	attribut	= #16 ;
+	
+	InsereDefL	= ^ 1 ;
+	DefComment	= ^ 2 ;
+	InitSynt	= ^ 3 ;
+	InsereTokL	= ^ 4 ;
+	ZERO	= ^ 5 ;
+	Valeur	= ^ 6 ;
+	ToutCar	= ^ 7 ;
+	Union	= ^ 8 ;
+	Difference	= ^ 9 ;
+	Vide	= ^10 ;
+	Intervalle	= ^11 ;
+	ExtraitChaine	= ^12 ;
+	NombreChaine	= ^13 ;
+	FinDeclaration	= ^14 ;
+	InsereNonTerm	= ^15 ;
+	InsereFonctionHard	= ^16 ;
+	InsereFonctionSoft	= ^17 ;
+	InsereSem	= ^18 ;
+	ChercheNT	= ^19 ;
+	InsereRegle	= ^20 ;
+	ChercheTerm	= ^21 ;
+	ChercheFixePrec	= ^22 ;
+	ChercheFonction	= ^23 ;
+	COPIE	= ^24 ;
+	FixeTerminaison	= ^25 ;
+	FixeAxiome	= ^26 ;
+	ChercheTokL	= ^27 ;
+	Nomme	= ^28 ;
+
+GRAMMAR
+
+{ 1}_specifications	=	babel chaine point-virgule _partieDefinition _commentaire _partieLexicale _terminaison _partieDeclaration _partieSyntaxique _axiome
+: $0.void = Nomme($2) ;
+
+{ 2}_partieDefinition	=	;
+
+{ 3}_partieDefinition	=	definition _definitions _definition point-virgule ;
+
+{ 4}_definitions	=	;
+
+{ 5}_definitions	=	_definitions _definition point-virgule ;
+
+{ 6}_definition	=	identificateur egal _regExp
+: $0.res = InsereDefL($1, $3.lExp) ;
+
+{ 7}_commentaire	=	;
+
+{ 8}_commentaire	=	commentaire _regExp virgule _regExp point-virgule
+: $0.res = DefComment($2.lExp, $4.lExp) ;
+
+{ 9}_partieLexicale	=	lexique _defToks _defTok point-virgule
+: $0.res = InitSynt ;
+
+{10}_defToks	=	;
+
+{11}_defToks	=	_defToks _defTok point-virgule ;
+
+{12}_defTok	=	identificateur _precedence egal _regExp
+: $0.res = InsereTokL($1, $2.prec, $2.assoc, $4.lExp) ;
+
+{13}_precedence	=
+: $0.prec = ZERO, $0.assoc = true ;
+
+{14}_precedence	=	crochetG nombre crochetD
+: $0.prec = Valeur($2), $0.assoc = true ;
+
+{15}_precedence	=	crochetG _assoc crochetD
+: $0.prec = ZERO, $0.assoc = $2.assoc ;
+
+{16}_precedence	=	crochetG nombre _assoc crochetD
+: $0.prec = Valeur($2), $0.assoc = $3.assoc ;
+
+{17}_precedence	=	crochetG _assoc nombre crochetD
+: $0.prec = Valeur($3), $0.assoc = $2.assoc ;
+
+{18}_assoc	=	piqueG
+: $0.assoc = false ;
+
+{19}_assoc	=	piqueD
+: $0.assoc = true ;
+
+{20}_regExp	=	_regSExp
+: $0.lExp = $1.lExp ;
+
+{21}_regExp	=	_regExp slash _regSExp
+: $0.lExp = slash($1.lExp, $3.lExp) ;
+
+{22}_regSExp	=	_regTerme
+: $0.lExp= $1.lExp ;
+
+{23}_regSExp	=	_regSExp ou _regTerme
+: $0.lExp = ou($1.lExp, $3.lExp) ;
+
+{24}_regTerme	=	_regFacteur
+: $0.lExp = $1.lExp ;
+
+{25}_regTerme	=	_regTerme _regFacteur
+: $0.lExp = cat($1.lExp, $2.lExp) ;
+
+{26}_regFacteur	=	_regFacteur etoile
+: $0.lExp = star($1.lExp) ;
+
+{27}_regFacteur	=	_regFacteur plus
+: $0.aux1 = star($1.lExp), $0.lExp = cat($1.lExp, $0.aux1) ;
+
+{28}_regFacteur	=	_regFacteur interro
+: $0.aux1 = eps, $0.lExp = ou($1.lExp, $0.aux1) ;
+
+{29}_regFacteur	=	_regFacteur piqueG nombre virgule nombre piqueD
+: $0.aux2 = Valeur($3), $0.aux3 = Valeur($5),  $0.lExp = mult($1.lExp, $0.aux2, $0.aux3) ;
+
+{30}_regFacteur	=	_chaine
+: $0.lExp = catCha($1.chaine) ;
+
+{31}_regFacteur	=	point
+: $0.aux4 = ToutCar, $0.lExp = creeCarL($0.aux4) ;
+
+{32}_regFacteur	=	dollar
+: $0.lExp = eOL ;
+
+{33}_regFacteur	=	crochetG _specs crochetD
+: $0.lExp = creeCarL($2.lCars) ;
+
+{34}_regFacteur	=	identificateur
+: $0.lExp = ChercheTokL($1) ;
+
+{35}_regFacteur	=	parG _regExp parD
+: $0.lExp = $2.lExp ;
+
+{36}_specs	=	_spec _lSpec
+: $0.lCars = Union($1.lCars, $2.lCars) ;
+
+{37}_specs	=	_spec _lSpec chapeau _spec _lSpec
+: $0.aux1 = Union($1.lCars, $2.lCars), $0.aux2 = Union($4.lCars, $5.lCars), $0.lCars = Difference($0.aux1, $0.aux2) ;
+
+{38}_lSpec	=
+: $0.lCars = Vide ;
+
+{39}_lSpec	=	virgule _spec _lSpec
+: $0.lCars = Union($2.lCars, $3.lCars) ;
+
+{40}_spec	=	_chaine
+: $0.lCars = Intervalle($1.chaine, $1.chaine) ;
+
+{41}_spec	=	_chaine tiret _chaine
+: $0.lCars = Intervalle($1.chaine, $3.chaine) ;
+
+{42}_spec	=	point
+: $0.lCars = ToutCar ;
+
+{43}_chaine	=	chaine
+: $0.chaine = ExtraitChaine($1) ;
+
+{44}_chaine	=	diese nombre
+: $0.aux = Valeur($2), $0.chaine = NombreChaine($0.aux) ;
+
+{45}_partieDeclaration	=	declaration _declarations _declaration point-virgule
+: $0.res = FinDeclaration ;
+
+{46}_declarations	=	;
+
+{47}_declarations	=	_declarations _declaration point-virgule ;
+
+{48}_declaration	=	_marque non-terminal _attributsPossibles
+: $0.res = InsereNonTerm($2, $1.m, $3.lAtt) ;
+
+{49}_declaration	=	identificateur egal chapeau nombre
+: $0.aux = Valeur($4), $0.res = InsereFonctionHard($1, $0.aux) ;
+
+{50}_declaration	=	identificateur egal diese nombre
+: $0.aux = Valeur($4), $0.res = InsereFonctionSoft($1, $0.aux) ;
+
+{51}_attributsPossibles	=
+: $0.lAtt = nil ;
+
+{52}_attributsPossibles	=	parG _listeAttributs identificateur _numAtt parD
+: $0.lAtt = cons($3, $4.val, $2.lAtt) ;
+
+{53}_listeAttributs	=
+: $0.lAtt = nil ;
+
+{54}_listeAttributs	=	_listeAttributs identificateur _numAtt virgule
+: $0.lAtt = cons($2, $3.val, $1.lAtt) ;
+
+{55}_numAtt	=
+: $0.val = ZERO ;
+
+{56}_numAtt	=	crochetG nombre crochetD
+: $0.val = Valeur($2) ;
+
+{57}_partieSyntaxique	=	grammaire _regles _regle point-virgule ;
+
+{58}_regles	=	;
+
+{59}_regles	=	_regles _regle point-virgule ;
+
+{60}_regle	=	_syntaxe _action
+: $0.res = InsereSem($2.lAct) ;
+
+{61}_syntaxe	=	non-terminal egal _gramExp
+: $0.aux = ChercheNT($1), $0.res = InsereRegle($0.aux, $3.gExp) ;
+
+{62}_marque	=
+: $0.m = false ;
+
+{63}_marque	=	etoile
+: $0.m = true ;
+
+{64}_gramExp	=
+: $0.gExp = nil ;
+
+{65}_gramExp	=	_gramExp non-terminal
+: $0.aux1 = ChercheNT($2), $0.aux2 = false, $0.gExp = cons($0.aux1, $0.aux2, $1.gExp) ;
+
+{66}_gramExp	=	_gramExp identificateur
+: $0.aux1 = ChercheTerm($2), $0.aux2 = true, $0.gExp = cons($0.aux1, $0.aux2, $1.gExp) ;
+
+{67}_action	=
+: $0.lAct = nil ;
+
+{68}_action	=	deux_points _affectation _affectations
+: $0.lAct = cons($2.act, $3.lAct) ;
+
+{69}_action	=	deux_points identificateur _affectations
+: $0.res = ChercheFixePrec($2), $0.lAct = $3.lAct ;
+
+{70}_affectations	=
+: $0.lAct = nil ;
+
+{71}_affectations	=	virgule _affectation _affectations
+: $0.lAct = cons($2.act, $3.lAct) ;
+
+{72}_affectation	=	dollar nombre point identificateur egal _fonction
+: $0.aux = Valeur($2), $0.act = action($0.aux, $4, $6.fonct) ;
+
+{73}_fonction	=	identificateur _params
+: $0.aux1 = ChercheFonction($1), $0.fonct = fonction($0.aux1, $2.lPar) ;
+
+{74}_fonction	=	_attribut
+: $0.aux1 = COPIE, $0.aux2 = nil, $0.aux3 = cons($1.att, $0.aux2), $0.fonct = fonction($0.aux1, $0.aux3) ;
+
+{75}_params	=
+: $0.lPar = nil ;
+
+{76}_params	=	parG _lAttrib _attribut parD
+: $0.lPar = cons($3.att, $2.lPar) ;
+
+{77}_lAttrib	=
+: $0.lPar = nil ;
+
+{78}_lAttrib	=	_lAttrib _attribut virgule
+: $0.lPar = cons($2.att, $1.lPar) ;
+
+{79}_attribut	=	dollar nombre
+: $0.aux = Valeur($2), $0.att = attribut($0.aux) ;
+
+{80}_attribut	=	dollar nombre point identificateur
+: $0.aux = Valeur($2), $0.att = attribut($0.aux, $4) ;
+
+{81}_terminaison	=	;
+
+{82}_terminaison	=	terminaison identificateur point-virgule
+: $0.aux = ChercheTerm($2), $0.res = FixeTerminaison($0.aux) ;
+
+{83}_axiome	=	axiome non-terminal
+: $0.aux = ChercheNT($2), $0.res = FixeAxiome($0.aux) ;
+
+AXIOM
+	
+	_specifications .

@@ -1,0 +1,231 @@
+EBNF UtilGraphQL:
+
+{
+exclamation = "!" ;
+dollar = "$" ;
+ampersand = "&" ;
+leftpar = "(" ;
+rightpar = ")" ;
+spread = "..." ;
+colon = ":" ;
+equal = "=" ;
+arobase = "@" ;
+leftbracket = "[" ;
+rightbracket = "]" ;
+leftbrace = "{" ;
+or = "|" ;
+rightbrace = "}" ;
+}
+
+(*** Document ***)
+
+Document = Definition { Definition }.
+
+Definition = ExecutableDefinition | TypeSystemDefinition | TypeSystemExtension.
+
+ExecutableDefinition = OperationDefinition | FragmentDefinition.
+
+TypeSystemDefinition = SchemaDefinition | TypeDefinition | DirectiveDefinition.
+
+TypeSystemExtension = SchemaExtension | TypeExtension.
+
+OperationDefinition = [OperationType [Name] [VariableDefinitions] {Directive}] SelectionSet.
+
+FragmentDefinition = fragment FragmentName TypeCondition {Directive} SelectionSet.
+
+SchemaDefinition = schema {Directive_const} "{" OperationTypeDefinition {OperationTypeDefinition} "}".
+
+TypeDefinition = ScalarTypeDefinition | ObjectTypeDefinition | InterfaceTypeDefinition | UnionTypeDefinition | EnumTypeDefinition | InputObjectTypeDefinition.
+
+DirectiveDefinition = [Description] directive "@" Name [ArgumentsDefinition] on DirectiveLocations.
+
+SchemaExtension = extend schema [Directives_const] "{" OperationTypeDefinition {OperationTypeDefinition} "}" | extend schema Directives_const.
+
+TypeExtension = ScalarTypeExtension | ObjectTypeExtension | InterfaceTypeExtension | UnionTypeExtension | EnumTypeExtension | InputObjectTypeExtension.
+
+OperationType = query | mutation | subscription.
+
+VariableDefinitions = "(" VariableDefinition {VariableDefinition} ")".
+
+Directive = "@" Name [Arguments].
+
+SelectionSet = "{" Selection {Selection} "}".
+
+FragmentName = Name (* but not 'on' *).
+
+TypeCondition = on NamedType.
+
+Directive_const = "@" Name [Arguments_const].
+
+OperationTypeDefinition = OperationType ":" NamedType.
+
+ScalarTypeDefinition = [Description] scalar Name [Directives_const].
+
+ObjectTypeDefinition = [Description] type Name [ImplementsInterfaces] [Directives_const] [FieldsDefinition].
+
+InterfaceTypeDefinition = [Description] interface Name [Directives_const] [FieldsDefinition].
+
+UnionTypeDefinition = [Description] union Name [Directives_const] [UnionMemberTypes].
+
+EnumTypeDefinition = [Description] enum Name [Directives_const] [EnumValuesDefinition].
+
+InputObjectTypeDefinition = [Description] input Name [Directives_const] [InputFieldsDefinition].
+
+ArgumentsDefinition = "(" InputValueDefinition {InputValueDefinition} ")".
+
+DirectiveLocations = ["|"] DirectiveLocation {"|" DirectiveLocation}.
+
+Directives_const = Directive_const {Directive_const}.
+
+ScalarTypeExtension = extend scalar Name Directives_const.
+
+ObjectTypeExtension = extend type Name [ImplementsInterfaces] [Directives_const] FieldsDefinition | extend type Name [ImplementsInterfaces] Directives_const | extend type Name ImplementsInterfaces.
+
+InterfaceTypeExtension = extend interface Name [Directives_const] FieldsDefinition | extend interface Name Directives_const.
+
+UnionTypeExtension = extend union Name [Directives_const] UnionMemberTypes | extend union Name Directives_const.
+
+EnumTypeExtension = extend enum Name [Directives_const] EnumValuesDefinition | extend enum Name Directives_const.
+
+InputObjectTypeExtension = extend input Name [Directives_const] InputFieldsDefinition | extend input Name Directives_const.
+
+VariableDefinition = Variable ":" Type [DefaultValue].
+
+Arguments = "(" Argument {Argument} ")".
+
+Selection = Field | FragmentSpread | InlineFragment.
+
+NamedType = Name.
+
+Arguments_const = "(" Argument_const {Argument_const} ")".
+
+Description = StringValue.
+
+ImplementsInterfaces = implements ["&"] NamedType { "&" NamedType}.
+
+FieldsDefinition = "{" FieldDefinition {FieldDefinition} "}".
+
+UnionMemberTypes = "=" ["|"] NamedType {"|" NamedType}.
+
+EnumValuesDefinition = "{" EnumValueDefinition {EnumValueDefinition} "}".
+
+InputFieldsDefinition = "{" InputValueDefinition {InputValueDefinition} "}".
+
+InputValueDefinition = [Description] Name ":" Type [DefaultValue] [Directives_const].
+
+DirectiveLocation = ExecutableDirectiveLocation | TypeSystemDirectiveLocation.
+
+Variable = "$" Name.
+
+Type = NamedType | ListType | NonNullType.
+
+DefaultValue = "=" Value_const.
+
+Argument = Name ":" Value.
+
+Field = [Alias] Name [Arguments] {Directive} [SelectionSet].
+
+FragmentSpread = "..." FragmentName {Directive}.
+
+InlineFragment = "..." [TypeCondition] {Directive} SelectionSet.
+
+Argument_const = Name ":" Value_const.
+
+FieldDefinition = [Description] Name [ArgumentsDefinition] ":" Type [Directives_const].
+
+EnumValueDefinition = [Description] EnumValue [Directives_const].
+
+ExecutableDirectiveLocation = QUERY | MUTATION | SUBSCRIPTION | FIELD | FRAGMENT_DEFINITION | FRAGMENT_SPREAD | INLINE_FRAGMENT.
+
+TypeSystemDirectiveLocation = SCHEMA | SCALAR | OBJECT | FIELD_DEFINITION | ARGUMENT_DEFINITION | INTERFACE | UNION | ENUM | ENUM_VALUE | INPUT_OBJECT | INPUT_FIELD_DEFINITION.
+
+ListType = "[" Type "]".
+
+NonNullType = NamedType "!" | ListType "!".
+
+Value_const = IntValue | FloatValue | StringValue | BooleanValue | NullValue | EnumValue | ListValue_const | ObjectValue_const.
+
+Value = Variable | IntValue | FloatValue | StringValue | BooleanValue | NullValue | EnumValue | ListValue | ObjectValue.
+
+Alias = Name ":".
+
+EnumValue = Name. (* but not 'true', 'false' or 'null' *)
+
+BooleanValue = true | false.
+
+NullValue = null.
+
+ListValue_const = "[" {Value_const} "]".
+
+ObjectValue_const = "{" {ObjectField_const} "}".
+
+ListValue = "[" {Value} "]".
+
+ObjectValue = "{" {ObjectField} "}".
+
+ObjectField_const = Name ":" Value_const.
+
+ObjectField = Name ":" Value.
+
+(*** Lexical Definitions ***)
+
+(*
+SourceCharacter = &[#9H, #0AH, #0DH, #20H-#0FFFFH]&.
+*)
+
+(** Ignored Tokens **)
+
+Ignored = &UnicodeBOM | WhiteSpace | LineTerminator | Comment | Comma&.
+
+UnicodeBOM = &#0FEFFH&.
+
+WhiteSpace = &[#9H, #20H]&.
+
+LineTerminator = &[#0AH, #0DH] | #0DH #0AH&.
+
+Comment = &"#" CommentChar*&.
+
+CommentChar = &[#9H, #20H-#0FFFFH]&.
+
+Comma = &","&.
+
+(** Lexical Tokens **)
+
+(*
+Token = &Punctuator | Name | IntValue | FloatValue | StringValue&.
+
+Punctuator = &["!", "$", "(", ")", ":", "=", "@", "[", "]", "{", "|", "}"] | "..."&.
+*)
+
+Name = &["_", "A"-"Z", "a"-"z"] ["_", "0"-"9", "A"-"Z", "a"-"z"]*&.
+
+IntValue = &IntegerPart&.
+
+IntegerPart = &NegativeSign? ("0" | NonZeroDigit Digit*)&.
+
+NegativeSign = &"-"&.
+
+Digit = &["0"-"9"]&.
+
+NonZeroDigit = &["1"-"9"]&.
+
+FloatValue = &IntegerPart (FractionalPart | ExponentPart | FractionalPart ExponentPart)&.
+
+FractionalPart = &"." Digit+&.
+
+ExponentPart = &ExponentIndicator Sign? Digit+&.
+
+ExponentIndicator = &["e", "E"]&.
+
+Sign = &["+", "-"]&.
+
+StringValue = &'"' StringCharacter* '"' | '"""' BlockStringCharacter* '"""'&.
+
+StringCharacter = &[#9H, #20H-#0FFFFH ^ '"', "\"] | "\u" EscapedUnicode |  "\" EscapedCharacter&.
+
+EscapedUnicode = &["0"-"9", "A"-"F", "a"-"f"]<4, 4>&.
+
+EscapedCharacter = &['"', "\", "/", "b", "f", "n", "r", "t"]&.
+
+BlockStringCharacter = &"\"? ('"'<1, 2> | '"'<4, 4> '"'*) | "\" ('"'<0, 2> [#9H, #0AH, #0DH, #20H-#0FFFFH ^ '"'])? | [#9H, #0AH, #0DH, #20H-#0FFFFH ^ '"', "\"] | '\"""'&. (* Block string values are interpreted to exclude blank initial and trailing
+lines and uniform indentation with {BlockStringValue()} *)
