@@ -110,6 +110,11 @@ const (
 					<input type="submit" value="{{.OK}}">
 				</p>
 			</form>
+			{{if .WarnNum}}
+				<h4>
+					{{.WarnNum}}
+				</h4>
+			{{end}}
 			{{if .Warnings}}
 				{{range .Warnings}}
 					<p>
@@ -203,7 +208,8 @@ type (
 		Title,
 		Now,
 		Forward,
-		OK string
+		OK,
+		WarnNum string
 		Fw int
 		Warnings Warnings
 	}
@@ -255,12 +261,13 @@ func print (t string, now *Block, forward string, fw int, props props, title, co
 	}
 	nowS := fmt.Sprint(doBlock(now), " → ", BA.Ts2s(next(now.Bct, fw)))
 	ok := SM.Map("#duniterClient:OK")
+	warnNum := fmt.Sprint(SM.Map("#duniterClient:WarnNum"), " ", len(props))
 	warnings := make(Warnings, len(props))
 	for i, p := range props {
 		content := fmt.Sprint(BA.Ts2s(p.prop), "    ", p.id)
 		warnings[i] = &Warning{titleE, compE, content, certE, p.aux}
 	}
-	return &Out{tE, nowS, forwardE, ok, fw, warnings}
+	return &Out{tE, nowS, forwardE, ok, warnNum, fw, warnings}
 } //print
 
 func makeCount (now *Block, what string, ids Identities, fw int) props {

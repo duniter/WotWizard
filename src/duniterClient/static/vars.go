@@ -140,6 +140,7 @@ SortedByCExpDates	Sorted by Expiration Dates of Certifications
 Threshold	Threshold
 TypeUidOrPubkey	Start of Nickname or Public Key
 Utc	Blockchain Actual Time
+WarnNum	Number of Warnings:
 Written_block	First Membership
 wwByDate	Sorted by Dates
 wwByName	Sorted by Names
@@ -155,7 +156,7 @@ yes	yes
 AllCertified	Toutes les identités certifiées non-révoquées :
 AllCertifiers	Tous les certificateurs connus et non-révoqués :
 50allParameters	Informations : Paramètres de la chaîne de blocs
-AppLimitDate	Date limite d'adhésion ou de révocation
+AppLimitDate	Date limite d'adhésion ou d'exclusion
 Availability	Disponibilité du prochain envoi de certification
 Bct	Temps médian de la chaîne de blocs
 Block	Bloc
@@ -274,6 +275,7 @@ SortedByCExpDates	Tri par dates d'expiration des certifications
 Threshold	Seuil
 TypeUidOrPubkey	Début de pseudo ou de clef publique
 Utc	Temps réel de la chaîne de blocs
+WarnNum	Nombre d'alertes :
 Written_block	Première adhésion
 wwByDate	Tri par dates
 wwByName	Tri par noms

@@ -410,13 +410,14 @@ func printT (a EventsT, now *NowT, title, period string) *Out {
 	nowS := printNow(now)
 	dy := SM.Map("#duniterClient:Delay")
 	s := SM.Map("#duniterClient:OK")
+	block := SM.Map("#duniterClient:Block");
 	actual := SM.Map("#duniterClient:Utc")
 	median := SM.Map("#duniterClient:Bct")
 	entry := SM.Map("#duniterClient:Entry")
 	exit := SM.Map("#duniterClient:Exit")
 	l := make(ListE, len(a))
 	for i, ai := range a {
-		d := fmt.Sprint(actual, ": ", BA.Ts2s(ai.Block.Utc0), "    ", median, ": ", BA.Ts2s(ai.Block.Bct))
+		d := fmt.Sprint(block, ": ", ai.Block.Number,  "    ", actual, ": ", BA.Ts2s(ai.Block.Utc0), "    ", median, ": ", BA.Ts2s(ai.Block.Bct))
 		in := make(InOutsT, len(ai.IdList))
 		for j, id := range ai.IdList {
 			w := new(strings.Builder)
