@@ -117,7 +117,7 @@ func (fac factorer) Create (nF string) bool {
 	if err != nil {
 		return false
 	}
-	_ = f.Close()
+	f.Close()
 	return true
 }
 

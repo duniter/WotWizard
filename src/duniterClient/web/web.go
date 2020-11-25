@@ -14,13 +14,18 @@ package web
 
 import (
 	
+	A	"util/avl"
 	BA	"duniterClient/basicPrint"
+	F	"path/filepath"
 	M	"util/misc"
 	R	"util/resources"
 	SM	"util/strMapping"
+		"errors"
 		"fmt"
 		"net/http"
 		"github.com/gorilla/mux"
+		"os"
+		"text/scanner"
 		"html/template"
 
 )
@@ -45,6 +50,8 @@ const (
 			{{end}}
 		{{end}}
 	`
+	
+	authorizationsName = "Authorizations.txt"
 
 )
 
@@ -56,12 +63,12 @@ type (
 		temp *template.Template
 		call executeFunc
 	}
+	
+	stringComp string
 
 )
 
 var (
-	
-	wd = R.FindDir()
 	
 	packages = make(map[string] *pack)
 	packagesD = make(map[string] *pack)
@@ -83,6 +90,55 @@ func RegisterPackage (name, temp string, call executeFunc, displayed bool) {
 	}
 }
 
+func (s1 stringComp) Compare (s2 A.Comparer) A.Comp {
+	ss2 := s2.(stringComp)
+	switch {
+	case s1 < ss2:
+		return A.Lt
+	case s1 > ss2:
+		return A.Gt
+	default:
+		return A.Eq
+	}
+}
+
+func initAuthorizations () {
+	name := F.Join(R.FindDir(), "duniterClient", authorizationsName)
+	f, err := os.Open(name)
+	if err == nil {
+		defer f.Close()
+		s := new(scanner.Scanner)
+		s.Init(f)
+		s.Error = func(s *scanner.Scanner, msg string) {panic(errors.New("File " + name + " incorrect"))}
+		s.Mode = scanner.ScanStrings
+		auth := make(map[string] *int)
+		for s.Scan() != scanner.EOF {
+			ss := s.TokenText()
+			M.Assert(ss[0] == '"' && ss[len(ss) - 1] == '"', ss, 101)
+			auth[ss[1:len(ss) - 1]] = nil
+		}
+		for view, _ := range packagesD {
+			if _, ok := auth[view]; !ok {
+				delete(packages, view)
+				delete(packagesD, view)
+			}
+		}
+	} else {
+		f, err := os.Create(name)
+		M.Assert(err == nil, err, 102)
+		defer f.Close()
+		t := A.New()
+		for view, _ := range packagesD {
+			t.SearchIns(stringComp(view))
+		}
+		e := t.Next(nil)
+		for e != nil {
+			fmt.Fprintln(f, "\"" + e.Val().(stringComp) + "\"")
+			e = t.Next(e)
+		}
+	}
+}
+
 func getHandler (name string, p *pack) http.HandlerFunc {
 	
 	return func (w http.ResponseWriter, r *http.Request) {
@@ -92,6 +148,7 @@ func getHandler (name string, p *pack) http.HandlerFunc {
 }
 
 func Start () {
+	initAuthorizations()
 	r := mux.NewRouter().StrictSlash(false)
 	for name, p := range packages {
 		if name == "index" {

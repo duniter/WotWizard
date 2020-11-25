@@ -18,6 +18,8 @@ package bTree
 
 // Management of concurrency in buffer pages allocations and deallocations
 
+// Small Index Pages Version
+
 import (
 
 	A "util/avl"
@@ -43,12 +45,6 @@ const (
 	LIS = 8 // int64 size.
 	SRS = 4 // float32 size.
 	RES = 8 // float64 size.
-	
-	// max uint8 value.
-	maxInt8 = 0x7F
-	
-	// max uint16 value.
-	maxInt16 = 0x7FFF
 
 )
 	
@@ -103,16 +99,16 @@ type (
 		// Truncate the file at the length end.
 		Truncate (end FilePos)
 		
-		// Read and return a real from the array a at position pos; put pos at the position following the real.
+		// Read and return a float64 from the slice b at position pos; put pos at the position following the float64.
 		BytesToFloat64 (b Bytes, pos *int) float64
 		
-		// Read and return a shortreal from the array a at position pos; put pos at the position following the shortreal.
+		// Read and return a float32 from the slice b at position pos; put pos at the position following the float32.
 		BytesToFloat32 (b Bytes, pos *int) float32
 		
-		// Return a pointer to an array of bytes coding for the real r.
+		// Return a pointer to a slice of bytes coding for r.
 		Float64ToBytes (f float64) Bytes
 		
-		// Return a pointer to an array of bytes coding for the shortreal r.
+		// Return a pointer to a slice of bytes coding for r.
 		Float32ToBytes (f float32) Bytes
 	
 	}
@@ -168,11 +164,11 @@ type (
 		// Comparison method. s1 and s2 are the keys to be compared. The result can be lt (s1 < s2), eq (s1 = s2) or gt (s1 > s2). KeyManagerer.CompP must induce a total order on the set of keys.
 		CompP (s1, s2 Data) Comp
 		
-		/* Create a prefix of a key. On input key1 and key2 are two keys, with key1 < key2. On output, key2 may be modified, but cannot be enlarged, so that it becomes a prefix of its previous value. A prefix Pref(key1, key2) of  the key key2 in relation to the key key1 is defined by:
-			1) Pref(key1, key2) is a key, which can be compared to other keys by the mean of the method KeyManager.CompP;
-			2) Pref(key1, key2) is the shortest key with key1 < Pref(key1, key2) <= key2;
-			3) key1 may have a null length and, in this case, mut be considered less than any other key.
-	Prefixes are useful if keys are long or if their lengths vary much. In this case, if KeyManager.PrefP is instantiated, database is shorter and searches are faster. */
+		// Create a prefix of a key. On input key1 and key2 are two keys, with key1 < key2. On output, key2 may be modified, but cannot be enlarged, so that it becomes a prefix of its previous value. A prefix Pref(key1, key2) of  the key key2 in relation to the key key1 is defined by:
+		//	1) Pref(key1, key2) is a key, which can be compared to other keys by the mean of the method KeyManager.CompP;
+		//	2) Pref(key1, key2) is the shortest key with key1 < Pref(key1, key2) <= key2;
+		//	3) key1 may have a null length and, in this case, must be considered less than any other key.
+		// Prefixes are useful if keys are long or if their lengths vary much. In this case, if KeyManager.PrefP is instantiated, database is shorter and searches are faster.
 		PrefP (key1 Data, key2 *Data)
 	
 	}
@@ -196,13 +192,13 @@ type (
 	stringKeyManager struct {
 	}
 	
-	// Reader of an index.
+	// Reader of an index; each index may create several independant readers.
 	IndexReader struct {
 		ind *Index // Index of the IndexReader
 		posI FilePos  // Current position in index
 	}
 	
-	// Writer of an index.
+	// Writer of an index; each index owns only one writer.
 	IndexWriter struct {
 		IndexReader // An IndexWriter can read too.
 	}
@@ -213,7 +209,7 @@ type (
 		manager *KeyManager // Key manager of index
 		refI, // Reference of the index in its database
 		rootI, // Root of btree
-		stringI FilePos // Doubly linked ring of keys and associated datas (see StringI)
+		stringI FilePos // Doubly linked ring of keys and associated datas (see the type stringI)
 		writer *IndexWriter
 		keySize, // Size of a key
 		keysSize, // Size reserved for the concatenation of all key prefixes in btree pages
@@ -258,13 +254,12 @@ type (
 	// Header of a free cluster; satisfies Data
 	fClusterHead struct {
 		// Structure of leftist tree. Cf. Knuth, The art of computer programming, vol. 3, ch. 5.2.3 and exercises 32 & 35.
-		/* For any p fClusterHead,
-			p.size >= p.left.size, p.size >= p.right.size (priority queue: the root has the biggest size),
-			p.rDist = 1 + p.right.rDist (rDist is the distance to the leaf (+ 1) when going right),
-			p.left.rDist >= p.right.rDist (hence the name "leftist tree"),
-			p.lDist = 1 + p.left.rDist (useful)
-			p.father = bNil (root) or p = p.father.left or p = p.father.right
-		*/
+		// For any p fClusterHead,
+		//	p.size >= p.left.size, p.size >= p.right.size (priority queue: the root has the biggest size),
+		//	p.rDist = 1 + p.right.rDist (rDist is the distance to the leaf (+ 1) when going right),
+		//	p.left.rDist >= p.right.rDist (hence the name "leftist tree"),
+		//	p.lDist = 1 + p.left.rDist (useful)
+		//	p.father = bNil (root) or p = p.father.left or p = p.father.right
 		clusterHead
 		father,
 		left,
@@ -369,7 +364,7 @@ const (
 	elemSize = LIS + SIS
 	
 	// Minimal number of elements in a btree page
-	minEl = (maxInt8 - 1) / 2 // 63
+	minEl = (M.MaxInt8 - 1) / 2 // 63
 
 )
 
@@ -380,11 +375,9 @@ type (
 		keys FilePos // Pointer to the concatenation of all key prefixes in the page
 		elNb int8 // Number of elements
 		elems [2 * (minEl + 1)]element // Elements of the page
-		/*
-		p.elems[0].endK = 0,
-		p.elems[0].ptr -> (pageI or stringI) corresponding to keys < the first key (or prefix) of p (i.e. p.keys[p.elems[0].endK .. p.elems[1].endK]),
-		p.elems[i].ptr (i > 0) -> (pageI or stringI) corresponding to keys >= the ith key (or prefix) of p (i.e. p.keys[p.elems[i - 1].endK .. p.elems[i].endK]) and < the (i + 1)th prefix, if present
-		*/
+		// p.elems[0].endK = 0,
+		// p.elems[0].ptr -> (pageI or stringI) corresponding to keys < the first key (or prefix) of p (i.e. p.keys[p.elems[0].endK .. p.elems[1].endK]),
+		// p.elems[i].ptr (i > 0) -> (pageI or stringI) corresponding to keys >= the ith key (or prefix) of p (i.e. p.keys[p.elems[i - 1].endK .. p.elems[i].endK]) and < the (i + 1)th prefix, if present
 	}
 	
 	// Factory of pageI; satisfies DataFac
@@ -680,8 +673,7 @@ func (w *Writer) initWriter (ref *File) {
 // Return the content of w.s (output stream of the writer) as an array of bytes
 func (w *Writer) write () Bytes {
 	n := w.s.NumberOfElems()
-	var a Bytes
-	a = make(Bytes, n)
+	a := make(Bytes, n)
 	i := 0
 	e := w.s.Next(nil)
 	for e != nil {
@@ -1074,23 +1066,23 @@ func (base *Database) createPage (pageSize int, pos FilePos) *pageT {
 				q, _, _ := base.pages.SearchNext(pp)
 				for q != nil && q.Val().(*pageT).posP <= p.posP {
 					switch qq := q.Val().(type) {
-						case *pageT:
-							po := qq.posP
-							adjustPos(qq.pageP, qq.sizeP, &po)
-							if qq.dirty { // Write it normally
-								qq.dirty = false
-								var w Writer
-								w.initWriter(base.ref)
-								qq.pageP.Write(&w)
-								aP := w.write()
-								base.writeBase(po, aP)
-							} else { // Write a series of zeroes
-								var a = Bytes{0} 
-								base.ref.PosWriter(po);
-								for i := 0; i < qq.sizeP; i++ {
-									base.ref.Write(a)
-								}
+					case *pageT:
+						po := qq.posP
+						adjustPos(qq.pageP, qq.sizeP, &po)
+						if qq.dirty { // Write it normally
+							qq.dirty = false
+							var w Writer
+							w.initWriter(base.ref)
+							qq.pageP.Write(&w)
+							aP := w.write()
+							base.writeBase(po, aP)
+						} else { // Write a series of zeroes
+							var a = Bytes{0} 
+							base.ref.PosWriter(po);
+							for i := 0; i < qq.sizeP; i++ {
+								base.ref.Write(a)
 							}
+						}
 					}
 					q = base.pages.Next(q)
 				}
@@ -1878,7 +1870,7 @@ func (m *DataMan) EraseData (ptr FilePos) {
 func (pa *pageI) Write (w *Writer) {
 	w.OutFilePos(pa.keys)
 	w.OutInt8(pa.elNb)
-	for i := 0; i < 2 * (minEl + 1); i++ {
+	for i := 0; i <= int(pa.elNb); i++ {
 		w.OutFilePos(pa.elems[i].ptr)
 		w.OutInt16(pa.elems[i].endK)
 	}
@@ -1887,14 +1879,14 @@ func (pa *pageI) Write (w *Writer) {
 func (pa *pageI) Read (r *Reader) {
 	pa.keys = r.InFilePos()
 	pa.elNb = r.InInt8()
-	for i := 0; i < 2 * (minEl + 1); i++ {
+	for i := 0; i <= int(pa.elNb); i++ {
 		pa.elems[i].ptr = r.InFilePos()
 		pa.elems[i].endK = r.InInt16()
 	}
 }
 
 func (f pageIFac) New (sz int) Data {
-	M.Assert(sz == pageIS, 114)
+	M.Assert(sz <= pageIS, 114)
 	return new(pageI)
 }
 
@@ -2044,6 +2036,11 @@ func (base *Database) DeleteIndex (ref FilePos) {
 	base.eraseDiskPage(ref)
 }
 
+// Return the height of 'ind'
+func (ind *Index) Height () int {
+	return ind.height
+}
+
 // Create a new Reader for ind. A Reader keeps a position in an Index and can update this position or read values there.
 func (ind *Index) NewReader () *IndexReader {
 	return &IndexReader{ind: ind, posI: ind.stringI}
@@ -2086,11 +2083,8 @@ func (ind *Index) adjustKeysSize (p *pageI, extra int) {
 	l := int(p.elems[p.elNb].endK) // Initial content size
 	l2 := l + extra // New content size
 	if l2 > l1 {
-		l1 += sectSize
-		for l1 < l2 {
-			l1 += sectSize
-		}
-		M.Assert(l1 <= maxInt16 + 1, 100)
+		l1 = (l2 + sectSize - 1) / sectSize * sectSize
+		M.Assert(l1 <= M.MaxInt16 + 1, 100)
 		var nKeys FilePos
 		nK := ind.baseI.newDiskPage(l1, kf, &nKeys).(*keyCont)
 		nC := nK.c
@@ -2194,7 +2188,7 @@ func (ir *IndexReader) Ind () *Index {
 	return ir.ind
 }
 
-// Search in the page of address p the key key (keyA in Bytes form); father is the address of the father of p, fatherNum is the rank of p in father, h is the height of p; at exit, if inc (tree has grown), el is the new link to insert (PageI inside index or StringI at its bottom), c is the new key (or prefix) to insert and lC is its length
+// Search in the page of address p the key key (keyA in Bytes form); father is the address of the father of p, fatherNum is the rank of p in father, h is the height of p; at exit, if inc (tree has grown), el is the new link to insert (PageI inside index or stringI at its bottom), c is the new key (or prefix) to insert and lC is its length
 func (iw *IndexWriter) searchIns (key Data, keyA keyT, p, father FilePos, fatherNum, h int) (found, inc bool, el FilePos, lC int, c keyT) {
 	ind := iw.ind
 	if h == 0 { // At the bottom of btree

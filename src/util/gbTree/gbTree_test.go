@@ -225,6 +225,7 @@ func (man *gesClesCase) PrefP (k1 Data, k2 *Data) {
 	*k2 = StringPrefP(k1.(*String), (*k2).(*String), man.CompP)
 }
 
+// AllocateSize
 func TestG1 (tt *testing.T) { 
 	
 	const (
@@ -239,8 +240,8 @@ func TestG1 (tt *testing.T) {
 		nbPages = 2000
 	
 	)
-	fmt.Println("TestG1")
-	//gen.Randomize(1)
+	fmt.Println("TestG1, AllocateSize")
+	gen.Randomize(1)
 	t := L.New()
 	Fac.CloseBase(nomBase)
 	ok := Fac.CreateBase(nomBase, 0); M.Assert(ok)
@@ -254,7 +255,7 @@ func TestG1 (tt *testing.T) {
 	e := t.First(&el)
 	for n < nbElems || e != nil {
 		if n % 1000 == 0 {
-			fmt.Println(n, "\t", m, "\t", x)
+			fmt.Println("time =", n, "\tnumber =", m, "\tsize =", x)
 		}
 		n++
 		if n < nbElems {
@@ -281,6 +282,7 @@ func TestG1 (tt *testing.T) {
 	fmt.Println()
 }
 
+// WriteAllocateData
 func TestG2 (tt *testing.T) { 
 
 	const (
@@ -296,8 +298,8 @@ func TestG2 (tt *testing.T) {
 		
 	)
 	
-	fmt.Println("TestG2")
-	// gen.Randomize(1)
+	fmt.Println("TestG2, WriteAllocateData")
+	gen.Randomize(2)
 	t := L.New()
 	Fac.CloseBase(nomBase)
 	_ = Fac.CreateBase(nomBase, 0)
@@ -311,7 +313,7 @@ func TestG2 (tt *testing.T) {
 	e := t.First(&el)
 	for n < nbElems || e != nil {
 		if n % 1000 == 0 {
-			fmt.Println(n, "\t", m, "\t", x)
+			fmt.Println("time =", n, "\tnumber =", m, "\tsize =", x)
 		}
 		n++
 		if n < nbElems {
@@ -346,14 +348,15 @@ func TestG2 (tt *testing.T) {
 	fmt.Println()
 }
 
+// Index of strings
 func TestG3 (tt *testing.T) { 
-	fmt.Println("TestG3")
-	// gen.Randomize(10)
+	fmt.Println("TestG3, Index of strings")
+	gen.Randomize(3)
 	const (
 		nomBase = "BaseC2.dat"
 		nbPages = 2000
 		maxCles = 100
-		nbCles = 10000
+		nbCles = 200000
 	)
 	Fac.CloseBase(nomBase)
 	ok := Fac.CreateBase(nomBase, 1); M.Assert(ok, 100)
@@ -368,15 +371,15 @@ func TestG3 (tt *testing.T) {
 	fmt.Println()
 	for i := 1; i <= nbCles; i++ {
 		if i % 1000 == 0 {
-			fmt.Println(i)
+			fmt.Println(i, "\theight =", ind.Height(), "\tsize =", ind.NumberOfKeys())
 		}
 		for {
 			n := int(gen.IntRand(1, maxCles))
-			s := new(String)
-			s.C = ""
+			rs := make([]rune, n)
 			for j := 0; j < n; j++ {
-				s.C = s.C + string(rune(gen.IntRand(0x21, 0x7E + 1)))
+				rs[j] = rune(gen.IntRand(0x21, 0x7E + 1))
 			}
+			s := &String{C: string(rs)}
 			if !iw.SearchIns(s) {break}
 		}
 	}
@@ -420,13 +423,14 @@ func TestG3 (tt *testing.T) {
 	fmt.Println()
 }
 
+// Index of int32
 func TestG4 (tt *testing.T) { 
-	fmt.Println("TestG4")
-	// gen.Randomize(10)
+	fmt.Println("TestG4, Index of int32")
+	gen.Randomize(4)
 	const (
 		nomBase = "BaseI2.dat"
 		nbPages = 2000
-		nbCles = 10000
+		nbCles = 200000
 	)
 	Fac.CloseBase(nomBase)
 	ok := Fac.CreateBase(nomBase, 1); M.Assert(ok)
@@ -440,7 +444,7 @@ func TestG4 (tt *testing.T) {
 	iw := ind.Writer()
 	for i := 1; i <= nbCles; i++ {
 		if i % 1000 == 0 {
-			fmt.Println(i)
+			fmt.Println(i, "\theight =", ind.Height(), "\tsize =", ind.NumberOfKeys())
 		}
 		j := new(integer)
 		*j = integer(gen.IntRand(0, maxInt))
@@ -472,13 +476,14 @@ func TestG4 (tt *testing.T) {
 	b.CloseBase()
 }
 
+// Continuous Insertion / Deletions in Index of Strings
 func TestG5 (tt *testing.T) { 
-	fmt.Println("TestG5")
-	// gen.Randomize(2)
+	fmt.Println("TestG5, Continuous Insertion / Deletions in Index of Strings")
+	gen.Randomize(5)
 	const (
-		nbElems = 50000
+		nbElems = 100000
 		dureeMin = 1
-		dureeMax = 1000
+		dureeMax = 20000
 		taMin = 1
 		taMax = 100
 		nomBase = "BaseM2.dat"
@@ -500,7 +505,7 @@ func TestG5 (tt *testing.T) {
 	e := t.First(&el)
 	for n < nbElems || e != nil {
 		if n % 1000 == 0 {
-			fmt.Println(n)
+			fmt.Println(n, "\theight =", ind.Height(), "\tsize =", ind.NumberOfKeys())
 		}
 		n++
 		if n < nbElems {
@@ -537,13 +542,14 @@ func TestG5 (tt *testing.T) {
 	fmt.Println()
 }
 
+// Continuous Insertion / Deletions in Index of Strings
 func TestG6 (tt *testing.T) { 
-	fmt.Println("TestG6")
-	// gen.Randomize(2)
+	fmt.Println("TestG6, Continuous Insertion / Deletions in Index of Strings")
+	gen.Randomize(6)
 	const (
-		nbElems = 50000
+		nbElems = 100000
 		dureeMin = 100
-		dureeMax = 2000
+		dureeMax = 20000
 		taMin = 1
 		taMax = 100
 		nomBase = "BaseN2.dat"
@@ -564,7 +570,7 @@ func TestG6 (tt *testing.T) {
 	e := t.First(&el)
 	for n < nbElems {
 		if n % 1000 == 0 {
-			fmt.Println(n)
+			fmt.Println(n, "\theight =", ind.Height(), "\tsize =", ind.NumberOfKeys())
 		}
 		n++
 		eF := new(elemCle)
@@ -599,13 +605,14 @@ func TestG6 (tt *testing.T) {
 	b.CloseBase()
 }
 
+// Index of float64
 func TestG7 (tt *testing.T) { 
-	fmt.Println("TestG7")
-	// gen.Randomize(10)
+	fmt.Println("TestG7, Index of float64")
+	gen.Randomize(7)
 	const (
 		nomBase = "BaseJ2.dat"
 		nbPages = 2000
-		nbCles = 10000
+		nbCles = 200000
 	)
 	Fac.CloseBase(nomBase)
 	ok := Fac.CreateBase(nomBase, 1); M.Assert(ok)
@@ -618,6 +625,9 @@ func TestG7 (tt *testing.T) {
 	ind := b.OpenIndex(rI, g, f)
 	iw := ind.Writer()
 	for i := 0; i < nbCles; i++ {
+		if i % 1000 == 0 {
+			fmt.Println(i, "\theight =", ind.Height(), "\tsize =", ind.NumberOfKeys())
+		}
 		r := new(real)
 		*r = real(gen.Random())
 		for iw.SearchIns(r) {
@@ -647,11 +657,11 @@ func TestG7 (tt *testing.T) {
 
 func TestG8 (tt *testing.T) { 
 	fmt.Println("TestG8")
-	gen.Randomize(2)
+	gen.Randomize(8)
 	const (
-		nbElems = 50000
+		nbElems = 100000
 		dureeMin = 1
-		dureeMax = 1000
+		dureeMax = 20000
 		taMin = 1
 		taMax = 100
 		nomBase = "BaseCC2.dat"
@@ -678,7 +688,7 @@ func TestG8 (tt *testing.T) {
 	e := t.First(&el)
 	for n < nbElems {
 		if n % 1000 == 0 {
-			fmt.Println(n)
+			fmt.Println(n, "\theight =", ind.Height(), "\tsize =", ind.NumberOfKeys())
 		}
 		n++
 		eF := new(elemCle)

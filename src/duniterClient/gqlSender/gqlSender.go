@@ -24,6 +24,7 @@ import (
 		"github.com/gorilla/mux"
 		"os"
 		"strings"
+		"sync"
 		"net/url"
 
 )
@@ -44,7 +45,19 @@ const (
 
 type (
 	
+	askChan chan J.Json
+	askChans []chan<- J.Json
+	askMap map[string] askChans
 	bufferMap map[string] J.Json
+	
+	/*
+	qElem struct {
+		next *qElem
+		c chan<- J.Json
+		ask url.Values
+		s string
+	}
+	*/
 
 )
 
@@ -52,10 +65,49 @@ var (
 	
 	subAddress = BA.SubAddress()
 	
+	/*
+	askQ *qElem = nil
+	*/
+	askM sync.Mutex
+	asks = make(askMap)
 	queries = make(bufferMap)
 	subs = make(bufferMap)
 
 )
+
+/*
+func push (ask url.Values, s string) {
+	e := &qElem{ask: ask, s: s}
+	askM.Lock()
+	if askQ == nil {
+		e.next = e
+		askQ = e
+	} else {
+		e.next = askQ.next
+		askQ.next = e
+		askQ = e
+	}
+	askM.Unlock()
+}
+
+func pull (ask *url.Values, s *string) bool {
+	askM.Lock()
+	if askQ == nil {
+		askM.Unlock()
+		return false
+	}
+	e := askQ.next
+	if e == askQ {
+		askQ = nil
+	} else {
+		askQ.next = e.next
+	}
+	askM.Unlock()
+	*ask = e.ask
+	*s = e.s
+	return true
+}
+*/
 
 func send (request url.Values) J.Json {
 	r, err := http.PostForm("http://" + BA.ServerAddress(), request)
@@ -71,6 +123,21 @@ func send (request url.Values) J.Json {
 } //send
 
 func Send (j J.Json, doc *G.Document) J.Json {
+	
+	wait := func (s string) J.Json {
+		var j J.Json = nil
+		askM.Lock()
+		if cs, ok := asks[s]; ok {
+			c := make(askChan)
+			asks[s] = append(cs, c)
+			askM.Unlock()
+			j = <-c
+		} else {
+			askM.Unlock()
+		}
+		return j
+	}
+	
 	w := new(strings.Builder)
 	v := make(url.Values)
 	v.Set("returnAddr", subAddress)
@@ -86,9 +153,19 @@ func Send (j J.Json, doc *G.Document) J.Json {
 	if j, ok := queries[s]; ok {
 		return j
 	}
+	if j := wait(s); j != nil {
+		return j
+	}
+	asks[s] = make(askChans, 0)
 	j = send(v)
 	M.Assert(j != nil && (len(j.(*J.Object).Fields) == 0 || j.(*J.Object).Fields[0].Name != "errors"), 100)
 	queries[s] = j
+	askM.Lock()
+	for _, c := range asks[s] {
+		c <- j
+	}
+	delete(asks, s)
+	askM.Unlock()
 	return j
 } //Send
 
@@ -102,6 +179,7 @@ func subHandler (_ http.ResponseWriter, req *http.Request) {
 	o, ok := j.(*J.Object); M.Assert(ok, 102)
 	opName := J.GetString(o, "opName"); M.Assert(opName != "", 103)
 	if opName == "ResetQueryMap" {
+		asks = make(askMap)
 		queries = make(bufferMap)
 	} else {
 		j := J.GetJson(o, "result"); M.Assert(j != nil,104)

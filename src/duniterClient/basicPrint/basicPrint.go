@@ -149,9 +149,7 @@ func HtmlAddress () string {
 }
 
 func fixAddress (adrName string, adr *string) {
-	dir := F.Join(wd, "duniterClient")
-	err := os.MkdirAll(dir, 0777); M.Assert(err == nil, err, 100)
-	name := F.Join(dir, adrName)
+	name := F.Join(wd, "duniterClient", adrName)
 	f, err := os.Open(name)
 	if err == nil {
 		defer f.Close()
@@ -172,6 +170,8 @@ func fixAddress (adrName string, adr *string) {
 } // fixAddress
 
 func init () {
+	dir := F.Join(wd, "duniterClient")
+	err := os.MkdirAll(dir, 0777); M.Assert(err == nil, err, 100)
 	fixAddress(serverAddressName, &serverAddress)
 	fixAddress(subAddressName, &subAddress)
 	fixAddress(htmlAddressName, &htmlAddress)
