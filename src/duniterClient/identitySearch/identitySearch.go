@@ -807,7 +807,11 @@ func printFind (t, hint, selHash string, reC, miC, meC, neC, dC, qC, cC bool, fi
 func printFix (t, hint, selHash string, reC, miC, meC, neC, dC, qC, cC bool, find *FindRes, fix *FixRes) *Out {
 	start := doStart(t, hint, reC, miC, meC, neC, fix.Data.Now)
 	findS := doFind(find.Data.IdSearch, selHash, dC, qC, cC)
-	fixS := doFix(fix.Data.IdFromHash)
+	// if 'find.Data.IdSearch' is nil or void, don't display it
+	fixS := (*Fix)(nil)
+	if find.Data.IdSearch != nil && len(find.Data.IdSearch.Ids) > 0 {
+		fixS = doFix(fix.Data.IdFromHash)
+	}
 	return &Out{Start: start, Find: findS, Fix: fixS, OK:SM.Map("#duniterClient:OK")}
 } //printFix
 
