@@ -415,7 +415,9 @@ func printT (a EventsT, now *NowT, title, period string) *Out {
 	median := SM.Map("#duniterClient:Bct")
 	entry := SM.Map("#duniterClient:Entry")
 	exit := SM.Map("#duniterClient:Exit")
-	l := make(ListE, len(a))
+	la := len(a)
+	l := make(ListE, la)
+	la--
 	for i, ai := range a {
 		d := fmt.Sprint(block, ": ", ai.Block.Number,  "    ", actual, ": ", BA.Ts2s(ai.Block.Utc0), "    ", median, ": ", BA.Ts2s(ai.Block.Bct))
 		in := make(InOutsT, len(ai.IdList))
@@ -429,7 +431,7 @@ func printT (a EventsT, now *NowT, title, period string) *Out {
 			fmt.Fprint(w, id.Id.Uid)
 			in[j] = w.String()
 		}
-		l[i] = &Evt{Dates: d, InOuts: in, Number: ai.Number}
+		l[la - i] = &Evt{Dates: d, InOuts: in, Number: ai.Number}
 	}
 	return &Out{Title: t, Now: nowS, Delay: dy, Period: period, Submit: s, List: l}
 } //printT

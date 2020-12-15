@@ -336,7 +336,10 @@ func (doc *Document) writeCommon (flat bool) string {
 			//WriteOperationTypeDefinitions
 			if ops != nil {
 				sepC(w, flat); w.WriteString("{"); lnC(w, flat)
-				for _, op := range ops {
+				for i, op := range ops {
+					if i > 0 {
+						sepF(w, flat)
+					}
 					WriteOperationTypeDefinition(&op, ind + 1)
 					lnC(w, flat)
 				}
@@ -560,10 +563,13 @@ func (doc *Document) writeCommon (flat bool) string {
 			WriteDirectiveDefinition := func (d *DirectiveDefinition, ind int) {
 				
 				WriteDirectiveLocations := func (dls DirectiveLocations, ind int) {
+					lnC(w, flat); sepF(w, flat)
+					indent(w, flat, ind + 1)
+					w.WriteString("on")
 					lnC(w, flat)
 					for _, dl := range dls {
-						indent(w, flat, ind + 1)
-						w.WriteString("case "); sepC(w, flat)
+						indent(w, flat, ind + 2)
+						w.WriteString("|"); sepC(w, flat)
 						w.WriteString(locationNameOf(dl))
 						lnC(w, flat)
 					}
@@ -721,4 +727,4 @@ func (doc *Document) Write (w io.Writer) {
 
 func (doc *Document) WriteFlat (w io.Writer) {
 	fmt.Fprintf(w, "%s", doc.GetFlatString())
-} //Write
+} //WriteFlat
