@@ -1,7 +1,7 @@
 /* 
 WotWizard
 
-Copyright (C) 2017-2020 GérardMeunier
+Copyright (C) 2017-2020 Gérard Meunier
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
 
@@ -40,7 +40,7 @@ import (
 
 const (
 	
-	version = "5.0.1"
+	version = "5.0.3"
 
 )
 
