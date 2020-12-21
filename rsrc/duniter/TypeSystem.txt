@@ -12,7 +12,7 @@ type Query {
 	idFromHash (hash: Hash!): Identity
 	
 	"Threshold for numbers of sent and received certifications to become sentry"
-	sentryTreshold: Int!
+	sentryThreshold: Int!
 	
 	"List of sentries, sorted by increasing uids"
 	sentries: [Identity!]!

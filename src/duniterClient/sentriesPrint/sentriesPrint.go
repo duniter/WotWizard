@@ -39,7 +39,7 @@ const (
 				number
 				bct
 			}
-			sentryTreshold
+			sentryThreshold
 			sentries {
 				uid
 			}
@@ -90,7 +90,7 @@ type (
 	
 	DataT struct {
 		Now *NowT
-		SentryTreshold int
+		SentryThreshold int
 		Sentries Identities
 	}
 
@@ -122,7 +122,7 @@ func printNow (now *NowT) string {
 
 func print (sentries *SentriesT) *Disp {
 	d := sentries.Data
-	t := fmt.Sprint(SM.Map("#duniterClient:Threshold"), " = ", d.SentryTreshold)
+	t := fmt.Sprint(SM.Map("#duniterClient:Threshold"), " = ", d.SentryThreshold)
 	ids := d.Sentries
 	n := fmt.Sprint(SM.Map("#duniterClient:SentriesNb"), " = ", len(ids))
 	dd := make(Disp0, len(ids))
