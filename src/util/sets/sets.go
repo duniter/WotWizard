@@ -10,13 +10,14 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
 
+// The module util/sets implements the type Set, a set of non-negative integers, represented by intervals.
 package sets
 
-// The module UtilSets implements the type Set, a set of non-negative integers, represented by intervals.
-
 const (
-	SMin = 0          // The smallest integer in sets.
-	SMax = 1 << 31 - 2 // The largest integer in sets.
+	// The smallest integer in sets.
+	SMin = 0
+	// The largest integer in sets.
+	SMax = 1 << 31 - 2
 
 	taSet = SMax - SMin + 1
 )
@@ -39,13 +40,13 @@ type (
 	tableVer [2][2]int
 
 	SetIterator struct {
-		s         *Set
-		cour      *segment
+		s *Set
+		cour *segment
 		pos, posE int
 	}
 )
 
-func insereSegment(apresSeg *segment, plein, vide int) {
+func insereSegment (apresSeg *segment, plein, vide int) {
 	s := new(segment)
 	s.suivant = apresSeg.suivant
 	s.precedent = apresSeg
@@ -55,13 +56,13 @@ func insereSegment(apresSeg *segment, plein, vide int) {
 	apresSeg.suivant = s
 }
 
-func (s *Set) trans(src *Set) {
+func (s *Set) trans (src *Set) {
 	s.nbElems = src.nbElems
 	s.elems = src.elems
 }
 
 // Creates and returns a new empty set.
-func NewSet() *Set {
+func NewSet () *Set {
 	s := new(Set)
 	s.elems = new(segment)
 	s.nbElems = 0
@@ -72,7 +73,7 @@ func NewSet() *Set {
 }
 
 // Returns the largest set available: SMin..SMax.
-func Full() *Set {
+func Full () *Set {
 	s := NewSet()
 	s.nbElems = taSet
 	s.elems.largeurs[0] = 0
@@ -81,7 +82,7 @@ func Full() *Set {
 }
 
 // Returns the set corresponding to the interval min..max.
-func Interval(min, max int) *Set {
+func Interval (min, max int) *Set {
 	if !((min >= SMin) && (min <= SMax) && (max >= SMin) && (max <= SMax)) {
 		panic(20)
 	}
@@ -94,18 +95,18 @@ func Interval(min, max int) *Set {
 	return s
 }
 
-// Tests whether s is empty.
-func (s *Set) IsEmpty() bool {
+// Test whether s is empty.
+func (s *Set) IsEmpty () bool {
 	return s.elems.suivant == s.elems
 }
 
-// Tests whether s is empty.
-func (s *Set) NbElems() int {
+// Return the number of elements in s.
+func (s *Set) NbElems () int {
 	return int(s.nbElems)
 }
 
 // Creates and returns a copy of s.
-func (s *Set) Copy() *Set {
+func (s *Set) Copy () *Set {
 	f := NewSet()
 	f.nbElems = s.nbElems
 	f.elems.largeurs[0] = s.elems.largeurs[0]
@@ -117,7 +118,7 @@ func (s *Set) Copy() *Set {
 	return f
 }
 
-func (s1 *Set) melange(s2 *Set, combi tableVer) *Set {
+func (s1 *Set) melange (s2 *Set, combi tableVer) *Set {
 	s := NewSet()
 	combine := func(c1, c2, c *segment) {
 		s1 := c1
@@ -173,7 +174,7 @@ func (s1 *Set) melange(s2 *Set, combi tableVer) *Set {
 }
 
 // Returns the union of s1 and s2.
-func (s1 *Set) Union(s2 *Set) *Set {
+func (s1 *Set) Union (s2 *Set) *Set {
 	var s *Set
 	if s1.IsEmpty() {
 		s = s2.Copy()
@@ -186,7 +187,7 @@ func (s1 *Set) Union(s2 *Set) *Set {
 }
 
 // Returns the intersection of s1 and s2.
-func (s1 *Set) Inter(s2 *Set) *Set {
+func (s1 *Set) Inter (s2 *Set) *Set {
 	var s *Set
 	if s1.IsEmpty() || s2.IsEmpty() {
 		s = NewSet()
@@ -197,7 +198,7 @@ func (s1 *Set) Inter(s2 *Set) *Set {
 }
 
 // Returns the difference between s1 and s2.
-func (s1 *Set) Diff(s2 *Set) *Set {
+func (s1 *Set) Diff (s2 *Set) *Set {
 	var s *Set
 	if s2.IsEmpty() {
 		s = s1.Copy()
@@ -210,7 +211,7 @@ func (s1 *Set) Diff(s2 *Set) *Set {
 }
 
 // Returns the exclusive union of s1 and s2.
-func (s1 *Set) XOR(s2 *Set) *Set {
+func (s1 *Set) XOR (s2 *Set) *Set {
 	var s *Set
 	if s1.IsEmpty() {
 		s = s2.Copy()
@@ -223,35 +224,35 @@ func (s1 *Set) XOR(s2 *Set) *Set {
 }
 
 // Includes the integer e in the set s.
-func (s *Set) Incl(e int) {
+func (s *Set) Incl (e int) {
 	ss := Interval(e, e)
 	ss = s.Union(ss)
 	s.trans(ss)
 }
 
 // Excludes the integer e from the set s.
-func (s *Set) Excl(e int) {
+func (s *Set) Excl (e int) {
 	ss := Interval(e, e)
 	ss = s.Diff(ss)
 	s.trans(ss)
 }
 
 // Adds the interval min..max to the set s.
-func (s *Set) Fill(min, max int) {
+func (s *Set) Fill (min, max int) {
 	ss := Interval(min, max)
 	ss = s.Union(ss)
 	s.trans(ss)
 }
 
 // Removes the interval min..max from the set s.
-func (s *Set) Clear(min, max int) {
+func (s *Set) Clear (min, max int) {
 	ss := Interval(min, max)
 	ss = s.Diff(ss)
 	s.trans(ss)
 }
 
 // Returns the set corresponding to the bitset se
-func Small(se uint64) *Set {
+func Small (se uint64) *Set {
 	s := NewSet()
 	var m uint64 = 1
 	for i := 0; i < 64; i++ {
@@ -264,7 +265,7 @@ func Small(se uint64) *Set {
 }
 
 // Tests whether the integer e is in the set s.
-func (s *Set) In(e int) bool {
+func (s *Set) In (e int) bool {
 	if e < SMin || e > SMax {
 		return false
 	}
@@ -284,17 +285,17 @@ func (s *Set) In(e int) bool {
 }
 
 // Tests whether s1 = s2.
-func (s1 *Set) Equal(s2 *Set) bool {
+func (s1 *Set) Equal (s2 *Set) bool {
 	return s1.XOR(s2).IsEmpty()
 }
 
 // Tests whether s1 is a subset of s2.
-func (s1 *Set) Subset(s2 *Set) bool {
+func (s1 *Set) Subset (s2 *Set) bool {
 	return s1.Diff(s2).IsEmpty()
 }
 
 // Attach the set s to a SetIterator and return the later.
-func (s *Set) Attach() *SetIterator {
+func (s *Set) Attach () *SetIterator {
 	i := new(SetIterator)
 	i.s = s
 	i.cour = nil
@@ -302,7 +303,7 @@ func (s *Set) Attach() *SetIterator {
 }
 
 // On return, min..max is the first interval of the set attached to i. Returns true in ok if such an interval exists. Usage: min, max, ok := i.First(); for ok { ... min, max, ok = i.Next()}
-func (i *SetIterator) First() (min, max int, ok bool) {
+func (i *SetIterator) First () (min, max int, ok bool) {
 	if i.s == nil {
 		panic(20)
 	}
@@ -319,7 +320,7 @@ func (i *SetIterator) First() (min, max int, ok bool) {
 }
 
 // On return, min..max is the next interval of the set attached to i. Returns true in ok if such an interval exists. i.First must have been called once before i.Next. Usage: min, max, ok := i.First(); for ok { ... min, max, ok = i.Next()}
-func (i *SetIterator) Next() (min, max int, ok bool) {
+func (i *SetIterator) Next () (min, max int, ok bool) {
 	if i.s == nil {
 		panic(20)
 	}
@@ -340,7 +341,7 @@ func (i *SetIterator) Next() (min, max int, ok bool) {
 }
 
 // On return, e contains the first element of the set attached to i. Returns true in ok if such an element exists. Usage: e, ok := i.FirstE(); for ok { ... e, ok = i.NextE()}
-func (i *SetIterator) FirstE() (e int, ok bool) {
+func (i *SetIterator) FirstE () (e int, ok bool) {
 	if i.s == nil {
 		panic(20)
 	}
@@ -357,7 +358,7 @@ func (i *SetIterator) FirstE() (e int, ok bool) {
 }
 
 // On return, e contains the next element of the set attached to i. Returns true in ok if such an element exists. i.FirstE must have been called once before i.NextE. Usage: e, ok := i.FirstE(); for ok { ... e, ok = i.NextE()}
-func (i *SetIterator) NextE() (e int, ok bool) {
+func (i *SetIterator) NextE () (e int, ok bool) {
 	if i.s == nil {
 		panic(20)
 	}

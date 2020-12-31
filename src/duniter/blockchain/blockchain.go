@@ -155,8 +155,8 @@ type (
 	CertEvents []CertEvent
 	
 	CertHist struct {
-		uid string
-		hist CertEvents
+		Uid string
+		Hist CertEvents
 	}
 	
 	CertHists []CertHist
@@ -1566,7 +1566,7 @@ func AllCertifiersIO (to string) CertHists {
 	pst.Next()
 	i := 0
 	for pst.PosSet() {
-		from[i].uid = pst.CurrentKey().(*B.String).C
+		from[i].Uid = pst.CurrentKey().(*B.String).C
 		var l *hList = nil
 		cioR := pst.ReadValue()
 		for cioR != B.BNil {
@@ -1582,7 +1582,7 @@ func AllCertifiersIO (to string) CertHists {
 			}
 			l = l.next
 		}
-		from[i].hist = h
+		from[i].Hist = h
 		i++
 		pst.Next()
 	}
@@ -1605,7 +1605,7 @@ func AllCertifiedIO (from string) CertHists {
 	pst.Next()
 	i := 0
 	for pst.PosSet() {
-		to[i].uid = pst.CurrentKey().(*B.String).C
+		to[i].Uid = pst.CurrentKey().(*B.String).C
 		var l *hList = nil
 		cioR := pst.ReadValue()
 		for cioR != B.BNil {
@@ -1621,7 +1621,7 @@ func AllCertifiedIO (from string) CertHists {
 			}
 			l = l.next
 		}
-		to[i].hist = h
+		to[i].Hist = h
 		i++
 		pst.Next()
 	}
@@ -2376,7 +2376,7 @@ func removeSecureGap () {
 	for undoList != B.BNil {
 		l := undoListMan.ReadData(undoList).(*undoListT)
 		switch l.typ {
-			case timeList: {
+			case timeList:
 				// Erase the timeTy data pointed by l.ref and the corresponding keys in timeT and timeMT
 				t := timeMan.ReadData(l.ref).(*timeTy)
 				b := timeT.Writer().Erase(&intKey{ref: t.bnb}); M.Assert(b, t.bnb, 100)
@@ -2384,16 +2384,14 @@ func removeSecureGap () {
 					b = timeMT.Writer().Erase(&lIntKey{ref: t.mTime}); M.Assert(b, t.mTime, 101)
 				}
 				timeMan.EraseData(l.ref)
-			}
-			case idAddList: {
+			case idAddList:
 				// Erase the identity data pointed by l.ref and the corresponding keys in idPubT, idHashT and idUidT
 				id := idMan.ReadData(l.ref).(*identity)
 				b := idPubT.Writer().Erase(&pubKey{ref: id.pubkey}); M.Assert(b, id.pubkey, 102)
 				b = idUidT.Writer().Erase(&B.String{C: id.uid}); M.Assert(b, id.uid, 103)
 				b = idHashT.Writer().Erase(&hashKey{ref: id.hash}); M.Assert(b, id.hash, 104)
 				idMan.EraseData(l.ref)
-			}
-			case joinList: {
+			case joinList:
 				// Let the identity no more be member; erase the last joinAndLeaveL data corresponding to l.ref; if this is also the first data, erase the corresponding joinAndLeave data and its key in joinAndLeaveT
 				id := idMan.ReadData(l.ref).(*identity)
 				id.member = false
@@ -2415,15 +2413,13 @@ func removeSecureGap () {
 					joinAndLeaveMan.WriteData(jlRef, jl)
 				}
 				joinAndLeaveLMan.EraseData(jlLRef)
-			}
-			case activeList: {
+			case activeList:
 				// Undo the identity.expires_on and identity.application updates
 				id := idMan.ReadData(l.ref).(*identity)
 				id.expires_on = l.aux
 				id.application = int32(l.aux2)
 				idMan.WriteData(l.ref, id)
-			}
-			case leaveList: {
+			case leaveList:
 				// Update the last joinAndLeaveL data corresponding to l.ref
 				id := idMan.ReadData(l.ref).(*identity)
 				id.member = true
@@ -2437,21 +2433,18 @@ func removeSecureGap () {
 				M.Assert(jlL.leavingBlock != HasNotLeaved, 109)
 				jlL.leavingBlock = HasNotLeaved
 				joinAndLeaveLMan.WriteData(jl.list, jlL)
-			}
-			case idAddTimeList: {
+			case idAddTimeList:
 				b := idTimeT.Writer().Erase(&filePosKey{ref: l.ref}); M.Assert(b, 110)
-			}
-			case idRemoveTimeList: {
+			case idRemoveTimeList:
 				b := idTimeT.Writer().SearchIns(&filePosKey{ref: l.ref}); M.Assert(!b, 111)
-			}
-			case certAddList: {
+			case certAddList:
 				// Erase the keys corresponding to the certification pointed by l.ref in certFromT and certToT, or, if l.aux # B.BNil, update them; modify identity. certifiers, identity.certified, identity.certifiersIO and identity.certifiedIO as needed
 				
 				remCertifiedrs := func (idRef B.FilePos, id *identity, certifiedrs *B.FilePos, key *B.String) {
-					M.Assert(*certifiedrs != B.BNil, 100)
+					M.Assert(*certifiedrs != B.BNil, 200)
 					ind := database.OpenIndex(*certifiedrs, uidKeyMan, uidKeyFac)
 					iw := ind.Writer()
-					b := iw.Erase(key); M.Assert(b, 101)
+					b := iw.Erase(key); M.Assert(b, 201)
 					if ind.IsEmpty() {
 						database.DeleteIndex(*certifiedrs); *certifiedrs = B.BNil
 						idMan.WriteData(idRef, id)
@@ -2459,17 +2452,17 @@ func removeSecureGap () {
 				} //remCertifiedrs
 				
 				remCertifiedrsIO := func (idRef B.FilePos, id *identity, certifiedrsIO *B.FilePos, key *B.String) {
-					M.Assert(*certifiedrsIO != B.BNil, 100)
+					M.Assert(*certifiedrsIO != B.BNil, 300)
 					ind := database.OpenIndex(*certifiedrsIO, uidKeyMan, uidKeyFac)
 					iw := ind.Writer()
-					b := iw.Search(key); M.Assert(b, 101)
+					b := iw.Search(key); M.Assert(b, 301)
 					cioR := iw.ReadValue()
 					cio := certInOutMan.ReadData(cioR).(*certInOut)
-					M.Assert(cio.outBlock == HasNotLeaved, 102)
+					M.Assert(cio.outBlock == HasNotLeaved, 302)
 					certInOutMan.EraseData(cioR)
 					cioR = cio.next
 					if cioR == B.BNil {
-						b = iw.Erase(key); M.Assert(b, 103)
+						b = iw.Erase(key); M.Assert(b, 303)
 						if ind.IsEmpty() {
 							database.DeleteIndex(*certifiedrsIO); *certifiedrsIO = B.BNil
 							idMan.WriteData(idRef, id)
@@ -2529,8 +2522,7 @@ func removeSecureGap () {
 					b = iwT.SearchIns(&filePosKey{ref: B.FilePos(l.aux)}); M.Assert(!b, 123)
 				}
 				certMan.EraseData(l.ref)
-			}
-			case certRemoveList: {
+			case certRemoveList:
 				// Insert the keys corresponding to the certification pointed by l.ref into certFromT, certToT and certTimeT; modify identity.certifiersIO and identity.certifiedIO as needed
 				c := certMan.ReadData(l.ref).(*certification)
 				p := &pubKey{ref: c.from}
@@ -2544,7 +2536,7 @@ func removeSecureGap () {
 				}
 				p.ref = c.to
 				iw := database.OpenIndex(n, pubKeyMan, pubKeyFac).Writer()
-				b := iw.SearchIns(p); M.Assert(!b, 126)
+				b := iw.SearchIns(p); M.Assert(!b, 124)
 				iw.WriteValue(l.ref)
 				iwT := certToT.Writer()
 				var ctf *certToFork
@@ -2558,42 +2550,51 @@ func removeSecureGap () {
 				}
 				p.ref = c.from
 				iw = database.OpenIndex(ctf.byPub, pubKeyMan, pubKeyFac).Writer()
-				b = iw.SearchIns(p); M.Assert(!b, 127)
+				b = iw.SearchIns(p); M.Assert(!b, 125)
 				iw.WriteValue(l.ref)
 				iw = database.OpenIndex(ctf.byExp, certKTimeMan, filePosKeyFac).Writer()
-				b = iw.SearchIns(&filePosKey{ref: l.ref}); M.Assert(!b, 128)
+				b = iw.SearchIns(&filePosKey{ref: l.ref}); M.Assert(!b, 126)
 				iw.WriteValue(l.ref)
-				b = certTimeT.Writer().SearchIns(&filePosKey{ref: l.ref}); M.Assert(!b, 129)
+				b = certTimeT.Writer().SearchIns(&filePosKey{ref: l.ref}); M.Assert(!b, 127)
 				
 				iwP := idPubT.Writer()
 				idP := &pubKey{ref: c.from}
-				b = iwP.Search(idP); M.Assert(b, idP.ref, 107)
+				b = iwP.Search(idP); M.Assert(b, idP.ref, 128)
 				idFRef := iwP.ReadValue()
 				idF := idMan.ReadData(idFRef).(*identity)
 				idUF := &B.String{C: idF.uid}
 				idP.ref = c.to
-				b = iwP.Search(idP); M.Assert(b, idP.ref, 108)
+				b = iwP.Search(idP); M.Assert(b, idP.ref, 129)
 				idTRef := iwP.ReadValue()
 				idT := idMan.ReadData(idTRef).(*identity)
 				idUT := &B.String{C: idT.uid}
 				
 				iw = database.OpenIndex(idF.certifiedIO, uidKeyMan, uidKeyFac).Writer()
-				b = iw.SearchIns(idUT); M.Assert(b, idF.uid, idUT.C, 109)
+				b = iw.SearchIns(idUT); M.Assert(b, idF.uid, idUT.C, 130)
 				cioR := iw.ReadValue()
 				cio := certInOutMan.ReadData(cioR).(*certInOut)
-				M.Assert(cio.outBlock != HasNotLeaved, 110)
+				M.Assert(cio.outBlock != HasNotLeaved, 131)
 				cio.outBlock = HasNotLeaved
 				certInOutMan.WriteData(cioR, cio)
 				
 				iw = database.OpenIndex(idT.certifiersIO, uidKeyMan, uidKeyFac).Writer()
-				b = iw.SearchIns(idUF); M.Assert(b, idT.uid, idUF.C, 112)
+				b = iw.SearchIns(idUF); M.Assert(b, idT.uid, idUF.C, 132)
 				cioR = iw.ReadValue()
 				cio = certInOutMan.ReadData(cioR).(*certInOut)
-				M.Assert(cio.outBlock != HasNotLeaved, 113)
+				M.Assert(cio.outBlock != HasNotLeaved, 133)
 				cio.outBlock = HasNotLeaved
 				certInOutMan.WriteData(cioR, cio)
-			}
-			case remCertified: {
+			case remCertifiers:
+				id := idMan.ReadData(B.FilePos(l.aux)).(*identity)
+				u := &B.String{C: id.uid}
+				id = idMan.ReadData(l.ref).(*identity)
+				if id.certifiers == B.BNil {
+					id.certifiers = database.CreateIndex(0)
+					idMan.WriteData(l.ref, id)
+				}
+				iw := database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac).Writer()
+				b := iw.SearchIns(u); M.Assert(!b, 134)
+			case remCertified:
 				id := idMan.ReadData(B.FilePos(l.aux)).(*identity)
 				u := &B.String{C: id.uid}
 				id = idMan.ReadData(l.ref).(*identity)
@@ -2602,8 +2603,9 @@ func removeSecureGap () {
 					idMan.WriteData(l.ref, id)
 				}
 				iw := database.OpenIndex(id.certified, uidKeyMan, uidKeyFac).Writer()
-				b := iw.SearchIns(u); M.Assert(!b, 131)
-			}
+				b := iw.SearchIns(u); M.Assert(!b, 135)
+			default:
+				M.Halt(136)
 		}
 		undoListMan.EraseData(undoList)
 		undoList = l.next

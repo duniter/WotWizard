@@ -575,6 +575,92 @@ func identityAllSentCertsR (rootValue *G.OutputObjectValue, argumentValues *A.Tr
 	}
 } //identityAllSentCertsR
 
+func identityAllRecCertsIOR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch hash := GQ.Unwrap(rootValue, 0).(type) {
+	case B.Hash:
+		l := G.NewListValue()
+		pubkey, inBC := B.IdHash(hash)
+		if inBC {
+			uid, b := B.IdPub(pubkey); M.Assert(b, 100)
+			for _, ch := range B.AllCertifiersIO(uid) {
+				_, _, h, _, _, _, b := B.IdUidComplete(ch.Uid); M.Assert(b, 101)
+				l.Append(GQ.Wrap(h, ch.Hist)) // Status == newcomer means certification is future
+			}
+		}
+			return l
+	case *G.NullValue:
+		return hash
+	default:
+		M.Halt(hash, 100)
+		return nil
+	}
+} //identityAllRecCertsIOR
+
+func identityAllSentCertsIOR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch hash := GQ.Unwrap(rootValue, 0).(type) {
+	case B.Hash:
+		l := G.NewListValue()
+		pubkey, inBC := B.IdHash(hash)
+		if inBC {
+			uid, b := B.IdPub(pubkey); M.Assert(b, 100)
+			for _, ch := range B.AllCertifiedIO(uid) {
+				_, _, h, _, _, _, b := B.IdUidComplete(ch.Uid); M.Assert(b, 101)
+				l.Append(GQ.Wrap(h, ch.Hist)) // Status == newcomer means certification is future
+			}
+		}
+		return l
+	case *G.NullValue:
+		return hash
+	default:
+		M.Halt(hash, 100)
+		return nil
+	}
+} //identityAllSentCertsIOR
+
+func certHistIdR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch hash := GQ.Unwrap(rootValue, 0).(type) {
+	case B.Hash:
+		return GQ.Wrap(hash)
+	default:
+		M.Halt(hash, 100)
+		return nil
+	}
+} //certHistIdR
+
+func certHistHistR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch hist := GQ.Unwrap(rootValue, 1).(type) {
+	case B.CertEvents:
+		l := G.NewListValue()
+		for _, ce := range hist {
+			l.Append(GQ.Wrap(ce.InOut, ce.Block))
+		}
+		return l
+	default:
+		M.Halt(hist, 100)
+		return nil
+	}
+} //certHistHistR
+
+func certEventInR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch b := GQ.Unwrap(rootValue, 0).(type) {
+	case bool:
+		return G.MakeBooleanValue(b)
+	default:
+		M.Halt(b, 100)
+		return nil
+	}
+} //certEventInR
+
+func certEventBlockR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch block := GQ.Unwrap(rootValue, 1).(type) {
+	case int32:
+		return GQ.Wrap(block)
+	default:
+		M.Halt(block, 100)
+		return nil
+	}
+} //certEventBlockR
+
 func identityDistanceR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
 	switch hash := GQ.Unwrap(rootValue, 0).(type) {
 	case B.Hash:
@@ -699,11 +785,19 @@ func fixFieldResolvers (ts G.TypeSystem) {
 	ts.FixFieldResolver("Identity", "sent_certifications", identitySentCertsR)
 	ts.FixFieldResolver("Identity", "all_certifiers", identityAllRecCertsR)
 	ts.FixFieldResolver("Identity", "all_certified", identityAllSentCertsR)
+	ts.FixFieldResolver("Identity", "all_certifiersIO", identityAllRecCertsIOR)
+	ts.FixFieldResolver("Identity", "all_certifiedIO", identityAllSentCertsIOR)
 	ts.FixFieldResolver("Identity", "distance", identityDistanceR)
 	ts.FixFieldResolver("Identity", "quality", identityQualityR)
 	ts.FixFieldResolver("Identity", "centrality", identityCentralityR)
 	ts.FixFieldResolver("Identity", "minDate", identityMinDateR)
 	ts.FixFieldResolver("Identity", "minDatePassed", identityMinDatePassedR)
+	
+	ts.FixFieldResolver("CertHist", "id", certHistIdR)
+	ts.FixFieldResolver("CertHist", "hist", certHistHistR)
+	
+	ts.FixFieldResolver("CertEvent", "in", certEventInR)
+	ts.FixFieldResolver("CertEvent", "block", certEventBlockR)
 	
 	ts.FixFieldResolver("Distance", "value", DistanceValR)
 	ts.FixFieldResolver("Distance", "dist_ok", DistanceOkR)

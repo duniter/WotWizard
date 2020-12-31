@@ -21,7 +21,6 @@ import (
 		"fmt"
 		"net/http"
 		"io/ioutil"
-		"github.com/gorilla/mux"
 		"os"
 		"strings"
 		"sync"
@@ -188,8 +187,8 @@ func subHandler (_ http.ResponseWriter, req *http.Request) {
 }
 
 func initReceiver () {
-	r := mux.NewRouter().StrictSlash(false)
-	r.HandleFunc("/", subHandler).Methods("POST")
+	r := http.NewServeMux()
+	r.HandleFunc("/", subHandler)
 	server := &http.Server{
 		Addr: subAddress,
 		Handler: r,

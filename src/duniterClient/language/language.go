@@ -31,7 +31,7 @@ const (
 		{{define "body"}}
 			<h1>{{.Title}}</h1>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 			<form action="" method="post">
 				<p>
@@ -47,7 +47,7 @@ const (
 				</p>
 			</form>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 		{{end}}
 	`

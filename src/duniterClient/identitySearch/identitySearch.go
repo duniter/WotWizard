@@ -118,6 +118,30 @@ const (
 				all_certified {
 					uid
 				}
+				all_certifiersIO {
+					id {
+						uid
+					}
+					hist {
+						in
+						block {
+							number
+							bct
+						}
+					}
+				}
+				all_certifiedIO {
+					id {
+						uid
+					}
+					hist {
+						in
+						block {
+							number
+							bct
+						}
+					}
+				}
 				distance @include(if: $dispDist) {
 					value
 					dist_ok
@@ -134,7 +158,7 @@ const (
 			{{with .Start}}
 				<h1>{{.Title}}</h1>
 				<p>
-					<a href = "/">index</a>
+					<a href = "/">{{Map "index"}}</a>
 				</p>
 				<h3>
 					{{.Now}}
@@ -293,6 +317,23 @@ const (
 							</blockquote>
 						</p>
 						<h5>
+							{{.AllCertifiersIO}}
+						</h5>
+						<p>
+							<blockquote>
+								{{range .ReceivedAllCertsIO}}
+									{{.Uid}}
+									<blockquote>
+										{{range .Hist}}
+											{{.}}
+											<br>
+										{{end}}
+									</blockquote>
+									<br>
+								{{end}}
+							</blockquote>
+						</p>
+						<h5>
 							{{.PresentCertified}}
 						</h5>
 						<blockquote>
@@ -325,11 +366,28 @@ const (
 								{{end}}
 							</blockquote>
 						</p>
+						<h5>
+							{{.AllCertifiedIO}}
+						</h5>
+						<p>
+							<blockquote>
+								{{range .SentAllCertsIO}}
+									{{.Uid}}
+									<blockquote>
+										{{range .Hist}}
+											{{.}}
+											<br>
+										{{end}}
+									</blockquote>
+									<br>
+								{{end}}
+							</blockquote>
+						</p>
 					{{end}}
 				{{end}}
 			{{end}}
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 		{{end}}
 	`
@@ -387,6 +445,20 @@ type (
 	
 	Identities []*Identity
 	
+	CertEvent struct {
+		In bool
+		Block Block
+	}
+	
+	CertEvents []CertEvent
+	
+	CertHist struct {
+		Id *Identity
+		Hist CertEvents
+	}
+	
+	CertHists []CertHist
+	
 	Distance struct {
 		Value float64
 		Dist_ok bool
@@ -409,6 +481,8 @@ type (
 		Sent_certifications Certifications
 		All_certifiers,
 		All_certified Identities
+		All_certifiersIO,
+		All_certifiedIO CertHists
 		Distance *Distance
 		Quality,
 		Centrality float64
@@ -467,6 +541,13 @@ type (
 	
 	ListI []int64
 	
+	CH struct {
+		Uid string
+		Hist ListS
+	}
+	
+	ListCH []CH
+	
 	Certifics struct {
 		PresentCertifiers,
 		PresentCertified string
@@ -479,6 +560,10 @@ type (
 		AllCertified string
 		ReceivedAllCerts,
 		SentAllCerts ListS
+		AllCertifiersIO,
+		AllCertifiedIO string
+		ReceivedAllCertsIO,
+		SentAllCertsIO ListCH
 	}
 	
 	Hist struct {
@@ -645,6 +730,24 @@ func certs (res *Identity) *Certifics {
 	for i, a := range res.All_certified {
 		sentAllCerts[i] = a.Uid
 	}
+	allCertifiedIO := SM.Map("#duniterClient:AllCertifiedIO")
+	sentAllCertsIO := make(ListCH, len(res.All_certifiedIO))
+	for i, a := range res.All_certifiedIO {
+		sentAllCertsIO[i].Uid = a.Id.Uid
+		h := make(ListS, len(a.Hist))
+		for j, ce := range a.Hist {
+			w := new(strings.Builder)
+			if ce.In {
+				fmt.Fprint(w, "↑")
+			} else {
+				fmt.Fprint(w, "↓")
+			}
+			b := ce.Block
+			fmt.Fprint(w, "    ", b.Number, " ", BA.Ts2s(b.Bct))
+			h[j] = w.String()
+		}
+		sentAllCertsIO[i].Hist = h
+	}
 	
 	certifs = res.Received_certifications.Certifications
 	receivedCertsNb, receivedCertsFutNb := countCerts(certifs)
@@ -674,8 +777,26 @@ func certs (res *Identity) *Certifics {
 	for i, a := range res.All_certifiers {
 		receivedAllCerts[i] = a.Uid
 	}
+	allCertifiersIO := SM.Map("#duniterClient:AllCertifiersIO")
+	receivedAllCertsIO := make(ListCH, len(res.All_certifiersIO))
+	for i, a := range res.All_certifiersIO {
+		receivedAllCertsIO[i].Uid = a.Id.Uid
+		h := make(ListS, len(a.Hist))
+		for j, ce := range a.Hist {
+			w := new(strings.Builder)
+			if ce.In {
+				fmt.Fprint(w, "↑")
+			} else {
+				fmt.Fprint(w, "↓")
+			}
+			b := ce.Block
+			fmt.Fprint(w, "    ", b.Number, " ", BA.Ts2s(b.Bct))
+			h[j] = w.String()
+		}
+		receivedAllCertsIO[i].Hist = h
+	}
 	
-	return &Certifics{presentCertifiers, presentCertified, receivedCerts, sentCerts, sortedByDate, receivedByLimits, sentByLimits, allCertifiers, allCertified, receivedAllCerts, sentAllCerts}
+	return &Certifics{presentCertifiers, presentCertified, receivedCerts, sentCerts, sortedByDate, receivedByLimits, sentByLimits, allCertifiers, allCertified, receivedAllCerts, sentAllCerts, allCertifiersIO, allCertifiedIO, receivedAllCertsIO, sentAllCertsIO}
 } //certs
 
 func printHistory (h History) *Hist {

@@ -96,7 +96,7 @@ const (
 		{{define "body"}}
 			<h1>{{.Title}}</h1>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 			<h3>
 				{{.Now}}
@@ -141,7 +141,7 @@ const (
 				{{end}}
 			{{end}}
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 		{{end}}
 	`

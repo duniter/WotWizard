@@ -63,7 +63,7 @@ func sentriesR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value 
 } //sentriesR
 
 func fixFieldResolvers (ts G.TypeSystem) {
-	ts.FixFieldResolver("Query", "SentryThreshold", sentryTR)
+	ts.FixFieldResolver("Query", "sentryThreshold", sentryTR)
 	ts.FixFieldResolver("Query", "sentries", sentriesR)
 } //fixFieldResolvers
 

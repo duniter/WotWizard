@@ -34,6 +34,7 @@ import (
 	_	"duniterClient/wwViews"
 
 	_	"duniterClient/tellLimitsPrint"
+	_	"duniterClient/stats"
 	
 		"fmt"
 
@@ -41,7 +42,7 @@ import (
 
 const (
 	
-	version = "5.0.2"
+	version = "5.1.0"
 
 )
 

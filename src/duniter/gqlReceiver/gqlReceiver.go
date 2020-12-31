@@ -28,7 +28,6 @@ import (
 		"fmt"
 		"net/http"
 		"io"
-		"github.com/gorilla/mux"
 		"os"
 		"strings"
 		"net/url"
@@ -347,8 +346,8 @@ func makeHandler (newAction chan<- B.Actioner) func (w http.ResponseWriter, req 
 
 func loop (newAction chan<- B.Actioner) {
 	newAction <- new(readSubsAction)
-	r := mux.NewRouter().StrictSlash(false)
-	r.HandleFunc("/", makeHandler(newAction)).Methods("POST")
+	r := http.NewServeMux()
+	r.HandleFunc("/", makeHandler(newAction))
 	server := &http.Server{
 		Addr: serverAddress,
 		Handler: r,

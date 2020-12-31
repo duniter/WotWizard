@@ -176,6 +176,12 @@ type Identity {
 	"All certified identities, old or present, but not REVOKED (empty list for NEWCOMER)"
 	all_certified: [Identity!]!
 	
+	"All certifiers, old or present (empty list for NEWCOMER), with blocks of certification validity inputs and outputs"
+	all_certifiersIO: [CertHist!]!
+	
+	"All certified identities, old or present (empty list for NEWCOMER), with blocks of certification validity inputs and outputs"
+	all_certifiedIO: [CertHist!]!
+	
 	"State of the identity's distance rule"
 	distance: Distance!
 	
@@ -307,6 +313,28 @@ type HistoryEvent {
 	block: Block!
 	
 } #HistoryEvent
+
+"History of certifications from or to an identity"
+type CertHist {
+	
+	"Certifier or certified identity"
+	id: Identity!
+	
+	"Beginning and ending blocks of certifications validities"
+	hist: [CertEvent!]!
+
+} #CertHist
+
+"Beginning or ending block of a certification validity"
+type CertEvent {
+	
+	"Beginning?"
+	in: Boolean!
+	
+	"Beginning or ending block"
+	block: Block!
+
+} #CertEvent
 
 "Number & dates of a block"
 type Block {

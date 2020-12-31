@@ -23,7 +23,6 @@ import (
 		"errors"
 		"fmt"
 		"net/http"
-		"github.com/gorilla/mux"
 		"os"
 		"text/scanner"
 		"html/template"
@@ -40,9 +39,9 @@ const (
 	`
 	
 	htmlIndex = `
-		{{define "head"}}<title>Index</title>{{end}}
+		{{define "head"}}<title>{{Map "Index"}}</title>{{end}}
 		{{define "body"}}
-			<h1>Index</h1>
+			<h1>{{Map "Index"}}</h1>
 			{{range $name, $temp := .}}
 				<p>
 					<a href="/{{$name}}">{{Map $name}}</a> 
@@ -149,7 +148,7 @@ func getHandler (name string, p *pack) http.HandlerFunc {
 
 func Start () {
 	initAuthorizations()
-	r := mux.NewRouter().StrictSlash(false)
+	r := http.NewServeMux()
 	for name, p := range packages {
 		if name == "index" {
 			r.HandleFunc("/", getHandler(name, p))
