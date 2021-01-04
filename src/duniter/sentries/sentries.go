@@ -39,7 +39,7 @@ func (i1 *uid) Compare (i2 A.Comparer) A.Comp {
 }
 
 func sentryTR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
-	return G.MakeIntValue(B.SentryTreshold())
+	return G.MakeIntValue(B.SentryThreshold())
 } //sentryTR
 
 func sentriesR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
@@ -63,7 +63,7 @@ func sentriesR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value 
 } //sentriesR
 
 func fixFieldResolvers (ts G.TypeSystem) {
-	ts.FixFieldResolver("Query", "sentryTreshold", sentryTR)
+	ts.FixFieldResolver("Query", "sentryThreshold", sentryTR)
 	ts.FixFieldResolver("Query", "sentries", sentriesR)
 } //fixFieldResolvers
 

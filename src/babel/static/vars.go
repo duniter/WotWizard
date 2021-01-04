@@ -12,8 +12,6 @@ You should have received a copy of the GNU General Public License along with thi
 
 package static
 
-// Package strMapping implements a mapping between keys and longer strings.
-
 var (
 	
 	strEn = `STRINGS

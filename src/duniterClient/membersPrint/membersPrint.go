@@ -227,7 +227,7 @@ const (
 		{{define "body"}}
 			<h1>{{.Title}}</h1>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}</a>
 			</p>
 			<h3>
 				{{.Now}}
@@ -275,7 +275,7 @@ const (
 				</p>
 			{{end}}
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 		{{end}}
 	`
@@ -393,15 +393,15 @@ var (
 
 )
 
-func printNow (now *NowT) string {
-	return fmt.Sprint(SM.Map("#duniterClient:Block"), " ", now.Number, " ", BA.Ts2s(now.Bct))
+func printNow (now *NowT, lang *SM.Lang) string {
+	return fmt.Sprint(lang.Map("#duniterClient:Block"), " ", now.Number, " ", BA.Ts2s(now.Bct, lang))
 } //printNow
 
-func printN (now *NowT, title, period string) *Out {
-	t := SM.Map(title)
-	nowS := printNow(now)
-	dy := SM.Map("#duniterClient:Delay")
-	s := SM.Map("#duniterClient:OK")
+func printN (now *NowT, title, period string, lang *SM.Lang) *Out {
+	t := lang.Map(title)
+	nowS := printNow(now, lang)
+	dy := lang.Map("#duniterClient:Delay")
+	s := lang.Map("#duniterClient:OK")
 	return &Out{Title: t, Now: nowS, Delay: dy, Period: period, Submit: s}
 } //printN
 
@@ -415,11 +415,9 @@ func printT (a EventsT, now *NowT, title, period string) *Out {
 	median := SM.Map("#duniterClient:Bct")
 	entry := SM.Map("#duniterClient:Entry")
 	exit := SM.Map("#duniterClient:Exit")
-	la := len(a)
-	l := make(ListE, la)
-	la--
+	l := make(ListE, len(a))
 	for i, ai := range a {
-		d := fmt.Sprint(block, ": ", ai.Block.Number,  "    ", actual, ": ", BA.Ts2s(ai.Block.Utc0), "    ", median, ": ", BA.Ts2s(ai.Block.Bct))
+		d := fmt.Sprint(block, ": ", ai.Block.Number,  "    ", actual, ": ", BA.Ts2s(ai.Block.Utc0, lang), "    ", median, ": ", BA.Ts2s(ai.Block.Bct, lang))
 		in := make(InOutsT, len(ai.IdList))
 		for j, id := range ai.IdList {
 			w := new(strings.Builder)
@@ -436,11 +434,11 @@ func printT (a EventsT, now *NowT, title, period string) *Out {
 	return &Out{Title: t, Now: nowS, Delay: dy, Period: period, Submit: s, List: l}
 } //printT
 
-func printG (a EventsT, now *NowT, title, period, label, unit string) *Out {
-	t := SM.Map(title)
-	nowS := printNow(now)
-	dy := SM.Map("#duniterClient:Delay")
-	s := SM.Map("#duniterClient:OK")
+func printG (a EventsT, now *NowT, title, period, label, unit string, lang *SM.Lang) *Out {
+	t := lang.Map(title)
+	nowS := printNow(now, lang)
+	dy := lang.Map("#duniterClient:Delay")
+	s := lang.Map("#duniterClient:OK")
 	var t0 int64
 	if len(a) > 0 {
 		t0 = a[0].Block.Utc0
@@ -466,11 +464,11 @@ func printG (a EventsT, now *NowT, title, period, label, unit string) *Out {
 	*/
 } //printG
 
-func printR (a EventsRT, now *NowT, title, period, label, unit string, percent bool) *Out {
-	t := SM.Map(title)
-	nowS := printNow(now)
-	dy := SM.Map("#duniterClient:Delay")
-	s := SM.Map("#duniterClient:OK")
+func printR (a EventsRT, now *NowT, title, period, label, unit string, percent bool, lang *SM.Lang) *Out {
+	t := lang.Map(title)
+	nowS := printNow(now, lang)
+	dy := lang.Map("#duniterClient:Delay")
+	s := lang.Map("#duniterClient:OK")
 	lT := make(ListS, len(a))
 	lG := make(ListS, len(a))
 	var t0 int64
@@ -478,7 +476,7 @@ func printR (a EventsRT, now *NowT, title, period, label, unit string, percent b
 		t0 = a[0].Block.Utc0
 	}
 	for i, ai := range a {
-		lT[i] = fmt.Sprint(BA.Ts2s(ai.Block.Utc0), "    ", ai.Value)
+		lT[i] = fmt.Sprint(BA.Ts2s(ai.Block.Utc0, lang), "    ", ai.Value)
 		lG[i] = fmt.Sprintf("%21.16f    %v", float64(ai.Block.Utc0 - t0) / float64(month), ai.Value)
 	}
 	return &Out{Title: t, Now: nowS, Delay: dy, Period: period, Submit: s, ListT: lT, ListG: lG}
@@ -502,7 +500,7 @@ func printR (a EventsRT, now *NowT, title, period, label, unit string, percent b
 	*/
 } //printR
 
-func end (name string, temp *template.Template, r *http.Request, w http.ResponseWriter) {
+func end (name string, temp *template.Template, r *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	const (
 		
 		pT = iota
@@ -557,7 +555,7 @@ func end (name string, temp *template.Template, r *http.Request, w http.Response
 	if r.Method == "GET" {
 		j = GS.Send(nil, nowDoc)
 		J.ApplyTo(j, n)
-		out = printN(n.Data.Now, t, defaultDelay)
+		out = printN(n.Data.Now, t, defaultDelay, lang)
 		temp.ExecuteTemplate(w, name, out)
 	} else {
 		r.ParseForm()
@@ -634,13 +632,13 @@ func end (name string, temp *template.Template, r *http.Request, w http.Response
 		switch print {
 		case pT:
 			J.ApplyTo(j, b)
-			out = printT(b.Data.Events, b.Data.Now, t, delayS)
+			out = printT(b.Data.Events, b.Data.Now, t, delayS, lang)
 		case pG:
 			J.ApplyTo(j, b)
-			out = printG(b.Data.Events, b.Data.Now, t, delayS, "", "")
+			out = printG(b.Data.Events, b.Data.Now, t, delayS, "", "", lang)
 		case pR:
 			J.ApplyTo(j, br)
-			out = printR(br.Data.EventsR, br.Data.Now, t, delayS, "", "", pc)
+			out = printR(br.Data.EventsR, br.Data.Now, t, delayS, "", "", pc, lang)
 		}
 		temp.ExecuteTemplate(w, name, out)
 	}

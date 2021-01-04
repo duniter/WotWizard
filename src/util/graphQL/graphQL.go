@@ -368,6 +368,7 @@ var (
 	wd = R.FindDir()
 	direc = F.Join(wd, graphQLDir)
 	comp *C.Compiler
+	lang = SM.NewLanguage("en")
 	
 	StdDir TypeDirectory = new(typeDirectory)
 	Dir = StdDir
@@ -754,169 +755,169 @@ func (d *FragmentDefinition) isExecutableDefinition () {}
 
 func (e *ScalarTypeExtension) TEM () *TypeExtensionC {
 	return &e.TypeExtensionC
-}
+} //TEM
 
 func (e *ObjectTypeExtension) TEM () *TypeExtensionC {
 	return &e.TypeExtensionC
-}
+} //TEM
 
 func (e *InterfaceTypeExtension) TEM () *TypeExtensionC {
 	return &e.TypeExtensionC
-}
+} //TEM
 
 func (e *UnionTypeExtension) TEM () *TypeExtensionC {
 	return &e.TypeExtensionC
-}
+} //TEM
 
 func (e *EnumTypeExtension) TEM () *TypeExtensionC {
 	return &e.TypeExtensionC
-}
+} //TEM
 
 func (e *InputObjectTypeExtension) TEM () *TypeExtensionC {
 	return &e.TypeExtensionC
-}
+} //TEM
 
 func (dir *DirectiveDefinition) listableM () bool {
 	return dir.listable
-}
+} //listableM
 
 func (dir *DirectiveDefinition) setListableM (ok bool) {
 	dir.listable = ok
-}
+} //setListableM
 
 func (i *InputObjectTypeDefinition) listableM () bool {
 	return i.listable
-}
+} //listableM
 
 func (i *InputObjectTypeDefinition) setListableM (ok bool) {
 	i.listable = ok
-}
+} //setListableM
 
 func (e *EnumTypeDefinition) listableM () bool {
 	return e.listable
-}
+} //listableM
 
 func (e *EnumTypeDefinition) setListableM (ok bool) {
 	e.listable = ok
-}
+} //setListableM
 
 func (u *UnionTypeDefinition) listableM () bool {
 	return u.listable
-}
+} //listableM
 
 func (u *UnionTypeDefinition) setListableM (ok bool) {
 	u.listable = ok
-}
+} //setListableM
 
 func (i *InterfaceTypeDefinition) listableM () bool {
 	return i.listable
-}
+} //listableM
 
 func (i *InterfaceTypeDefinition) setListableM (ok bool) {
 	i.listable = ok
-}
+} //setListableM
 
 func (o *ObjectTypeDefinition) listableM () bool {
 	return o.listable
-}
+} //listableM
 
 func (o *ObjectTypeDefinition) setListableM (ok bool) {
 	o.listable = ok
-}
+} //setListableM
 
 func (s *ScalarTypeDefinition) listableM () bool {
 	return s.listable
-}
+} //listableM
 
 func (s *ScalarTypeDefinition) setListableM (ok bool) {
 	s.listable = ok
-}
+} //setListableM
 
 func (s *SchemaDefinition) listableM () bool {
 	return s.listable
-}
+} //listableM
 
 func (s *SchemaDefinition) setListableM (ok bool) {
 	s.listable = ok
-}
+} //setListableM
 
 func (ts *errorT) SetErrors (errors *A.Tree) {
 	ts.errors = errors
-}
+} //SetErrors
 
 func (ts *errorT) GetErrors () *A.Tree { // *ErrorElem
 	return ts.errors
-}
+} //GetErrors
 
 func MakeEventStream (es EventStreamer) *EventStream {
 	e := new(EventStream)
 	e.EventStreamer = es
 	return e
-}
+} //MakeEventStream
 
 func (n *NameMapItem) name () string {
 	return n.Name.S
-}
+} //name
 
 func (r *InstantResponse) Errors () *A.Tree {
 	return r.errors
-}
+} //Errors
 
 func (r *InstantResponse) SetErrors (err *A.Tree) {
 	r.errors = err
-}
+} //SetErrors
 
 func (r *SubscribeResponse) Errors () *A.Tree {
 	return r.errors
-}
+} //Errors
 
 func (r *SubscribeResponse) SetErrors (err *A.Tree) {
 	r.errors = err
-}
+} //SetErrors
 
 func (dir TypeSystemDirectiveLocation) LocM () int {
 	return dir.Loc
-}
+} //LocM
 
 func (dir ExecutableDirectiveLocation) LocM () int {
 	return dir.Loc
-}
+} //LocM
 
 func (i *InputObjectTypeDefinition) TypeDefinitionC () *TypeDefinitionCommon {
 	return &i.TypeDefinitionCommon
-}
+} //TypeDefinitionC
 
 func (e *EnumTypeDefinition) TypeDefinitionC () *TypeDefinitionCommon {
 	return &e.TypeDefinitionCommon
-}
+} //TypeDefinitionC
 
 func (u *UnionTypeDefinition) TypeDefinitionC () *TypeDefinitionCommon {
 	return &u.TypeDefinitionCommon
-}
+} //TypeDefinitionC
 
 func (i *InterfaceTypeDefinition) TypeDefinitionC () *TypeDefinitionCommon {
 	return &i.TypeDefinitionCommon
-}
+} //TypeDefinitionC
 
 func (o *ObjectTypeDefinition) TypeDefinitionC () *TypeDefinitionCommon {
 	return &o.TypeDefinitionCommon
-}
+} //TypeDefinitionC
 
 func (s *ScalarTypeDefinition) TypeDefinitionC () *TypeDefinitionCommon {
 	return &s.TypeDefinitionCommon
-}
+} //TypeDefinitionC
 
 func (f *Field) DirsM () Directives {
 	return f.Dirs
-}
+} //DirsM
 
 func (f *FragmentSpread) DirsM () Directives {
 	return f.Dirs
-}
+} //DirsM
 
 func (i *InlineFragment) DirsM () Directives {
 	return i.Dirs
-}
+} //DirsM
 
 func (d *directory) ReadInt () int32 {
 	m := uint32(0)
@@ -1050,12 +1051,12 @@ func (ov *InputObjectValue) insertInputField (name *StrPtr, value Value) {
 
 func (ov *InputObjectValue) First () *ObjectField {
 	return ov.inputFields
-}
+} //First
 
 func (*InputObjectValue) Next (f *ObjectField) *ObjectField {
 	M.Assert(f != nil, 20)
 	return f.next
-}
+} //Next
 
 func NewOutputObjectValue () *OutputObjectValue {
 	return &OutputObjectValue{outputFields: nil}
@@ -1084,7 +1085,7 @@ func (ov *OutputObjectValue) First () *ObjectField {
 		return nil
 	}
 	return f.next
-}
+} //First
 
 func (ov *OutputObjectValue) Next (f *ObjectField) *ObjectField {
 	M.Assert(f != nil, 20)
@@ -1092,7 +1093,7 @@ func (ov *OutputObjectValue) Next (f *ObjectField) *ObjectField {
 		return nil
 	}
 	return f.next
-}
+} //Next
 
 func NewListValue () *ListValue {
 	return &ListValue{endL: nil}
@@ -1116,7 +1117,7 @@ func (lv *ListValue) First () *ValueElem {
 		return nil
 	}
 	return l.next
-}
+} //First
 
 func (lv *ListValue) Next (l *ValueElem) *ValueElem {
 	M.Assert(l != nil, 20)
@@ -1124,7 +1125,7 @@ func (lv *ListValue) Next (l *ValueElem) *ValueElem {
 		return nil
 	}
 	return l.next
-}
+} //Next
 
 func newPathBuilder () *pathBuilder {
 	return &pathBuilder{end: nil}
@@ -1233,7 +1234,7 @@ func (ts *errorT) Error (mes, aux1, aux2 string, pos *PosT, path Path) {
 		
 		prefix = "#util/graphQL:GQL_"
 	
-	el := &ErrorElem{Message: SM.Map(prefix + mes, aux1, aux2)}
+	el := &ErrorElem{Message: lang.Map(prefix + mes, aux1, aux2)}
 	if pos == nil {
 		el.Location = nil
 	} else {
@@ -1254,7 +1255,7 @@ func (comp *compilationer) Error (p, li, co int, mes string) {
 } //Error
 
 func (c *compilationer) Map (index string) string {
-	return SM.Map("#babel:" + index)
+	return lang.Map("#babel:" + index)
 } //Map
 
 const (
@@ -2095,7 +2096,7 @@ func (c *compilationer) Execution (fNum, parsNb int, pars C.ObjectsList) (o *C.O
 			o = o.ObjTermSon(2)
 		}
 		return l
-	}
+	} //MakeList
 	
 	MakeFragmentDefinition := func (o *C.Object) *FragmentDefinition {
 		M.Assert(o.ObjFunc() == fragDef, 20)
@@ -2109,7 +2110,7 @@ func (c *compilationer) Execution (fNum, parsNb int, pars C.ObjectsList) (o *C.O
 	
 	MakeVarValue := func (o *C.Object) *Variable {
 		return &Variable{Name: makeNameO(o)}
-	}
+	} //MakeVarValue
 	
 	MakeVariableDefinition := func (o *C.Object) *VariableDefinition {
 		M.Assert(o.ObjFunc() == varC, 20)
@@ -2277,7 +2278,7 @@ func Compile (r io.Reader) (*Document, Response) {// *ErrorElem
 
 func ReadString (s string)  (*Document, Response) {// *ErrorElem
 	return Compile(strings.NewReader(s))
-}
+} //ReadString
 
 type (
 	
@@ -2444,7 +2445,7 @@ func getObjectValueInputField (ov *InputObjectValue, name *StrPtr, value *Value)
 
 func GetObjectValueInputField (ov *InputObjectValue, name string, value *Value) bool {
 	return getObjectValueInputField(ov, makeName(name), value)
-}
+} //GetObjectValueInputField
 
 func equalValues (v1, v2 Value) bool {
 	switch v1 := v1.(type) {
@@ -3021,6 +3022,7 @@ func (es *execSystem) sameResponseShape (fieldA, fieldB *Field) bool {
 } //sameResponseShape
 
 func (es *execSystem) fieldsInSetCanMerge (set *A.Tree) { // *fieldMapItem
+	
 	EqualArgs := func (argsA, argsB Arguments) bool {
 		if len(argsA) != len(argsB) {
 			return false
@@ -4223,11 +4225,11 @@ func MakeInt64Value (n int64) *IntValue {
 
 func MakeFloat32Value (f float32) *FloatValue {
 	return &FloatValue{float64(f)}
-}
+} //MakeFloat32Value
 
 func MakeFloat64Value (f float64) *FloatValue {
 	return &FloatValue{f}
-}
+} //MakeFloat64Value
 
 func makeStringValue (s *StrPtr) *StringValue {
 	return &StringValue{s}
@@ -5328,7 +5330,7 @@ func getSourceEvent (es *EventStream, event *OutputObjectValue) {
 
 func (rs *ResponseStream) FixResponseStream (s ResponseStreamer) {
 	rs.ResponseStreamer = s
-}
+} //FixResponseStream
 
 func (es *execSystem) mapSourceToResponseEvent (sourceStream *EventStream, subscription *OperationDefinition, variableValues *A.Tree) *ResponseStream { // *ValMapItem
 	responseStream := &ResponseStream{SourceStream: sourceStream, es: es, subscription: subscription, variableValues: variableValues}
@@ -5401,7 +5403,7 @@ func (es *execSystem) getOperation (operationName *StrPtr) *OperationDefinition 
 
 func (es *execSystem) GetOperation (operationName string) *OperationDefinition {
 	return es.getOperation(makeName(operationName))
-}
+} //GetOperation
 
 func (es *execSystem) executeRequest (operationName *StrPtr, variableValues *A.Tree, initialValue *OutputObjectValue) Response { // *ValMapItem
 	operation := es.getOperation(operationName)
@@ -6157,14 +6159,14 @@ func (ts *typeSystem) conjugateObjectsAndInterfaces (ds Definitions) {
 
 func SetDir (td TypeDirectory) {
 	Dir = td
-}
+} //SetDir
 
 func (dir *typeDirectory) NewTypeSystem (sc Scalarer) TypeSystem {
 	ts := new(typeSystem)
 	ts.Scalarer = sc
 	ts.errorT = errorT{A.New()}
 	return ts
-}
+} //NewTypeSystem
 
 func (ts *typeSystem) InitTypeSystem (doc *Document) {
 	
@@ -6379,16 +6381,16 @@ func SetLGQL (lG LinkGQL) LinkGQL {
 	l := lGQL
 	lGQL = lG
 	return l
-}
+} //SetLGQL
 
 func SetRComp (rComp io.Reader) {
 	comp = C.NewDirectory(&directory{r: bufio.NewReader(rComp)}).ReadCompiler()
-}
+} //SetRComp
 
 func linkFile (name string) io.ReadCloser {
 	f, err := os.Open(name); M.Assert(err == nil, err, 100)
 	return f
-}
+} //linkFile
 
 func init () {
 	SetLGQL(linkFile)

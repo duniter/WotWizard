@@ -70,7 +70,7 @@ const (
 		{{define "body"}}
 			<h1>{{.Title}}</h1>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 			<h3>
 				{{.Block}}
@@ -106,7 +106,7 @@ const (
 				{{end}}
 			</p>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 		{{end}}
 	`
@@ -242,24 +242,24 @@ func moments (certifications *CertificationsT, received bool) (d Dist, mean, sDe
 	return
 } //moments
 
-func printMoments (certifications *CertificationsT, received bool) (d Dist, number, mean, stdDev, median, dName string) {
+func printMoments (certifications *CertificationsT, received bool, lang *SM.Lang) (d Dist, number, mean, stdDev, median, dName string) {
 	d, m, sDev, nb, med := moments(certifications, received)
-	number = strconv.Itoa(nb) + " " + SM.Map("#duniterClient:Certifications")
-	mean = SM.Map("#duniterClient:Mean") + " = " + strconv.FormatFloat(m, 'f', -1, 64)
-	median = SM.Map("#duniterClient:Median") + " = " + strconv.Itoa(med)
-	stdDev = SM.Map("#duniterClient:SDev") + " = " + strconv.FormatFloat(sDev, 'f', -1, 64)
-	dName = SM.Map("#duniterClient:Distribution")
+	number = strconv.Itoa(nb) + " " + lang.Map("#duniterClient:Certifications")
+	mean = lang.Map("#duniterClient:Mean") + " = " + strconv.FormatFloat(m, 'f', -1, 64)
+	median = lang.Map("#duniterClient:Median") + " = " + strconv.Itoa(med)
+	stdDev = lang.Map("#duniterClient:SDev") + " = " + strconv.FormatFloat(sDev, 'f', -1, 64)
+	dName = lang.Map("#duniterClient:Distribution")
 	return
 } //printMoments
 
-func printNow (now *NowT) string {
-	return fmt.Sprint(SM.Map("#duniterClient:Block"), " ", now.Number, "\t", BA.Ts2s(now.Bct))
+func printNow (now *NowT, lang *SM.Lang) string {
+	return fmt.Sprint(lang.Map("#duniterClient:Block"), " ", now.Number, "\t", BA.Ts2s(now.Bct, lang))
 } //printNow
 
-func printCerts (cs Certs) Disp2 {
+func printCerts (cs Certs, lang *SM.Lang) Disp2 {
 
 	PrintCert := func (c *Cert) *Disp3 {
-		return &Disp3{c.Other.Uid, fmt.Sprint(BA.Ts2s(c.Registration.Bct)), fmt.Sprint(BA.Ts2s(c.Limit))}
+		return &Disp3{c.Other.Uid, fmt.Sprint(BA.Ts2s(c.Registration.Bct, lang)), fmt.Sprint(BA.Ts2s(c.Limit, lang))}
 	} //PrintCert
 
 	//printCerts
@@ -270,35 +270,35 @@ func printCerts (cs Certs) Disp2 {
 	return d
 } //printCerts
 
-func printIdentities (ids IdentitiesT, received bool) Disp0 {
+func printIdentities (ids IdentitiesT, received bool, lang *SM.Lang) Disp0 {
 	d := make(Disp0, len(ids))
 	for i, id := range ids {
 		d[i].Name = id.Uid
 		if received {
-			d[i].Second = printCerts(id.Received_certifications.Certifications)
+			d[i].Second = printCerts(id.Received_certifications.Certifications, lang)
 		} else {
-			d[i].Second = printCerts(id.Sent_certifications)
+			d[i].Second = printCerts(id.Sent_certifications, lang)
 		}
 		d[i].NbCerts = len(d[i].Second)
 	}
 	return d
 } //printIdentities
 
-func printFrom (certifications *CertificationsT) *Disp {
+func printFrom (certifications *CertificationsT, lang *SM.Lang) *Disp {
 	d := certifications.Data
-	dd := &Disp{Title: SM.Map("#duniterClient:certificationsFrom"), Block: printNow(d.Now), Arrow: "→", First: printIdentities(d.Identities, false)}
-	dd.Distribution, dd.Number, dd.Mean, dd.StdDev, dd.Median, dd.DistName = printMoments(certifications, false)
+	dd := &Disp{Title: lang.Map("#duniterClient:certificationsFrom"), Block: printNow(d.Now, lang), Arrow: "→", First: printIdentities(d.Identities, false, lang)}
+	dd.Distribution, dd.Number, dd.Mean, dd.StdDev, dd.Median, dd.DistName = printMoments(certifications, false, lang)
 	return dd
 } //printFrom
 
-func printTo (certifications *CertificationsT) *Disp {
+func printTo (certifications *CertificationsT, lang *SM.Lang) *Disp {
 	d := certifications.Data
-	dd := &Disp{Title: SM.Map("#duniterClient:certificationsTo"), Block: printNow(d.Now), Arrow: "←", First: printIdentities(d.Identities, true)}
-	dd.Distribution, dd.Number, dd.Mean, dd.StdDev, dd.Median, dd.DistName = printMoments(certifications, true)
+	dd := &Disp{Title: lang.Map("#duniterClient:certificationsTo"), Block: printNow(d.Now, lang), Arrow: "←", First: printIdentities(d.Identities, true, lang)}
+	dd.Distribution, dd.Number, dd.Mean, dd.StdDev, dd.Median, dd.DistName = printMoments(certifications, true, lang)
 	return dd
 } //printTo
 
-func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter) {
+func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	to := name == certificationsToName
 	M.Assert(to || name == certificationsFromName, name, 100)
 	mk := J.NewMaker()
@@ -311,9 +311,9 @@ func end (name string, temp *template.Template, _ *http.Request, w http.Response
 	J.ApplyTo(j, certifications)
 	var d *Disp
 	if to {
-		d = printTo(certifications)
+		d = printTo(certifications, lang)
 	} else {
-		d = printFrom(certifications)
+		d = printFrom(certifications, lang)
 	}
 	temp.ExecuteTemplate(w, name, d)
 } //end

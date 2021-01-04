@@ -64,6 +64,12 @@ type (
 		next *dico
 		key string
 		val value
+		mut *sync.RWMutex
+	}
+	
+	Lang struct {
+		lang string
+		dicos *dico
 	}
 
 )
@@ -72,9 +78,8 @@ var (
 	
 	lStr = make(map[string]LinkStrings)
 	wd = R.FindDir()
-	dicos *dico
-	language = "en"
-	mut = new(sync.RWMutex)
+	stdLang = "en"
+	langs = &dico{next: nil, mut: new(sync.RWMutex)}
 
 )
 
@@ -85,32 +90,38 @@ func linkFile (base string) LinkStrings {
 		return f, err == nil
 	}
 
-}
+} //linkFile
 
-// Language returns the current language of the mapped strings
-func Language () string {
-	return language
-}
+// Language returns the current language in 'l'
+func (l *Lang) Language () string {
+	return l.lang
+} //Language
 
 func (rac *dico) search (key string) value {
-	rac = rac.next
-	for rac != nil && rac.key < key {
-		rac = rac.next
+	rac.mut.RLock()
+	r := rac.next
+	for r != nil && r.key < key {
+		r = r.next
 	}
-	if rac == nil || rac.key != key {
+	if r == nil || r.key != key {
+		rac.mut.RUnlock()
 		return nil
 	}
-	return rac.val
-}
+	rac.mut.RUnlock()
+	return r.val
+} //search
 
 func (rac *dico) insert (key string, val value) {
-	for rac.next != nil && rac.next.key < key {
-		rac = rac.next
+	rac.mut.Lock()
+	r := rac
+	for r.next != nil && r.next.key < key {
+		r = r.next
 	}
-	if rac.next == nil || rac.next.key != key {
-		rac.next = &dico{next: rac.next, key: key, val: val}
+	if r.next == nil || r.next.key != key {
+		r.next = &dico{next: r.next, key: key, val: val}
 	}
-}
+	rac.mut.Unlock()
+} //insert
 
 func (m *mapScan) scan () bool {
 	const sepLen = len(string(sep))
@@ -143,10 +154,10 @@ func (m *mapScan) scan () bool {
 	err := m.s.Err()
 	M.Assert(err == nil, err, 101)
 	return true
-}
+} //scan
 
-func initDico (base string) bool {
-	lang := language
+func (l *Lang) initDico (base string) bool {
+	lang := l.lang
 	if lang == "en" {
 		lang = ""
 	}
@@ -162,20 +173,34 @@ func initDico (base string) bool {
 		return false
 	}
 	defer rc.Close()
-	m := &mapScan{s: bufio.NewScanner(rc), rac: &dico{next: nil}}
+	m := &mapScan{s: bufio.NewScanner(rc), rac: &dico{next: nil, mut: new(sync.RWMutex)}}
 	b := m.scan()
 	M.Assert(b, errors.New("util/stringmapping: error with base = " + base + " and language = " + lang), 100)
-	mut.Lock()
-	dicos.insert(base, m.rac)
-	mut.Unlock()
+	l.dicos.insert(base, m.rac)
 	return true
-}
+} //initDico
+
+func NewLanguage (lang string) *Lang {
+	M.Assert(len(lang) == 2, 20)
+	v := langs.search(lang)
+	if v != nil {
+		return &Lang{lang: lang, dicos: v.(*dico)}
+	}
+	l := &dico{next: nil, mut: new(sync.RWMutex)}
+	langs.insert(lang, l)
+	return  &Lang{lang: lang, dicos: l}
+} //NewLanguage
+
+// Language returns the current standard language
+func NewStdLanguage () *Lang {
+	return NewLanguage(stdLang)
+} //NewStdLanguage
 
 // Map translates a key string 'key' into a mapped string. Strings of the form "#base:message" are translated if there is a corresponding 'base' resource string (or file) for this base. Otherwise, the "#base:" prefix is stripped away.
 // As an example, "#system:Cancel" may be translated to "Cancel" in the USA, and to "Abbrechen" in Germany; or to "Cancel" if the resource file or the appropriate entry is missing.
 // Additional input parameters can be spliced into the resulting string. These parameters 'p' are inserted where "^0", "^1", "^2", etc... occur in the resulting string (^0 for the first parameter, ^1 for the second, etc...). The parameters are not mapped, but merely substituted.
 // Map allows to remove country- and language-specific strings from a program source text, while at the same time providing a default string in the program source text such that the program always works, even if string resources are missing. 
-func Map (key string, p ...string) string {
+func (l *Lang) Map (key string, p ...string) string {
 	M.Assert(key[0] == '#', 20)
 	pos := strings.Index(key, ":")
 	M.Assert(pos > 1, 21)
@@ -183,14 +208,12 @@ func Map (key string, p ...string) string {
 	M.Assert(pos < len(key), 22)
 	k := key[pos:]
 	key = key[1:pos-1]
-	mut.RLock()
-	g := dicos.search(key)
-	mut.RUnlock()
+	g := l.dicos.search(key)
 	if g == nil {
-		if !initDico(key) {
+		if !l.initDico(key) {
 			return k
 		}
-		g = dicos.search(key)
+		g = l.dicos.search(key)
 	}
 	g = g.(*dico).search(k)
 	if g == nil {
@@ -201,24 +224,14 @@ func Map (key string, p ...string) string {
 		k = strings.Replace(k, "^" + strconv.Itoa(i), pp, -1)
 	}
 	return k
-}
-
-// Reinit flushes the contents of the .str files from main memory and fixes the current language to lang (two characters).
-func Reinit (lang string) {
-	M.Assert(len(lang) == 2, 20)
-	language = lang
-	dicos = &dico{next: nil}
-	f, err := os.Create(langPath); M.Assert(err == nil, err, 100)
-	defer f.Close()
-	fmt.Fprintln(f, language)
-}
+} //Map
 
 // SetLStr fixes the LinkStrings function 'ls' for the base 'base'. Optional.
 // The default LinkStrings function for the base 'base' associates the language 'lang' to the string contained in the file "<resource directory>/base/lang/strings.txt".
 // For <resource directory>, see the package "util/resources".
 func SetLStr (base string, lS LinkStrings) {
 	lStr[base] = lS
-}
+} //SetLStr
 
 func init () {
 	dir := F.Join(wd, strMappingDir)
@@ -231,9 +244,10 @@ func init () {
 		s.Init(f)
 		s.Error = func(s *scanner.Scanner, msg string) {panic(errors.New("File" + langPath + "incorrect"))}
 		s.Scan()
-		lang := s.TokenText()
-		Reinit(lang)
+		stdLang = s.TokenText()
 	} else {
-		Reinit("en")
+		f, err := os.Create(langPath); M.Assert(err == nil, err, 100)
+		defer f.Close()
+		fmt.Fprintln(f, stdLang)
 	}
-}
+} //init

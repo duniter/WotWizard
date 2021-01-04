@@ -57,6 +57,8 @@ type (
 var (
 	
 	rsrcDir = R.FindDir()
+	
+	lang = SM.NewStdLanguage()
 
 )
 
@@ -98,7 +100,7 @@ func (f *Facer) SetPos (pos int) {
 } // SetPos
 
 func (f *Facer) Map (index string, p ... string) string {
-	return SM.Map("#babel:" + index, p ...)
+	return lang.Map("#babel:" + index, p ...)
 } // Map
 
 func decompNom (nom, midPath string) (path, name string) {
@@ -124,13 +126,13 @@ func compile1Text (input io.ReadSeeker, output, binOutput io.Writer) (path, name
 	var mes string
 	switch res {
 	case A.WithoutDisp:
-		mes = SM.Map("#babel:BOk")
+		mes = lang.Map("#babel:BOk")
 	case A.Remarks:
-		mes = SM.Map("#babel:BRem")
+		mes = lang.Map("#babel:BRem")
 	case A.Warnings:
-		mes = SM.Map("#babel:BWarning")
+		mes = lang.Map("#babel:BWarning")
 	case A.Errors:
-		mes = SM.Map("#babel:BError")
+		mes = lang.Map("#babel:BError")
 	}
 	fmt.Fprintln(os.Stderr, mes)
 	ok = res != A.Errors
@@ -146,7 +148,7 @@ func compile1Name (nom string) bool {
 	target := F.Join(rsrcDir, path, name + sourcesExt)
 	input, err := os.Open(target)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, target, SM.Map("#babel:BNotFound"))
+		fmt.Fprintln(os.Stderr, target, lang.Map("#babel:BNotFound"))
 		return false
 	}
 	defer input.Close()
@@ -163,7 +165,7 @@ func compile1Name (nom string) bool {
 		}
 		if err != nil {
 			fmt.Fprintln(output)
-			fmt.Fprint(output, SM.Map("#babel:BNoCreate"))
+			fmt.Fprint(output, lang.Map("#babel:BNoCreate"))
 			ok = false
 		}
 		if output.Len() > 0 {

@@ -71,7 +71,7 @@ const (
 		{{define "body"}}
 			<h1>{{.Title}}</h1>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 			<h3>
 				{{.Now}}
@@ -83,7 +83,7 @@ const (
 				{{end}}
 			</p>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 		{{end}}
 	`
@@ -195,14 +195,14 @@ func count (limits *Limits, what string, ids IdentitiesT) (props propsT) {
 	return
 } //count
 
-func printNow (now *NowT) string {
-	return fmt.Sprint(SM.Map("#duniterClient:Block"), " ", now.Number, "\t", BA.Ts2s(now.Bct))
+func printNow (now *NowT, lang *SM.Lang) string {
+	return fmt.Sprint(lang.Map("#duniterClient:Block"), " ", now.Number, "\t", BA.Ts2s(now.Bct, lang))
 } //printNow
 
-func print (limits *Limits, what, title string) *Disp {
+func print (limits *Limits, what, title string, lang *SM.Lang) *Disp {
 	d := limits.Data
-	now := printNow(d.Now)
-	t := SM.Map(title)
+	now := printNow(d.Now, lang)
+	t := lang.Map(title)
 	var ids IdentitiesT
 	if what == limitsCertsName {
 		ids = d.IdSearch.Ids
@@ -214,7 +214,7 @@ func print (limits *Limits, what, title string) *Disp {
 	ps := make(PropList, len(props))
 	for i, p := range props {
 		w := new(strings.Builder)
-		fmt.Fprint(w, BA.Ts2s(p.prop), "     ")
+		fmt.Fprint(w, BA.Ts2s(p.prop, lang), "     ")
 		if p.aux {
 			fmt.Fprint(w, "  ")
 		} else {
@@ -226,7 +226,7 @@ func print (limits *Limits, what, title string) *Disp {
 	return &Disp{Now: now, Title: t, Ps: ps}
 } //print
 
-func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter) {
+func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	var (j J.Json; doc *G.Document; title string)
 	m := J.NewMaker()
 	switch name {
@@ -256,7 +256,7 @@ func end (name string, temp *template.Template, _ *http.Request, w http.Response
 	j = GS.Send(j, doc)
 	limits := new(Limits)
 	J.ApplyTo(j, limits)
-	temp.ExecuteTemplate(w, name, print(limits, name, title))
+	temp.ExecuteTemplate(w, name, print(limits, name, title, lang))
 } //end
 
 func init() {

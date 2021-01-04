@@ -19,12 +19,15 @@ var (
 	strEn = `STRINGS
 
 AllCertified	All Non-Revoked Certified Identities:
+AllCertifiedIO	History of all sent certifications (start ↑ and end ↓):
 AllCertifiers	All Known Non-Revoked Certifiers:
+AllCertifiersIO	History of all received certifications (start ↑ and end ↓):
 50allParameters	Informations: Blockchain Parameters
 AppLimitDate	Limit Date of Membership or Exclusion
 Availability	Availability of next sent certification
 Bct	Blockchain Median Time
 Block	Block
+Brackets	Brackets
 22centralities	Properties: Centralities
 centralities	Centralities
 Centrality	Centrality
@@ -35,6 +38,7 @@ certificationsFrom	Certifications From Members
 certificationsTo	Certifications To Members
 34certLim	Limits: Certifications Limits Dates by Dates
 Computation_duration	Computation Duration
+Day	Day
 day	day(s)
 Delay	Delay (days)
 Distance	Distance Rule
@@ -56,6 +60,8 @@ Hash	Hash
 history	History
 hour	hour(s)
 In	In
+Index	Index
+index	index
 intCertifs	internal certifications
 KO	KO
 language	Choose Language
@@ -109,6 +115,7 @@ newcomers	Pending Dossiers
 NewcomersNb	Number of Newcomers
 Nickname	Nickname
 no	no
+NotMembers	Not Members
 OK	OK
 Out	Out
 Parameters	Parameters
@@ -131,6 +138,8 @@ Revokeds	Revoked
 SDev	Standard Deviation
 second	second(s)
 Select	Select
+SentCertsHistory	Sent Certifications History
+60sentCertsHistory	Statistics: Sent Certifications History
 Sentries	Sentries
 57sentries	Informations : List of Sentries
 SentriesNb	Number of Sentries
@@ -154,12 +163,15 @@ yes	yes
 	strFr = `STRINGS
 
 AllCertified	Toutes les identités certifiées non-révoquées :
+AllCertifiedIO	Débuts (↑) et fins (↓) de validité de toutes les certifications émises :
 AllCertifiers	Tous les certificateurs connus et non-révoqués :
+AllCertifiersIO	Débuts (↑) et fins (↓) de validité de toutes les certifications reçues :
 50allParameters	Informations : Paramètres de la chaîne de blocs
 AppLimitDate	Date limite d'adhésion ou d'exclusion
 Availability	Disponibilité du prochain envoi de certification
 Bct	Temps médian de la chaîne de blocs
 Block	Bloc
+Brackets	Tranches
 22centralities	Propriétés : Centralités
 centralities	Centralités
 Centrality	Centralité
@@ -170,6 +182,7 @@ certificationsFrom	Certifications depuis les membres
 certificationsTo	Certifications vers les membres
 34certLim	Limites : Limites des certifications par date
 Computation_duration	Durée du calcul
+Day	Jour
 day	jour(s)
 Delay	Durée (jours)
 Distance	Règle de distance
@@ -191,6 +204,8 @@ Hash	Hash
 history	Entrées / sorties de la toile de confiance
 hour	heure(s)
 In	Entrée
+Index	Menu
+index	menu
 intCertifs	certifications internes
 KO	KO
 language	Choix de la langue
@@ -244,6 +259,7 @@ newcomers	dossiers en attente
 NewcomersNb	Nombre des arrivant(e)s
 Nickname	Pseudo
 no	non
+NotMembers	Non membres
 OK	OK
 Out	Sortie
 Parameters	Paramètres
@@ -266,6 +282,8 @@ Revokeds	Révoqué(e)s
 SDev	Écart type
 second	seconde(s)
 Select	Sélectionner
+SentCertsHistory	Évolution des certifications émises
+60sentCertsHistory	Statistiques : Évolution des certifications émises
 Sentries	Membres référents
 57sentries	Informations : Liste des membres référents
 SentriesNb	Nombre de membres référents

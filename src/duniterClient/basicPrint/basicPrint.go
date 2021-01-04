@@ -1,7 +1,7 @@
 /* 
 duniterClient: WotWizard.
 
-Copyright (C) 2017 GérardMeunier
+Copyright (C) 2017-2020 GérardMeunier
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
 
@@ -30,7 +30,7 @@ import (
 
 const (
 	
-	timeFormat = "02/01/2006 15:04:05"
+	timeFormat = "2006/01/02 15:04:05"
 	
 	OldIcon = "×" // Icon for old items (old or leaving members)
 	
@@ -69,12 +69,12 @@ var (
 )
 
 // Convert the date t to the string dt
-func Ts2s (t int64) string {
+func Ts2s (t int64, lang *SM.Lang) string {
 	switch t {
 	case never:
-		return SM.Map("#duniterClient:Never")
+		return lang.Map("#duniterClient:Never")
 	case Revoked:
-		return SM.Map("#duniterClient:Revoked")
+		return lang.Map("#duniterClient:Revoked")
 	case Already:
 		return "**/**/**** **:**:**"
 	default:

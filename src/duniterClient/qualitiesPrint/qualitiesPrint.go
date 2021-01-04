@@ -82,7 +82,7 @@ const (
 		{{define "body"}}
 			<h1>{{.Title}}</h1>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 			<h3>
 				{{.Now}}
@@ -100,7 +100,7 @@ const (
 				{{end}}
 			</p>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 		{{end}}
 	`
@@ -194,11 +194,11 @@ func count (dist bool, ids IdentitiesT) (props, propsId propsT) {
 	return
 } //count
 
-func printNow (now *NowT) string {
-	return fmt.Sprint(SM.Map("#duniterClient:Block"), " ", now.Number, "\t", BA.Ts2s(now.Bct))
+func printNow (now *NowT, lang *SM.Lang) string {
+	return fmt.Sprint(lang.Map("#duniterClient:Block"), " ", now.Number, "\t", BA.Ts2s(now.Bct, lang))
 } //printNow
 
-func print (qual string, qualities *Qualities) *QualT {
+func print (qual string, qualities *Qualities, lang *SM.Lang) *QualT {
 
 /*
 const (
@@ -223,17 +223,17 @@ var (
 */
 
 	d := qualities.Data
-	now := printNow(d.Now)
+	now := printNow(d.Now, lang)
 	var t string
 	switch qual {
 	case distancesName:
-		t = SM.Map("#duniterClient:distances")
+		t = lang.Map("#duniterClient:distances")
 		//axe := "d"
 	case qualitiesName:
-		t = SM.Map("#duniterClient:qualities")
+		t = lang.Map("#duniterClient:qualities")
 		//axe := "q"
 	case centralitiesName:
-		t = SM.Map("#duniterClient:centralities")
+		t = lang.Map("#duniterClient:centralities")
 		//axe := "c"
 	}
 	props, propsId := count(qual == distancesName, d.Identities)
@@ -264,7 +264,7 @@ var (
 	*/
 } //print
 
-func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter) {
+func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	var doc *G.Document
 	switch name {
 	case distancesName:
@@ -279,7 +279,7 @@ func end (name string, temp *template.Template, _ *http.Request, w http.Response
 	j := GS.Send(nil, doc)
 	quals := new(Qualities)
 	J.ApplyTo(j, quals)
-	temp.ExecuteTemplate(w, name, print(name, quals))
+	temp.ExecuteTemplate(w, name, print(name, quals, lang))
 } //end
 
 func init() {

@@ -39,7 +39,7 @@ const (
 				number
 				bct
 			}
-			sentryTreshold
+			sentryThreshold
 			sentries {
 				uid
 			}
@@ -51,7 +51,7 @@ const (
 		{{define "body"}}
 			<h1>{{.Title}}</h1>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 			<h3>
 				{{.Block}}
@@ -68,7 +68,7 @@ const (
 				{{end}}
 			</p>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 		{{end}}
 	`
@@ -90,7 +90,7 @@ type (
 	
 	DataT struct {
 		Now *NowT
-		SentryTreshold int
+		SentryThreshold int
 		Sentries Identities
 	}
 
@@ -116,28 +116,28 @@ var (
 
 )
 
-func printNow (now *NowT) string {
-	return fmt.Sprint(SM.Map("#duniterClient:Block"), " ", now.Number, " ", BA.Ts2s(now.Bct))
+func printNow (now *NowT, lang *SM.Lang) string {
+	return fmt.Sprint(lang.Map("#duniterClient:Block"), " ", now.Number, " ", BA.Ts2s(now.Bct, lang))
 } //printNow
 
-func print (sentries *SentriesT) *Disp {
+func print (sentries *SentriesT, lang *SM.Lang) *Disp {
 	d := sentries.Data
-	t := fmt.Sprint(SM.Map("#duniterClient:Threshold"), " = ", d.SentryTreshold)
+	t := fmt.Sprint(lang.Map("#duniterClient:Threshold"), " = ", d.SentryThreshold)
 	ids := d.Sentries
-	n := fmt.Sprint(SM.Map("#duniterClient:SentriesNb"), " = ", len(ids))
+	n := fmt.Sprint(lang.Map("#duniterClient:SentriesNb"), " = ", len(ids))
 	dd := make(Disp0, len(ids))
 	for i, id := range(ids) {
 		dd[i] = id.Uid
 	}
-	return &Disp{Title: SM.Map("#duniterClient:Sentries"), Block: printNow(d.Now), Threshold: t, Number: n, Ids: dd}
+	return &Disp{Title: lang.Map("#duniterClient:Sentries"), Block: printNow(d.Now, lang), Threshold: t, Number: n, Ids: dd}
 } //print
 
-func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter) {
+func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	M.Assert(name == sentriesName, name, 100)
 	j := GS.Send(nil, sentriesDoc)
 	sentries := new(SentriesT)
 	J.ApplyTo(j, sentries)
-	temp.ExecuteTemplate(w, name, print(sentries))
+	temp.ExecuteTemplate(w, name, print(sentries, lang))
 } //end
 
 func init() {

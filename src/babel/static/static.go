@@ -12,10 +12,6 @@ You should have received a copy of the GNU General Public License along with thi
 
 package static
 
-// Package strMapping implements a mapping between keys and lengthier strings.
-
-// This package must be imported for its side effects when the content of strMapping resource files is stored in "util/strMapping/static" (file "vars.go", variables "compiler" and "str")
-
 import (
 	
 	SM	"util/strMapping"

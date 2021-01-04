@@ -96,7 +96,7 @@ const (
 		{{define "body"}}
 			<h1>{{.Title}}</h1>
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 			<h3>
 				{{.Now}}
@@ -141,7 +141,7 @@ const (
 				{{end}}
 			{{end}}
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 		{{end}}
 	`
@@ -237,34 +237,34 @@ func (s *propsSort) Less (p1, p2 int) bool {
 	return s.t[p1].prop < s.t[p2].prop || s.t[p1].prop == s.t[p2].prop && BA.CompP(s.t[p1].id, s.t[p2].id) == BA.Lt
 } //Less
 
-func doBlock (b *Block) string {
-	return fmt.Sprint(SM.Map("#duniterClient:Block"), " ", b.Number, " ", BA.Ts2s(b.Bct))
+func doBlock (b *Block, lang *SM.Lang) string {
+	return fmt.Sprint(lang.Map("#duniterClient:Block"), " ", b.Number, " ", BA.Ts2s(b.Bct, lang))
 } //doBlock
 
-func printN (t string, now *Block, forward string, fw int) *Out {
-	tE := SM.Map(t)
-	forwardE := SM.Map(forward)
-	nowS := fmt.Sprint(doBlock(now), " → ", BA.Ts2s(next(now.Bct, fw)))
-	return &Out{Title: tE, Now: nowS, Forward: forwardE, Fw: fw, OK: SM.Map("#duniterClient:OK")}
+func printN (t string, now *Block, forward string, fw int, lang *SM.Lang) *Out {
+	tE := lang.Map(t)
+	forwardE := lang.Map(forward)
+	nowS := fmt.Sprint(doBlock(now, lang), " → ", BA.Ts2s(next(now.Bct, fw), lang))
+	return &Out{Title: tE, Now: nowS, Forward: forwardE, Fw: fw, OK: lang.Map("#duniterClient:OK")}
 } //printN
 
-func print (t string, now *Block, forward string, fw int, props props, title, comp, cert string) *Out {
-	tE := SM.Map(t)
-	titleE := SM.Map(title)
-	certE := SM.Map(cert)
-	forwardE := SM.Map(forward)
+func print (t string, now *Block, forward string, fw int, props props, title, comp, cert string, lang *SM.Lang) *Out {
+	tE := lang.Map(t)
+	titleE := lang.Map(title)
+	certE := lang.Map(cert)
+	forwardE := lang.Map(forward)
 	var compE string
 	if comp == "" {
 		compE = ""
 	} else {
-		compE = SM.Map(comp)
+		compE = lang.Map(comp)
 	}
-	nowS := fmt.Sprint(doBlock(now), " → ", BA.Ts2s(next(now.Bct, fw)))
-	ok := SM.Map("#duniterClient:OK")
-	warnNum := fmt.Sprint(SM.Map("#duniterClient:WarnNum"), " ", len(props))
+	nowS := fmt.Sprint(doBlock(now, lang), " → ", BA.Ts2s(next(now.Bct, fw), lang))
+	ok := lang.Map("#duniterClient:OK")
+	warnNum := fmt.Sprint(lang.Map("#duniterClient:WarnNum"), " ", len(props))
 	warnings := make(Warnings, len(props))
 	for i, p := range props {
-		content := fmt.Sprint(BA.Ts2s(p.prop), "    ", p.id)
+		content := fmt.Sprint(BA.Ts2s(p.prop, lang), "    ", p.id)
 		warnings[i] = &Warning{titleE, compE, content, certE, p.aux}
 	}
 	return &Out{tE, nowS, forwardE, ok, warnNum, fw, warnings}
@@ -345,7 +345,7 @@ func makeCount (now *Block, what string, ids Identities, fw int) props {
 	return props
 } //makeCount
 
-func end (name string, temp *template.Template, r *http.Request, w http.ResponseWriter) {
+func end (name string, temp *template.Template, r *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 
 	var (
 		
@@ -381,7 +381,7 @@ func end (name string, temp *template.Template, r *http.Request, w http.Response
 		j := GS.Send(nil, nowDoc)
 		n := new(Limits)
 		J.ApplyTo(j, n)
-		out := printN(t, n.Data.Now, forward, fw)
+		out := printN(t, n.Data.Now, forward, fw, lang)
 		err := temp.ExecuteTemplate(w, name, out); M.Assert(err == nil, err, 100)
 	} else {
 		r.ParseForm()
@@ -404,7 +404,7 @@ func end (name string, temp *template.Template, r *http.Request, w http.Response
 			ids = lim.Data.IdSearch.Ids
 		}
 		props := makeCount(lim.Data.Now, name, ids, fw)
-		out := print(t, lim.Data.Now, forward, fw, props, title, comp, cert)
+		out := print(t, lim.Data.Now, forward, fw, props, title, comp, cert, lang)
 		err := temp.ExecuteTemplate(w, name, out); M.Assert(err == nil, err, 101)
 	}
 } //end

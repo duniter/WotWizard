@@ -118,6 +118,30 @@ const (
 				all_certified {
 					uid
 				}
+				all_certifiersIO {
+					id {
+						uid
+					}
+					hist {
+						in
+						block {
+							number
+							bct
+						}
+					}
+				}
+				all_certifiedIO {
+					id {
+						uid
+					}
+					hist {
+						in
+						block {
+							number
+							bct
+						}
+					}
+				}
 				distance @include(if: $dispDist) {
 					value
 					dist_ok
@@ -134,7 +158,7 @@ const (
 			{{with .Start}}
 				<h1>{{.Title}}</h1>
 				<p>
-					<a href = "/">index</a>
+					<a href = "/">{{Map "index"}}</a>
 				</p>
 				<h3>
 					{{.Now}}
@@ -293,6 +317,23 @@ const (
 							</blockquote>
 						</p>
 						<h5>
+							{{.AllCertifiersIO}}
+						</h5>
+						<p>
+							<blockquote>
+								{{range .ReceivedAllCertsIO}}
+									{{.Uid}}
+									<blockquote>
+										{{range .Hist}}
+											{{.}}
+											<br>
+										{{end}}
+									</blockquote>
+									<br>
+								{{end}}
+							</blockquote>
+						</p>
+						<h5>
 							{{.PresentCertified}}
 						</h5>
 						<blockquote>
@@ -325,11 +366,28 @@ const (
 								{{end}}
 							</blockquote>
 						</p>
+						<h5>
+							{{.AllCertifiedIO}}
+						</h5>
+						<p>
+							<blockquote>
+								{{range .SentAllCertsIO}}
+									{{.Uid}}
+									<blockquote>
+										{{range .Hist}}
+											{{.}}
+											<br>
+										{{end}}
+									</blockquote>
+									<br>
+								{{end}}
+							</blockquote>
+						</p>
 					{{end}}
 				{{end}}
 			{{end}}
 			<p>
-				<a href = "/">index</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 		{{end}}
 	`
@@ -387,6 +445,20 @@ type (
 	
 	Identities []*Identity
 	
+	CertEvent struct {
+		In bool
+		Block Block
+	}
+	
+	CertEvents []CertEvent
+	
+	CertHist struct {
+		Id *Identity
+		Hist CertEvents
+	}
+	
+	CertHists []CertHist
+	
 	Distance struct {
 		Value float64
 		Dist_ok bool
@@ -409,6 +481,8 @@ type (
 		Sent_certifications Certifications
 		All_certifiers,
 		All_certified Identities
+		All_certifiersIO,
+		All_certifiedIO CertHists
 		Distance *Distance
 		Quality,
 		Centrality float64
@@ -467,6 +541,13 @@ type (
 	
 	ListI []int64
 	
+	CH struct {
+		Uid string
+		Hist ListS
+	}
+	
+	ListCH []CH
+	
 	Certifics struct {
 		PresentCertifiers,
 		PresentCertified string
@@ -479,6 +560,10 @@ type (
 		AllCertified string
 		ReceivedAllCerts,
 		SentAllCerts ListS
+		AllCertifiersIO,
+		AllCertifiedIO string
+		ReceivedAllCertsIO,
+		SentAllCertsIO ListCH
 	}
 	
 	Hist struct {
@@ -525,8 +610,8 @@ var (
 
 )
 
-func doBlock (b *Block) string {
-	return fmt.Sprint(SM.Map("#duniterClient:Block"), " ", b.Number, " ", BA.Ts2s(b.Bct))
+func doBlock (b *Block, lang *SM.Lang) string {
+	return fmt.Sprint(lang.Map("#duniterClient:Block"), " ", b.Number, " ", BA.Ts2s(b.Bct, lang))
 } //doBlock
 
 func fixChecked (checked bool) string {
@@ -536,22 +621,22 @@ func fixChecked (checked bool) string {
 	return ""
 } //fixChecked
 
-func doStart (title, hint string, revokedC, missingC, memberC, newcomerC bool, now *Block) *Start {
-	t := SM.Map(title)
-	nowS := doBlock(now)
-	placeholder := SM.Map("#duniterClient:TypeUidOrPubkey")
+func doStart (title, hint string, revokedC, missingC, memberC, newcomerC bool, now *Block, lang *SM.Lang) *Start {
+	t := lang.Map(title)
+	nowS := doBlock(now, lang)
+	placeholder := lang.Map("#duniterClient:TypeUidOrPubkey")
 	revokedChecked := fixChecked(revokedC)
-	checkRevoked := SM.Map("#duniterClient:Revokeds") + " (" + string(revokedIcon) + ")"
+	checkRevoked := lang.Map("#duniterClient:Revokeds") + " (" + string(revokedIcon) + ")"
 	missingChecked := fixChecked(missingC)
-	checkMissing := SM.Map("#duniterClient:Missings") + " (" + string(missingIcon) + ")"
+	checkMissing := lang.Map("#duniterClient:Missings") + " (" + string(missingIcon) + ")"
 	memberChecked := fixChecked(memberC)
-	checkMember := SM.Map("#duniterClient:Members")
+	checkMember := lang.Map("#duniterClient:Members")
 	newcomerChecked := fixChecked(newcomerC)
-	checkNewcomer := SM.Map("#duniterClient:Newcomers") + " (" + string(newcomerIcon) + ")"
+	checkNewcomer := lang.Map("#duniterClient:Newcomers") + " (" + string(newcomerIcon) + ")"
 	return &Start{t, nowS, placeholder, hint, revokedChecked, checkRevoked, missingChecked, checkMissing, memberChecked, checkMember, newcomerChecked, checkNewcomer}
 } //doStart
 
-func doFind (idso *IdSearchOutput, selectedHash string, distC, qualC, centrC bool) *Find {
+func doFind (idso *IdSearchOutput, selectedHash string, distC, qualC, centrC bool, lang *SM.Lang) *Find {
 	
 	SearchId := func (id *Identity) *IdHash {
 		var uid string
@@ -574,14 +659,14 @@ func doFind (idso *IdSearchOutput, selectedHash string, distC, qualC, centrC boo
 	if idso == nil {
 		return nil
 	}
-	idNumbers := fmt.Sprint(idso.RevokedNb, " ", SM.Map("#duniterClient:Revokeds"), "    ", idso.MissingNb, " ", SM.Map("#duniterClient:Missings"), "    ", idso.MemberNb, " ", SM.Map("#duniterClient:Members"), "    ", idso.NewcomerNb, " ", SM.Map("#duniterClient:Newcomers"))
-	selectIt := SM.Map("#duniterClient:Select")
+	idNumbers := fmt.Sprint(idso.RevokedNb, " ", lang.Map("#duniterClient:Revokeds"), "    ", idso.MissingNb, " ", lang.Map("#duniterClient:Missings"), "    ", idso.MemberNb, " ", lang.Map("#duniterClient:Members"), "    ", idso.NewcomerNb, " ", lang.Map("#duniterClient:Newcomers"))
+	selectIt := lang.Map("#duniterClient:Select")
 	distChecked := fixChecked(distC)
-	checkDist := SM.Map("#duniterClient:Distance")
+	checkDist := lang.Map("#duniterClient:Distance")
 	qualChecked := fixChecked(qualC)
-	checkQual := SM.Map("#duniterClient:Quality")
+	checkQual := lang.Map("#duniterClient:Quality")
 	centrChecked := fixChecked(centrC)
-	checkCentr := SM.Map("#duniterClient:Centrality")
+	checkCentr := lang.Map("#duniterClient:Centrality")
 	ids := idso.Ids
 	idHs := make(IdHashes, len(ids))
 	for i, id := range ids {
@@ -599,7 +684,7 @@ func (e *expSort) Swap (i, j int) {
 	e.exps[i], e.exps[j] = e.exps[j], e.exps[i]
 } //Swap
 
-func certs (res *Identity) *Certifics {
+func certs (res *Identity, lang *SM.Lang) *Certifics {
 
 	countCerts := func (cs Certifications) (nb, futNb int) {
 		nb = 0
@@ -616,13 +701,13 @@ func certs (res *Identity) *Certifics {
 
 	//certs
 	var ts sort.TS
-	sortedByDate := SM.Map("#duniterClient:SortedByCExpDates")
+	sortedByDate := lang.Map("#duniterClient:SortedByCExpDates")
 	es := new(expSort)
 	ts.Sorter = es
 	
 	certifs := res.Sent_certifications
 	sentCertsNb, sentCertsFutNb := countCerts(certifs)
-	presentCertified := fmt.Sprint(SM.Map("#duniterClient:PresentCertified"), " (", sentCertsNb, " + ", sentCertsFutNb, ")")
+	presentCertified := fmt.Sprint(lang.Map("#duniterClient:PresentCertified"), " (", sentCertsNb, " + ", sentCertsFutNb, ")")
 	sentCerts := make(ListS, sentCertsNb + sentCertsFutNb)
 	es.exps = make(ListI, len(sentCerts))
 	for i, c := range certifs {
@@ -638,17 +723,35 @@ func certs (res *Identity) *Certifics {
 	ts.QuickSort(0, len(es.ids) - 1)
 	sentByLimits := make(ListS, len(es.ids))
 	for i := 0; i < len(es.ids); i++ {
-		sentByLimits[i] = fmt.Sprint(BA.Ts2s(es.exps[i]), "    ", es.ids[i])
+		sentByLimits[i] = fmt.Sprint(BA.Ts2s(es.exps[i], lang), "    ", es.ids[i])
 	}
-	allCertified := SM.Map("#duniterClient:AllCertified")
+	allCertified := lang.Map("#duniterClient:AllCertified")
 	sentAllCerts := make(ListS, len(res.All_certified))
 	for i, a := range res.All_certified {
 		sentAllCerts[i] = a.Uid
 	}
+	allCertifiedIO := lang.Map("#duniterClient:AllCertifiedIO")
+	sentAllCertsIO := make(ListCH, len(res.All_certifiedIO))
+	for i, a := range res.All_certifiedIO {
+		sentAllCertsIO[i].Uid = a.Id.Uid
+		h := make(ListS, len(a.Hist))
+		for j, ce := range a.Hist {
+			w := new(strings.Builder)
+			if ce.In {
+				fmt.Fprint(w, "↑")
+			} else {
+				fmt.Fprint(w, "↓")
+			}
+			b := ce.Block
+			fmt.Fprint(w, "    ", b.Number, " ", BA.Ts2s(b.Bct, lang))
+			h[j] = w.String()
+		}
+		sentAllCertsIO[i].Hist = h
+	}
 	
 	certifs = res.Received_certifications.Certifications
 	receivedCertsNb, receivedCertsFutNb := countCerts(certifs)
-	presentCertifiers := fmt.Sprint(SM.Map("#duniterClient:PresentCertifiers"), " (", receivedCertsNb, " + ", receivedCertsFutNb, ")")
+	presentCertifiers := fmt.Sprint(lang.Map("#duniterClient:PresentCertifiers"), " (", receivedCertsNb, " + ", receivedCertsFutNb, ")")
 	receivedCerts := make(ListS, receivedCertsNb + receivedCertsFutNb)
 	es.exps = make(ListI, len(receivedCerts))
 	for i, c := range certifs {
@@ -664,26 +767,44 @@ func certs (res *Identity) *Certifics {
 	ts.QuickSort(0, len(es.ids) - 1)
 	receivedByLimits := make(ListS, len(es.ids))
 	for i := 0; i < len(es.ids); i++ {
-		receivedByLimits[i] = fmt.Sprint(BA.Ts2s(es.exps[i]), "    ", es.ids[i])
+		receivedByLimits[i] = fmt.Sprint(BA.Ts2s(es.exps[i], lang), "    ", es.ids[i])
 		if es.exps[i] == res.Received_certifications.Limit {
 			receivedByLimits[i] = "→ " + receivedByLimits[i]
 		}
 	}
-	allCertifiers := SM.Map("#duniterClient:AllCertifiers")
+	allCertifiers := lang.Map("#duniterClient:AllCertifiers")
 	receivedAllCerts := make(ListS, len(res.All_certifiers))
 	for i, a := range res.All_certifiers {
 		receivedAllCerts[i] = a.Uid
 	}
+	allCertifiersIO := lang.Map("#duniterClient:AllCertifiersIO")
+	receivedAllCertsIO := make(ListCH, len(res.All_certifiersIO))
+	for i, a := range res.All_certifiersIO {
+		receivedAllCertsIO[i].Uid = a.Id.Uid
+		h := make(ListS, len(a.Hist))
+		for j, ce := range a.Hist {
+			w := new(strings.Builder)
+			if ce.In {
+				fmt.Fprint(w, "↑")
+			} else {
+				fmt.Fprint(w, "↓")
+			}
+			b := ce.Block
+			fmt.Fprint(w, "    ", b.Number, " ", BA.Ts2s(b.Bct, lang))
+			h[j] = w.String()
+		}
+		receivedAllCertsIO[i].Hist = h
+	}
 	
-	return &Certifics{presentCertifiers, presentCertified, receivedCerts, sentCerts, sortedByDate, receivedByLimits, sentByLimits, allCertifiers, allCertified, receivedAllCerts, sentAllCerts}
+	return &Certifics{presentCertifiers, presentCertified, receivedCerts, sentCerts, sortedByDate, receivedByLimits, sentByLimits, allCertifiers, allCertified, receivedAllCerts, sentAllCerts, allCertifiersIO, allCertifiedIO, receivedAllCertsIO, sentAllCertsIO}
 } //certs
 
-func printHistory (h History) *Hist {
+func printHistory (h History, lang *SM.Lang) *Hist {
 	if len(h) == 0 {
 		return nil
 	}
-	la := SM.Map("#duniterClient:history")
-	lg := fmt.Sprint("↑  ", SM.Map("#duniterClient:In"), "    ", "↓  ", SM.Map("#duniterClient:Out"))
+	la := lang.Map("#duniterClient:history")
+	lg := fmt.Sprint("↑  ", lang.Map("#duniterClient:In"), "    ", "↓  ", lang.Map("#duniterClient:Out"))
 	ls := make(ListS, len(h))
 	for i, hi := range h {
 		w := new(strings.Builder)
@@ -693,25 +814,25 @@ func printHistory (h History) *Hist {
 			fmt.Fprint(w, "↓")
 		}
 		b := hi.Block
-		fmt.Fprint(w, "    ", b.Number, " ", BA.Ts2s(b.Bct))
+		fmt.Fprint(w, "    ", b.Number, " ", BA.Ts2s(b.Bct, lang))
 		ls[i] = w.String()
 	}
 	return &Hist{la, lg, ls}
 } //printHistory
 
-func get (res *Identity) *Idty {
-	yes := SM.Map("#duniterClient:yes")
-	no := SM.Map("#duniterClient:no")
-	uid := fmt.Sprint(SM.Map("#duniterClient:Nickname"), "    ", res.Uid)
-	hash := fmt.Sprint(SM.Map("#duniterClient:Hash"), "    ", string(res.Hash))
-	pubkey := fmt.Sprint(SM.Map("#duniterClient:Pubkey"), "    ", string(res.Pubkey))
-	member := fmt.Sprint(SM.Map("#duniterClient:Member"), "    ")
+func get (res *Identity, lang *SM.Lang) *Idty {
+	yes := lang.Map("#duniterClient:yes")
+	no := lang.Map("#duniterClient:no")
+	uid := fmt.Sprint(lang.Map("#duniterClient:Nickname"), "    ", res.Uid)
+	hash := fmt.Sprint(lang.Map("#duniterClient:Hash"), "    ", string(res.Hash))
+	pubkey := fmt.Sprint(lang.Map("#duniterClient:Pubkey"), "    ", string(res.Pubkey))
+	member := fmt.Sprint(lang.Map("#duniterClient:Member"), "    ")
 	if res.Status == "MEMBER" {
 		member += yes
 	} else {
 		member += no
 	}
-	sentry := fmt.Sprint(SM.Map("#duniterClient:Sentry"), "    ")
+	sentry := fmt.Sprint(lang.Map("#duniterClient:Sentry"), "    ")
 	if res.Sentry {
 		sentry += yes
 	} else {
@@ -721,101 +842,101 @@ func get (res *Identity) *Idty {
 	if res.Id_written_block == nil {
 		block = ""
 	} else {
-		block = fmt.Sprint(SM.Map("#duniterClient:Written_block"), "    ", doBlock(res.Id_written_block))
+		block = fmt.Sprint(lang.Map("#duniterClient:Written_block"), "    ", doBlock(res.Id_written_block, lang))
 	}
 	if res.Status == "REVOKED" {
 		res.LimitDate = BA.Revoked
 	}
-	limitDate := fmt.Sprint(SM.Map("#duniterClient:AppLimitDate"), "    ", BA.Ts2s(res.LimitDate))
+	limitDate := fmt.Sprint(lang.Map("#duniterClient:AppLimitDate"), "    ", BA.Ts2s(res.LimitDate, lang))
 	var availability string
 	if res.MinDate == 0 {
 		availability = ""
 	} else {
-		availability = BA.Ts2s(res.MinDate) + "    "
+		availability = BA.Ts2s(res.MinDate, lang) + "    "
 	}
 	if res.MinDatePassed {
-		availability += SM.Map("#duniterClient:OK")
+		availability += lang.Map("#duniterClient:OK")
 	} else {
-		availability += SM.Map("#duniterClient:KO")
+		availability += lang.Map("#duniterClient:KO")
 	}
 	if availability != "" {
-		availability = fmt.Sprint(SM.Map("#duniterClient:Availability"), "    ", availability)
+		availability = fmt.Sprint(lang.Map("#duniterClient:Availability"), "    ", availability)
 	}
 	var pending string
 	isPending := res.Membership_pending && (res.Status == "MISSING" || res.Status == "MEMBER")
 	if isPending {
-		pending = fmt.Sprint(SM.Map("#duniterClient:pending"), "    ", SM.Map("#duniterClient:LimitDate"), "    ", BA.Ts2s(res.Membership_pending_limitDate))
+		pending = fmt.Sprint(lang.Map("#duniterClient:pending"), "    ", lang.Map("#duniterClient:LimitDate"), "    ", BA.Ts2s(res.Membership_pending_limitDate, lang))
 	} else {
 		pending = ""
 	}
-	history := printHistory(res.History)
+	history := printHistory(res.History, lang)
 	return &Idty{uid, pubkey, hash, member, sentry, block, limitDate, availability, pending, history}
 } //get
 
-func notTooFar (res *Identity) string {
+func notTooFar (res *Identity, lang *SM.Lang) string {
 	if res.Distance == nil {
 		return ""
 	}
 	d := res.Distance
 	b := new(strings.Builder)
-	fmt.Fprint(b, SM.Map("#duniterClient:Distance"), "    ", strconv.FormatFloat(d.Value, 'f', 2, 64), "%", "    ")
+	fmt.Fprint(b, lang.Map("#duniterClient:Distance"), "    ", strconv.FormatFloat(d.Value, 'f', 2, 64), "%", "    ")
 	if d.Dist_ok {
-		fmt.Fprint(b, SM.Map("#duniterClient:OK"))
+		fmt.Fprint(b, lang.Map("#duniterClient:OK"))
 	} else {
-		fmt.Fprint(b, SM.Map("#duniterClient:KO"))
+		fmt.Fprint(b, lang.Map("#duniterClient:KO"))
 	}
 	return b.String()
 } //notTooFar
 
-func calcQuality (res *Identity) string {
+func calcQuality (res *Identity, lang *SM.Lang) string {
 	if res.Quality == 0 {
 		return ""
 	}
-	return fmt.Sprint(SM.Map("#duniterClient:Quality"), "    ", strconv.FormatFloat(res.Quality, 'f', 2, 64), "%")
+	return fmt.Sprint(lang.Map("#duniterClient:Quality"), "    ", strconv.FormatFloat(res.Quality, 'f', 2, 64), "%")
 } //calcQuality
 
-func calcCentrality (res *Identity) string {
+func calcCentrality (res *Identity, lang *SM.Lang) string {
 	if res.Centrality == 0 {
 		return ""
 	}
-	return fmt.Sprint(SM.Map("#duniterClient:Centrality"), "    ", strconv.FormatFloat(res.Centrality, 'f', 2, 64), "%")
+	return fmt.Sprint(lang.Map("#duniterClient:Centrality"), "    ", strconv.FormatFloat(res.Centrality, 'f', 2, 64), "%")
 } //calcCentrality
 
-func doFix (res *Identity) *Fix {
+func doFix (res *Identity, lang *SM.Lang) *Fix {
 	if res == nil {
 		return nil
 	}
-	id := get(res)
-	cs := certs(res)
-	dist := notTooFar(res)
-	qual := calcQuality(res)
-	centr := calcCentrality(res)
+	id := get(res, lang)
+	cs := certs(res, lang)
+	dist := notTooFar(res, lang)
+	qual := calcQuality(res, lang)
+	centr := calcCentrality(res, lang)
 	return &Fix{id, dist, qual, centr, cs}
 } //doFix
 
-func printStart (t, hint string, reC, miC, meC, neC bool, now *NowRes) *Out {
-	start := doStart(t, hint, reC, miC, meC, neC, now.Data.Now)
-	return &Out{Start: start, OK: SM.Map("#duniterClient: OK")}
+func printStart (t, hint string, reC, miC, meC, neC bool, now *NowRes, lang *SM.Lang) *Out {
+	start := doStart(t, hint, reC, miC, meC, neC, now.Data.Now, lang)
+	return &Out{Start: start, OK: lang.Map("#duniterClient: OK")}
 } //printStart
 
-func printFind (t, hint, selHash string, reC, miC, meC, neC, dC, qC, cC bool, find *FindRes) *Out {
-	start := doStart(t, hint, reC, miC, meC, neC, find.Data.Now)
-	findS := doFind(find.Data.IdSearch, selHash, dC, qC, cC)
-	return &Out{Start: start, Find: findS, OK: SM.Map("#duniterClient:OK")}
+func printFind (t, hint, selHash string, reC, miC, meC, neC, dC, qC, cC bool, find *FindRes, lang *SM.Lang) *Out {
+	start := doStart(t, hint, reC, miC, meC, neC, find.Data.Now, lang)
+	findS := doFind(find.Data.IdSearch, selHash, dC, qC, cC, lang)
+	return &Out{Start: start, Find: findS, OK: lang.Map("#duniterClient:OK")}
 } //printFind
 
-func printFix (t, hint, selHash string, reC, miC, meC, neC, dC, qC, cC bool, find *FindRes, fix *FixRes) *Out {
-	start := doStart(t, hint, reC, miC, meC, neC, fix.Data.Now)
-	findS := doFind(find.Data.IdSearch, selHash, dC, qC, cC)
+func printFix (t, hint, selHash string, reC, miC, meC, neC, dC, qC, cC bool, find *FindRes, fix *FixRes, lang *SM.Lang) *Out {
+	start := doStart(t, hint, reC, miC, meC, neC, fix.Data.Now, lang)
+	findS := doFind(find.Data.IdSearch, selHash, dC, qC, cC, lang)
 	// if 'find.Data.IdSearch' is nil or void, don't display it
 	fixS := (*Fix)(nil)
 	if find.Data.IdSearch != nil && len(find.Data.IdSearch.Ids) > 0 {
-		fixS = doFix(fix.Data.IdFromHash)
+		fixS = doFix(fix.Data.IdFromHash, lang)
 	}
-	return &Out{Start: start, Find: findS, Fix: fixS, OK:SM.Map("#duniterClient:OK")}
+	return &Out{Start: start, Find: findS, Fix: fixS, OK:lang.Map("#duniterClient:OK")}
 } //printFix
 
-func end (name string, temp *template.Template, r *http.Request, w http.ResponseWriter) {
+func end (name string, temp *template.Template, r *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	
 	const (
 		
@@ -841,7 +962,7 @@ func end (name string, temp *template.Template, r *http.Request, w http.Response
 		j := GS.Send(nil, nowDoc)
 		n := new(NowRes)
 		J.ApplyTo(j, n)
-		out := printStart(t, defaultHint, defaultRevokedC, defaultMissingC, defaultMemberC, defaultNewcomerC, n)
+		out := printStart(t, defaultHint, defaultRevokedC, defaultMissingC, defaultMemberC, defaultNewcomerC, n, lang)
 		err := temp.ExecuteTemplate(w, name, out); M.Assert(err == nil, err, 101)
 		return
 	}
@@ -879,7 +1000,7 @@ func end (name string, temp *template.Template, r *http.Request, w http.Response
 	fd := new(FindRes)
 	J.ApplyTo(j, fd)
 	if !isFix {
-		out := printFind(t, hint, selHash, reC, miC, meC, neC, dC, qC, cC, fd)
+		out := printFind(t, hint, selHash, reC, miC, meC, neC, dC, qC, cC, fd, lang)
 		err := temp.ExecuteTemplate(w, name, out); M.Assert(err == nil, err, 102)
 		return
 	}
@@ -901,7 +1022,7 @@ func end (name string, temp *template.Template, r *http.Request, w http.Response
 	j = GS.Send(j, fixDoc)
 	fx := new(FixRes)
 	J.ApplyTo(j, fx)
-	out := printFix(t, hint, selHash, reC, miC, meC, neC, dC, qC, cC, fd, fx)
+	out := printFix(t, hint, selHash, reC, miC, meC, neC, dC, qC, cC, fd, fx, lang)
 	err := temp.ExecuteTemplate(w, name, out); M.Assert(err == nil, err, 103)
 } //end
 
