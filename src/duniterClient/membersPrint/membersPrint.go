@@ -227,7 +227,7 @@ const (
 		{{define "body"}}
 			<h1>{{.Title}}</h1>
 			<p>
-				<a href = "/">{{Map "index"}</a>
+				<a href = "/">{{Map "index"}}</a>
 			</p>
 			<h3>
 				{{.Now}}
@@ -405,17 +405,19 @@ func printN (now *NowT, title, period string, lang *SM.Lang) *Out {
 	return &Out{Title: t, Now: nowS, Delay: dy, Period: period, Submit: s}
 } //printN
 
-func printT (a EventsT, now *NowT, title, period string) *Out {
-	t := SM.Map(title)
-	nowS := printNow(now)
-	dy := SM.Map("#duniterClient:Delay")
-	s := SM.Map("#duniterClient:OK")
-	block := SM.Map("#duniterClient:Block");
-	actual := SM.Map("#duniterClient:Utc")
-	median := SM.Map("#duniterClient:Bct")
-	entry := SM.Map("#duniterClient:Entry")
-	exit := SM.Map("#duniterClient:Exit")
-	l := make(ListE, len(a))
+func printT (a EventsT, now *NowT, title, period string, lang *SM.Lang) *Out {
+	t := lang.Map(title)
+	nowS := printNow(now, lang)
+	dy := lang.Map("#duniterClient:Delay")
+	s := lang.Map("#duniterClient:OK")
+	block := lang.Map("#duniterClient:Block");
+	actual := lang.Map("#duniterClient:Utc")
+	median := lang.Map("#duniterClient:Bct")
+	entry := lang.Map("#duniterClient:Entry")
+	exit := lang.Map("#duniterClient:Exit")
+	la := len(a)
+	l := make(ListE, la)
+	la--
 	for i, ai := range a {
 		d := fmt.Sprint(block, ": ", ai.Block.Number,  "    ", actual, ": ", BA.Ts2s(ai.Block.Utc0, lang), "    ", median, ": ", BA.Ts2s(ai.Block.Bct, lang))
 		in := make(InOutsT, len(ai.IdList))
