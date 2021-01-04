@@ -120,7 +120,7 @@ func norm (t int64) (tN int, tName string) {
 	return
 } //norm
 
-func print (allParameters *AllParametersT) *Disp {
+func print (allParameters *AllParametersT, lang *SM.Lang) *Disp {
 	pars := allParameters.Data.AllParameters
 	d := make(Disp1, len(pars))
 	for i, p := range pars {
@@ -142,20 +142,20 @@ func print (allParameters *AllParametersT) *Disp {
 		}
 		d[i][1] = w.String()
 	}
-	return &Disp{Title: SM.Map("#duniterClient:Parameters"), Pars: d}
+	return &Disp{Title: lang.Map("#duniterClient:Parameters"), Pars: d}
 } //print
 
-func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter) {
+func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter, lang *SM.Lang) {
+	tNames = [...]string{lang.Map("#duniterClient:second"), lang.Map("#duniterClient:minute"), lang.Map("#duniterClient:hour"), lang.Map("#duniterClient:day"), lang.Map("#duniterClient:month"), lang.Map("#duniterClient:year")}
 	j := GS.Send(nil, allParametersDoc)
 	if name == allParametersName {
 		allParameters := new(AllParametersT)
 		J.ApplyTo(j, allParameters)
-		temp.ExecuteTemplate(w, name, print(allParameters))
+		temp.ExecuteTemplate(w, name, print(allParameters, lang))
 	}
 } //end
 
 func init() {
-	tNames = [...]string{SM.Map("#duniterClient:second"), SM.Map("#duniterClient:minute"), SM.Map("#duniterClient:hour"), SM.Map("#duniterClient:day"), SM.Map("#duniterClient:month"), SM.Map("#duniterClient:year")}
 	allParametersDoc = GS.ExtractDocument(queryAllParameters)
 	W.RegisterPackage(allParametersName, htmlAllParameters, end, true)
 } //init

@@ -83,28 +83,28 @@ var (
 
 )
 
-func end (name string, temp *template.Template, r *http.Request, w http.ResponseWriter) {
+func end (name string, temp *template.Template, r *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	M.Assert(name == languageName, name, 100)
 	if r.Method != "GET" {
 		r.ParseForm()
 		newLang := r.PostFormValue("language")
-		SM.Reinit(newLang)
+		http.SetCookie(w, &http.Cookie{Name: W.Language_cookie_name, Value: newLang})
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
-	t := SM.Map("#duniterClient:language")
-	sel := SM.Map("#duniterClient:Select")
-	ok := SM.Map("#duniterClient: OK")
+	t := lang.Map("#duniterClient:language")
+	sel := lang.Map("#duniterClient:Select")
+	ok := lang.Map("#duniterClient: OK")
 	l := make(langList, len(languages))
-	language := SM.Language()
-	for i, lang := range languages {
-		l[i].Code = lang
-		if lang == language {
+	language := lang.Language()
+	for i, lg := range languages {
+		l[i].Code = lg
+		if lg == language {
 			l[i].Selected = "selected"
 		} else {
 			l[i].Selected = ""
 		}
-		l[i].Name = SM.Map("#duniterClient:" + lang)
+		l[i].Name = lang.Map("#duniterClient:" + lg)
 	}
 	out := &Out{t, sel, ok, l}
 	err := temp.ExecuteTemplate(w, name, out); M.Assert(err == nil, err, 101)

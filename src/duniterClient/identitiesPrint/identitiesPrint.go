@@ -130,9 +130,9 @@ var (
 
 )
 
-func print (title, nbMsg string, identities *IdentitiesT) *Disp {
+func print (title, nbMsg string, identities *IdentitiesT, lang *SM.Lang) *Disp {
 	
-	hashId := SM.Map("#duniterClient:Hash")
+	hashId := lang.Map("#duniterClient:Hash")
 
 	PrintIds := func (ids []Identity0) Disp0 {
 		d := make(Disp0, len(ids))
@@ -143,13 +143,13 @@ func print (title, nbMsg string, identities *IdentitiesT) *Disp {
 			dd[1] = fmt.Sprint(hashId, " ", id.Hash)
 			w.Reset()
 			if id.Block != nil {
-				fmt.Fprint(w, BA.Ts2s(id.Block.Bct))
+				fmt.Fprint(w, BA.Ts2s(id.Block.Bct, lang))
 			}
 			if id.LimitDate != 0 {
 				if id.Block != nil {
 					fmt.Fprint(w, " ")
 				}
-				fmt.Fprint(w, "→ ", BA.Ts2s(id.LimitDate))
+				fmt.Fprint(w, "→ ", BA.Ts2s(id.LimitDate, lang))
 			}
 			dd[2] = w.String()
 			d[i] = dd
@@ -161,31 +161,31 @@ func print (title, nbMsg string, identities *IdentitiesT) *Disp {
 	d := new(Disp)
 	ids := identities.Data
 	d.Title = title
-	d.Block = fmt.Sprint(SM.Map("#duniterClient:Block"), " ", ids.Now.Number, "\t", BA.Ts2s(ids.Now.Bct))
+	d.Block = fmt.Sprint(lang.Map("#duniterClient:Block"), " ", ids.Now.Number, "\t", BA.Ts2s(ids.Now.Bct, lang))
 	d.Number = fmt.Sprint(nbMsg, " = ", len(ids.Identities))
 	d.Ids = PrintIds(ids.Identities)
 	return d
 } //print
 
-func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter) {
+func end (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	var status, title, nbMsg string
 	switch name {
 	case revokedName:
 		status = "REVOKED"
-		title = SM.Map("#duniterClient:RevokedM")
-		nbMsg = SM.Map("#duniterClient:RevokedNb")
+		title = lang.Map("#duniterClient:RevokedM")
+		nbMsg = lang.Map("#duniterClient:RevokedNb")
 	case missingName:
 		status = "MISSING"
-		title = SM.Map("#duniterClient:Missing")
-		nbMsg = SM.Map("#duniterClient:MissingNb")
+		title = lang.Map("#duniterClient:Missing")
+		nbMsg = lang.Map("#duniterClient:MissingNb")
 	case memberName:
 		status = "MEMBER"
-		title = SM.Map("#duniterClient:Members")
-		nbMsg = SM.Map("#duniterClient:MembersNb")
+		title = lang.Map("#duniterClient:Members")
+		nbMsg = lang.Map("#duniterClient:MembersNb")
 	case newcomerName:
 		status = "NEWCOMER"
-		title = SM.Map("#duniterClient:Newcomers")
-		nbMsg = SM.Map("#duniterClient:NewcomersNb")
+		title = lang.Map("#duniterClient:Newcomers")
+		nbMsg = lang.Map("#duniterClient:NewcomersNb")
 	default:
 		M.Halt(name, 100)
 	}
@@ -197,7 +197,7 @@ func end (name string, temp *template.Template, _ *http.Request, w http.Response
 	j := GS.Send(mk.GetJson(), identitiesDoc)
 	identities := new(IdentitiesT)
 	J.ApplyTo(j, identities)
-	temp.ExecuteTemplate(w, name, print(title, nbMsg, identities))
+	temp.ExecuteTemplate(w, name, print(title, nbMsg, identities, lang))
 } //end
 
 func init() {

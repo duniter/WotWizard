@@ -30,7 +30,7 @@ import (
 
 const (
 	
-	timeFormat = "02/01/2006 15:04:05"
+	timeFormat = "2006/01/02 15:04:05"
 	
 	OldIcon = "×" // Icon for old items (old or leaving members)
 	
@@ -69,12 +69,12 @@ var (
 )
 
 // Convert the date t to the string dt
-func Ts2s (t int64) string {
+func Ts2s (t int64, lang *SM.Lang) string {
 	switch t {
 	case never:
-		return SM.Map("#duniterClient:Never")
+		return lang.Map("#duniterClient:Never")
 	case Revoked:
-		return SM.Map("#duniterClient:Revoked")
+		return lang.Map("#duniterClient:Revoked")
 	case Already:
 		return "**/**/**** **:**:**"
 	default:

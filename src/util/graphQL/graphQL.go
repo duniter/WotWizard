@@ -368,6 +368,7 @@ var (
 	wd = R.FindDir()
 	direc = F.Join(wd, graphQLDir)
 	comp *C.Compiler
+	lang = SM.NewLanguage("en")
 	
 	StdDir TypeDirectory = new(typeDirectory)
 	Dir = StdDir
@@ -1233,7 +1234,7 @@ func (ts *errorT) Error (mes, aux1, aux2 string, pos *PosT, path Path) {
 		
 		prefix = "#util/graphQL:GQL_"
 	
-	el := &ErrorElem{Message: SM.Map(prefix + mes, aux1, aux2)}
+	el := &ErrorElem{Message: lang.Map(prefix + mes, aux1, aux2)}
 	if pos == nil {
 		el.Location = nil
 	} else {
@@ -1254,7 +1255,7 @@ func (comp *compilationer) Error (p, li, co int, mes string) {
 } //Error
 
 func (c *compilationer) Map (index string) string {
-	return SM.Map("#babel:" + index)
+	return lang.Map("#babel:" + index)
 } //Map
 
 const (

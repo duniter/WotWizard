@@ -320,18 +320,18 @@ var (
 
 )
 
-func printNow (now *NowT) string {
-	return fmt.Sprint(SM.Map("#duniterClient:Block"), " ", now.Number, "\t", BA.Ts2s(now.Bct))
+func printNow (now *NowT, lang *SM.Lang) string {
+	return fmt.Sprint(lang.Map("#duniterClient:Block"), " ", now.Number, "\t", BA.Ts2s(now.Bct, lang))
 } //printNow
 
 // Print f with fo, starting at the element of rank i0; if withNow, the output begins with the printing of the current date
-func printFile (f *File) *DispF {
+func printFile (f *File, lang *SM.Lang) *DispF {
 	
 	PrintCertOrDoss := func (cd *Certif_DossierT, sigQty int) *DossCertT {
 		
 		PrintCertif := func (c *DatedCertificationT) string {
 			cc := c.Certification
-			return fmt.Sprint(cc.To.Uid, " ← ", cc.From.Uid, " ", BA.Ts2s(c.Date), " (→ ", BA.Ts2s(cc.Expires_on), ")")
+			return fmt.Sprint(cc.To.Uid, " ← ", cc.From.Uid, " ", BA.Ts2s(c.Date, lang), " (→ ", BA.Ts2s(cc.Expires_on, lang), ")")
 		} //PrintCertif
 		
 		// Print d with fo
@@ -341,7 +341,7 @@ func printFile (f *File) *DispF {
 				
 				PrintCert := func (c *DatedCertificationT) string {
 					cc := c.Certification
-					return fmt.Sprint(cc.From.Uid, " ", BA.Ts2s(c.Date), " (→ ", BA.Ts2s(cc.Expires_on), ")")
+					return fmt.Sprint(cc.From.Uid, " ", BA.Ts2s(c.Date, lang), " (→ ", BA.Ts2s(cc.Expires_on, lang), ")")
 				} //PrintCert
 				
 				//PrintCerts
@@ -353,13 +353,13 @@ func printFile (f *File) *DispF {
 			} //PrintCerts
 			
 			//PrintDossier
-			fi := fmt.Sprint(d.Main_certifs, " ", d.Newcomer.Uid, " (", BA.Ts2s(d.Date), " ≥ ", BA.Ts2s(d.MinDate), ")")
+			fi := fmt.Sprint(d.Main_certifs, " ", d.Newcomer.Uid, " (", BA.Ts2s(d.Date, lang), " ≥ ", BA.Ts2s(d.MinDate, lang), ")")
 			w := new(strings.Builder)
-			fmt.Fprint(w, "(→ ", BA.Ts2s(d.Expires_on), ") (", int(d.Newcomer.Distance.Value), "%) (")
+			fmt.Fprint(w, "(→ ", BA.Ts2s(d.Expires_on, lang), ") (", int(d.Newcomer.Distance.Value), "%) (")
 			if d.Newcomer.Distance.Dist_ok && d.Main_certifs >= sigQty {
-				fmt.Fprint(w, SM.Map("#duniterClient:OK"))
+				fmt.Fprint(w, lang.Map("#duniterClient:OK"))
 			} else {
-				fmt.Fprint(w, SM.Map("#duniterClient:KO"))
+				fmt.Fprint(w, lang.Map("#duniterClient:KO"))
 			}
 			fmt.Fprint(w, ") |")
 			sd := w.String()
@@ -394,28 +394,28 @@ func printFile (f *File) *DispF {
 				}
 			}
 		}
-		return &StatsT{Number: m, List: nbs, DossName: SM.Map("#duniterClient:Dossiers")}
+		return &StatsT{Number: m, List: nbs, DossName: lang.Map("#duniterClient:Dossiers")}
 	} //PrintDossiersNbs
 	
 	//printFile
 	d := f.Data
-	now := printNow(d.Now)
+	now := printNow(d.Now, lang)
 	cds := d.WWFile.Certifs_dossiers
 	dcs := make(DossCertsT, len(cds))
 	for i, cd := range cds {
 		dcs[i] = *PrintCertOrDoss(&cd, d.Parameter.SigQty)
 	}
-	return &DispF{Title: SM.Map("#duniterClient:ShowFile"), Now: now, Stats: PrintDossiersNbs(cds), DossCerts: dcs}
+	return &DispF{Title: lang.Map("#duniterClient:ShowFile"), Now: now, Stats: PrintDossiersNbs(cds), DossCerts: dcs}
 } //printFile
 
 // Print permutations returned by CalcPermutations
-func printPermutations (ps *Perms) *DispP {
+func printPermutations (ps *Perms, lang *SM.Lang) *DispP {
 
 	PrintPermutation := func (wp *WPermutation) *PermT {
 	
 		PrintPropagation := func (p *Propagation) string {
 			w := new(strings.Builder)
-			fmt.Fprint(w, BA.Ts2s(p.Date))
+			fmt.Fprint(w, BA.Ts2s(p.Date, lang))
 			if p.After {
 				fmt.Fprint(w, "+")
 			} else {
@@ -426,7 +426,7 @@ func printPermutations (ps *Perms) *DispP {
 		} //PrintPropagation
 	
 		//PrintPermutation
-		p := fmt.Sprintf("%s = %10.6f%%", SM.Map("#duniterClient:Proba"), wp.Proba * 100)
+		p := fmt.Sprintf("%s = %10.6f%%", lang.Map("#duniterClient:Proba"), wp.Proba * 100)
 		pp := make(PropsT, len(wp.Permutation))
 		for i, pe := range wp.Permutation {
 			pp[i] = PrintPropagation(&pe)
@@ -436,10 +436,10 @@ func printPermutations (ps *Perms) *DispP {
 
 	//printPermutations
 	d := ps.Data
-	t := SM.Map("#duniterClient:Permutations")
-	now := printNow(d.Now)
+	t := lang.Map("#duniterClient:Permutations")
+	now := printNow(d.Now, lang)
 	p := d.WWResult.Permutations
-	n := fmt.Sprint(SM.Map("#duniterClient:PermutationsNb"), len(p))
+	n := fmt.Sprint(lang.Map("#duniterClient:PermutationsNb"), len(p))
 	pp := make(PermsT, len(p))
 	for i, pe := range p {
 		pp[i] = *PrintPermutation(&pe)
@@ -447,20 +447,20 @@ func printPermutations (ps *Perms) *DispP {
 	return &DispP{Title: t, Now: now, Number: n, Perms: pp}
 } //printPermutations
 
-func endF (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter) {
+func endF (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	M.Assert(name == wwFileName, name, 100)
 	j := GS.Send(nil, wwFileDoc)
 	f := new(File)
 	J.ApplyTo(j, f)
-	temp.ExecuteTemplate(w, name, printFile(f))
+	temp.ExecuteTemplate(w, name, printFile(f, lang))
 } //endF
 
-func endP (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter) {
+func endP (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	M.Assert(name == wwPermsName, name, 100)
 	j := GS.Send(nil, wwPermsDoc)
 	p := new(Perms)
 	J.ApplyTo(j, p)
-	temp.ExecuteTemplate(w, name, printPermutations(p))
+	temp.ExecuteTemplate(w, name, printPermutations(p, lang))
 } //endP
 
 func init() {

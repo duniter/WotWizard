@@ -51,15 +51,17 @@ const (
 	`
 	
 	authorizationsName = "Authorizations.txt"
+	
+	Language_cookie_name = "v59ipaE3MoQDDtpt9edL"
 
 )
 
 type (
 	
-	executeFunc func (name string, temp *template.Template, r *http.Request, w http.ResponseWriter)
+	executeFunc func (name string, temp *template.Template, r *http.Request, w http.ResponseWriter, lang *SM.Lang)
 	
 	pack struct {
-		temp *template.Template
+		tmp string
 		call executeFunc
 	}
 	
@@ -74,14 +76,16 @@ var (
 
 )
 
+func Lang (r *http.Request) *SM.Lang {
+	if c, err := r.Cookie(Language_cookie_name); err == nil {
+		return SM.NewLanguage(c.Value)
+	}
+	return SM.NewStdLanguage()
+}
+
 func RegisterPackage (name, temp string, call executeFunc, displayed bool) {
-	funcMap := make(template.FuncMap)
-	funcMap["Map"] = func (name string) string {return SM.Map("#duniterClient:" + name)}
 	p := new(pack)
-	p.temp = template.New(name)
-	p.temp = p.temp.Funcs(funcMap)
-	p.temp = template.Must(p.temp.Parse(temp))
-	p.temp = template.Must(p.temp.Parse(base))
+	p.tmp = temp
 	p.call = call
 	packages[name] = p
 	if displayed {
@@ -141,7 +145,14 @@ func initAuthorizations () {
 func getHandler (name string, p *pack) http.HandlerFunc {
 	
 	return func (w http.ResponseWriter, r *http.Request) {
-		p.call(name, p.temp, r, w)
+		lang := Lang(r)
+		funcMap := make(template.FuncMap)
+		funcMap["Map"] = func (name string) string {return lang.Map("#duniterClient:" + name)}
+		temp := template.New(name)
+		temp = temp.Funcs(funcMap)
+		temp = template.Must(temp.Parse(p.tmp))
+		temp = template.Must(temp.Parse(base))
+		p.call(name, temp, r, w, lang)
 	}
 	
 }
@@ -165,7 +176,7 @@ func Start () {
 	server.ListenAndServe()
 }
 
-func manageIndex (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter) {
+func manageIndex (name string, temp *template.Template, r *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	err := temp.ExecuteTemplate(w, name, packagesD)
 	M.Assert(err == nil, err, 100)
 }

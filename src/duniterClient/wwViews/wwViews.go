@@ -315,19 +315,19 @@ type (
 
 )
 
-func printNow (now *NowT) string {
-	return fmt.Sprint(SM.Map("#duniterClient:Block"), " ", now.Number, "\t", BA.Ts2s(now.Bct))
+func printNow (now *NowT, lang *SM.Lang) string {
+	return fmt.Sprint(lang.Map("#duniterClient:Block"), " ", now.Number, "\t", BA.Ts2s(now.Bct, lang))
 } //printNow
 
 // Print the permutation occurD sorted by dates
-func printByDates (fs Forecasts) CorpusA {
-	proba := SM.Map("#duniterClient:Proba")
+func printByDates (fs Forecasts, lang *SM.Lang) CorpusA {
+	proba := lang.Map("#duniterClient:Proba")
 	var (d int64 = -1; a = false; c *CorpusT)
 	cs := make(CorpusA, 0)
 	for _, f := range fs {
 		if f.Date != d || f.After != a {
 			d = f.Date; a = f.After
-			l := BA.Ts2s(d)
+			l := BA.Ts2s(d, lang)
 			if a {
 				l += "+"
 			} else {
@@ -343,8 +343,8 @@ func printByDates (fs Forecasts) CorpusA {
 } //printByDates
 
 // Print the permutation occurN sorted by names
-func printByNames (fs Forecasts) CorpusA {
-	proba := SM.Map("#duniterClient:Proba")
+func printByNames (fs Forecasts, lang *SM.Lang) CorpusA {
+	proba := lang.Map("#duniterClient:Proba")
 	var (uid = ""; c *CorpusT)
 	cs := make(CorpusA, 0)
 	for _, f := range fs {
@@ -353,7 +353,7 @@ func printByNames (fs Forecasts) CorpusA {
 			c = &CorpusT{Label: uid, Seconds: make(Details, 0)}
 			cs = append(cs, c)
 		}
-		d := BA.Ts2s(f.Date)
+		d := BA.Ts2s(f.Date, lang)
 		if f.After {
 			d += "+"
 		} else {
@@ -365,27 +365,27 @@ func printByNames (fs Forecasts) CorpusA {
 	return cs
 } //printByNames
 
-func printText (ww *WW, dateNameMeta string) *Disp {
+func printText (ww *WW, dateNameMeta string, lang *SM.Lang) *Disp {
 	r := ww.Data.WWResult
 	if r != nil {
-		now := printNow(r.Now)
-		dnb := fmt.Sprint(r.Dossiers_nb, " ", SM.Map("#duniterClient:newcomers"))
-		cnb := fmt.Sprint(r.Certifs_nb, " ", SM.Map("#duniterClient:intCertifs"))
-		cd := fmt.Sprint(SM.Map("#duniterClient:Computation_duration"), " = ", r.Computation_duration, "s")
-		pnb := fmt.Sprint(r.Permutations_nb, " ", SM.Map("#duniterClient:permutations"))
+		now := printNow(r.Now, lang)
+		dnb := fmt.Sprint(r.Dossiers_nb, " ", lang.Map("#duniterClient:newcomers"))
+		cnb := fmt.Sprint(r.Certifs_nb, " ", lang.Map("#duniterClient:intCertifs"))
+		cd := fmt.Sprint(lang.Map("#duniterClient:Computation_duration"), " = ", r.Computation_duration, "s")
+		pnb := fmt.Sprint(r.Permutations_nb, " ", lang.Map("#duniterClient:permutations"))
 		var c CorpusA
 		switch dateNameMeta {
 		case "2":
-			c = printByDates(r.ForecastsByDates)
+			c = printByDates(r.ForecastsByDates, lang)
 		case "0":
-			c = printByNames(r.ForecastsByNames)
+			c = printByNames(r.ForecastsByNames, lang)
 		default:
 			M.Halt(dateNameMeta, 100)
 		}
-		bn := SM.Map("#duniterClient:wwByName")
-		bd := SM.Map("#duniterClient:wwByDate")
-		m := SM.Map("#duniterClient:wwMeta")
-		ok := SM.Map("#duniterClient:OK")
+		bn := lang.Map("#duniterClient:wwByName")
+		bd := lang.Map("#duniterClient:wwByDate")
+		m := lang.Map("#duniterClient:wwMeta")
+		ok := lang.Map("#duniterClient:OK")
 		return &Disp{Now: now, F: &ForeC{D_nb: dnb, C_nb: cnb, C_d: cd, P_nb: pnb,Firsts: c}, Disp: dateNameMeta, WWByName: bn, WWMeta: m, WWByDate: bd, OK: ok}
 	} else {
 		return &Disp{F: &ForeC{Firsts: make(CorpusA, 0)}}
@@ -393,13 +393,13 @@ func printText (ww *WW, dateNameMeta string) *Disp {
 } //printText
 
 // Print the metadata m with the help of f
-func printMeta (cds Certifs_DossiersT) DossCertsT {
+func printMeta (cds Certifs_DossiersT, lang *SM.Lang) DossCertsT {
 	
 	PrintCertOrDoss := func (cd *Certif_DossierT) *DossCertT {
 		
 		PrintCertif := func (c *DatedCertificationT) string {
 			cc := c.Certification
-			return fmt.Sprint(cc.To.Uid, " ← ", cc.From.Uid, " ", BA.Ts2s(c.Date), " (→ ", BA.Ts2s(cc.Expires_on), ")")
+			return fmt.Sprint(cc.To.Uid, " ← ", cc.From.Uid, " ", BA.Ts2s(c.Date, lang), " (→ ", BA.Ts2s(cc.Expires_on, lang), ")")
 		} //PrintCertif
 		
 		PrintDossier := func (d *DossierT)  *DossCertT {
@@ -408,7 +408,7 @@ func printMeta (cds Certifs_DossiersT) DossCertsT {
 				
 				PrintCert := func (c *DatedCertificationT) string {
 					cc := c.Certification
-					return fmt.Sprint(cc.From.Uid, " ", BA.Ts2s(c.Date), " (→ ", BA.Ts2s(cc.Expires_on), ")")
+					return fmt.Sprint(cc.From.Uid, " ", BA.Ts2s(c.Date, lang), " (→ ", BA.Ts2s(cc.Expires_on, lang), ")")
 				} //PrintCert
 				
 				//PrintCerts
@@ -420,8 +420,8 @@ func printMeta (cds Certifs_DossiersT) DossCertsT {
 			} //PrintCerts
 			
 			//PrintDossier
-			fi := fmt.Sprint(d.Main_certifs, " ", d.Newcomer.Uid, " (", BA.Ts2s(d.Date), " ≥ ", BA.Ts2s(d.MinDate), ")")
-			sd := fmt.Sprint("(→ ", BA.Ts2s(d.Expires_on), ") (", int(d.Newcomer.Distance.Value), "%) |")
+			fi := fmt.Sprint(d.Main_certifs, " ", d.Newcomer.Uid, " (", BA.Ts2s(d.Date, lang), " ≥ ", BA.Ts2s(d.MinDate, lang), ")")
+			sd := fmt.Sprint("(→ ", BA.Ts2s(d.Expires_on, lang), ") (", int(d.Newcomer.Distance.Value), "%) |")
 			return &DossCertT{First: fi, Second: sd, Certs: PrintCerts(d.Certifications)}
 		} //PrintDossier
 		
@@ -441,15 +441,15 @@ func printMeta (cds Certifs_DossiersT) DossCertsT {
 	return dcs
 } //printMeta
 
-func printTextM (ww *WW) *Disp {
+func printTextM (ww *WW, lang *SM.Lang) *Disp {
 	f := ww.Data.WWFile
 	if f != nil {
-		now := printNow(f.Now)
-		dcs := printMeta(f.Certifs_dossiers)
-		bn := SM.Map("#duniterClient:wwByName")
-		bd := SM.Map("#duniterClient:wwByDate")
-		m := SM.Map("#duniterClient:wwMeta")
-		ok := SM.Map("#duniterClient:OK")
+		now := printNow(f.Now, lang)
+		dcs := printMeta(f.Certifs_dossiers, lang)
+		bn := lang.Map("#duniterClient:wwByName")
+		bd := lang.Map("#duniterClient:wwByDate")
+		m := lang.Map("#duniterClient:wwMeta")
+		ok := lang.Map("#duniterClient:OK")
 		return &Disp{Now: now, M: dcs, Disp: "1", WWByName: bn, WWMeta: m, WWByDate: bd, OK: ok}
 	} else {
 		return &Disp{M: make(DossCertsT, 0)}
@@ -460,7 +460,7 @@ func runSubscription (name string) {
 	GS.Send(nil, GS.ExtractDocument(name))
 }
 
-func end (name string, temp *template.Template, r *http.Request, w http.ResponseWriter) {
+func end (name string, temp *template.Template, r *http.Request, w http.ResponseWriter, lang *SM.Lang) {
 	M.Assert(name == wwName, name, 100)
 	disp := "0"
 	if r.Method == "POST" {
@@ -481,7 +481,7 @@ func end (name string, temp *template.Template, r *http.Request, w http.Response
 		}
 		ww := new(WW)
 		J.ApplyTo(j, ww)
-		temp.ExecuteTemplate(w, name, printText(ww, disp))
+		temp.ExecuteTemplate(w, name, printText(ww, disp, lang))
 	case "1":
 		for {
 			j = GS.GetSub(subMetaName); M.Assert(j != nil, 104)
@@ -494,7 +494,7 @@ func end (name string, temp *template.Template, r *http.Request, w http.Response
 		}
 		ww := new(WW)
 		J.ApplyTo(j, ww)
-		temp.ExecuteTemplate(w, name, printTextM(ww))
+		temp.ExecuteTemplate(w, name, printTextM(ww, lang))
 	default:
 		M.Halt(disp, 101)
 	}
