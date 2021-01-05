@@ -21,9 +21,9 @@ import (
 	
 	W	"duniterClient/web"
 	
-	_	"duniterClient/certificationsPrint"
+	//_	"duniterClient/certificationsPrint"
 	_	"duniterClient/eventsPrint"
-	_	"duniterClient/identitiesPrint"
+	//_	"duniterClient/identitiesPrint"
 	_	"duniterClient/identitySearch"
 	_	"duniterClient/language"
 	_	"duniterClient/membersPrint"

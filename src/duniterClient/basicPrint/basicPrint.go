@@ -30,7 +30,8 @@ import (
 
 const (
 	
-	timeFormat = "2006/01/02 15:04:05"
+	enTimeFormat = "01/02 03:04:05PM 2006"
+	frTimeFormat = "02/01/2006 15:04:05"
 	
 	OldIcon = "×" // Icon for old items (old or leaving members)
 	
@@ -78,7 +79,14 @@ func Ts2s (t int64, lang *SM.Lang) string {
 	case Already:
 		return "**/**/**** **:**:**"
 	default:
-		dt := time.Unix(M.Abs64(t), 0).Format(timeFormat)
+		var tf string
+		switch lang.Language() {
+		case "fr":
+			tf = frTimeFormat
+		default:
+			tf = enTimeFormat
+		}
+		dt := time.Unix(M.Abs64(t), 0).Format(tf)
 		if t < 0 {
 			dt = OldIcon + dt // leaving member
 		}
