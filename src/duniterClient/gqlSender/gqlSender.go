@@ -21,9 +21,9 @@ import (
 		"fmt"
 		"net/http"
 		"io/ioutil"
-		"os"
 		"strings"
 		"sync"
+		"time"
 		"net/url"
 
 )
@@ -39,6 +39,8 @@ const (
 			}
 		}
 	`
+	
+	sendSleepTime = 1 * time.Second
 
 )
 
@@ -48,15 +50,6 @@ type (
 	askChans []chan<- J.Json
 	askMap map[string] askChans
 	bufferMap map[string] J.Json
-	
-	/*
-	qElem struct {
-		next *qElem
-		c chan<- J.Json
-		ask url.Values
-		s string
-	}
-	*/
 
 )
 
@@ -64,9 +57,6 @@ var (
 	
 	subAddress = BA.SubAddress()
 	
-	/*
-	askQ *qElem = nil
-	*/
 	askM sync.Mutex
 	asks = make(askMap)
 	queries = make(bufferMap)
@@ -74,46 +64,22 @@ var (
 
 )
 
-/*
-func push (ask url.Values, s string) {
-	e := &qElem{ask: ask, s: s}
-	askM.Lock()
-	if askQ == nil {
-		e.next = e
-		askQ = e
-	} else {
-		e.next = askQ.next
-		askQ.next = e
-		askQ = e
-	}
-	askM.Unlock()
-}
-
-func pull (ask *url.Values, s *string) bool {
-	askM.Lock()
-	if askQ == nil {
-		askM.Unlock()
-		return false
-	}
-	e := askQ.next
-	if e == askQ {
-		askQ = nil
-	} else {
-		askQ.next = e.next
-	}
-	askM.Unlock()
-	*ask = e.ask
-	*s = e.s
-	return true
-}
-*/
-
 func send (request url.Values) J.Json {
+	/*
 	r, err := http.PostForm("http://" + BA.ServerAddress(), request)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error in duniterClient/gqlSender.send:", err)
 		os.Exit(errNoServer)
 	}
+	*/
+	/**/
+	r, err := http.PostForm("http://" + BA.ServerAddress(), request)
+	for err != nil {
+		M.Assert(strings.Index(err.Error(), "connection refused") >= 0, err, 100)
+		time.Sleep(sendSleepTime)
+		r, err = http.PostForm("http://" + BA.ServerAddress(), request)
+	}
+	/**/
 	M.Assert(r.StatusCode / 100 == 2, r.StatusCode, 101)
 	defer r.Body.Close()
 	b, err := ioutil.ReadAll(r.Body)
