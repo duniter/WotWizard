@@ -17,6 +17,8 @@ import (
 	A	"util/avl"
 	BA	"duniterClient/basicPrint"
 	F	"path/filepath"
+	GS	"duniterClient/gqlSender"
+	J	"util/json"
 	M	"util/misc"
 	R	"util/resources"
 	SM	"util/strMapping"
@@ -31,6 +33,12 @@ import (
 
 const (
 	
+	queryVersion = `
+		query Version {
+			version
+		}
+	`
+	
 	base = `
 		<html>
 			<head>{{template "head" .}}</head>
@@ -42,7 +50,10 @@ const (
 		{{define "head"}}<title>{{Map "Index"}}</title>{{end}}
 		{{define "body"}}
 			<h1>{{Map "Index"}}</h1>
-			{{range $name, $temp := .}}
+			<p>
+				{{Map "Server"}}{{.VersionS}}, {{Map "Client"}}{{.VersionC}}
+			</p>
+			{{range $name, $temp := .P}}
 				<p>
 					<a href="/{{$name}}">{{Map $name}}</a> 
 				</p>
@@ -73,6 +84,10 @@ var (
 	
 	packages = make(map[string] *pack)
 	packagesD = make(map[string] *pack)
+	
+	Version string
+	
+	versionDoc = GS.ExtractDocument(queryVersion)
 
 )
 
@@ -176,9 +191,18 @@ func Start () {
 	server.ListenAndServe()
 }
 
-func manageIndex (name string, temp *template.Template, r *http.Request, w http.ResponseWriter, lang *SM.Lang) {
-	err := temp.ExecuteTemplate(w, name, packagesD)
-	M.Assert(err == nil, err, 100)
+func manageIndex (name string, temp *template.Template, _ *http.Request, w http.ResponseWriter, lang *SM.Lang) {
+	
+	type
+		output struct {
+			VersionS,
+			VersionC string
+			P map[string] *pack
+		}
+	
+	j := GS.Send(nil, versionDoc); M.Assert(j != nil, 100)
+	err := temp.ExecuteTemplate(w, name, &output{VersionS: j.(*J.Object).Fields[0].Value.(*J.JsonVal).Json.(*J.Object).Fields[0].Value.(*J.String).S,VersionC: Version, P: packagesD})
+	M.Assert(err == nil, err, 101)
 }
 
 func init () {

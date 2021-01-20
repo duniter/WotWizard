@@ -37,6 +37,7 @@ certificationsFrom	Certifications From Members
 56certificationsTo	Informations: Certifications To Members
 certificationsTo	Certifications To Members
 34certLim	Limits: Certifications Limits Dates by Dates
+Client	Client Version: 
 Computation_duration	Computation Duration
 Day	Day
 day	day(s)
@@ -144,6 +145,7 @@ Sentries	Sentries
 57sentries	Informations : List of Sentries
 SentriesNb	Number of Sentries
 Sentry	Sentry
+Server	Server Version: 
 ShowFile	Dossier
 SortedByCExpDates	Sorted by Expiration Dates of Certifications
 Threshold	Threshold
@@ -181,6 +183,7 @@ certificationsFrom	Certifications depuis les membres
 56certificationsTo	Informations : Certifications vers les membres
 certificationsTo	Certifications vers les membres
 34certLim	Limites : Limites des certifications par date
+Client	Version client : 
 Computation_duration	Durée du calcul
 Day	Jour
 day	jour(s)
@@ -288,6 +291,7 @@ Sentries	Membres référents
 57sentries	Informations : Liste des membres référents
 SentriesNb	Nombre de membres référents
 Sentry	Référent
+Server	Version serveur : 
 ShowFile	Fichier
 SortedByCExpDates	Tri par dates d'expiration des certifications
 Threshold	Seuil

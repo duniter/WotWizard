@@ -27,9 +27,6 @@ import (
 	U	"util/sets2"
 		"bytes"
 		"fmt"
-		/*
-		"math"
-		*/
 		"os"
 		"os/signal"
 		"sync"
@@ -2613,7 +2610,6 @@ func removeSecureGap () {
 } //removeSecureGap
 
 //Cmds
-/**/
 func threshold (m, s int) int {
 	
 	pow := func (x, y int) int {
@@ -2636,15 +2632,9 @@ func threshold (m, s int) int {
 	}
 	return n
 } //threshold
-/**/
 
 func SentryThreshold () int {
-	/*
-	return int(math.Ceil(math.Pow(float64(IdLenM()), 1 / float64(pars.StepMax))))
-	*/
-	/**/
 	return threshold(IdLenM(), int(pars.StepMax))
-	/**/
 } //SentryThreshold
 
 // Cmds
@@ -3011,7 +3001,7 @@ func doAction (a Actioner) {
 } //doAction
 
 // Cmds
-func dispatchActions (updateReady <-chan bool, newAction <-chan Actioner) {
+func dispatchActions (updateReady <-chan bool, newAction chan Actioner) {
 	if startUpdate {
 		startUpdate = false
 		mutexCmds.Lock()
@@ -3031,12 +3021,15 @@ func dispatchActions (updateReady <-chan bool, newAction <-chan Actioner) {
 		case a := <-newAction:
 			if !firstUpdate {
 				go doAction(a)
+			} else {
+				time.Sleep(time.Second)
+				newAction <- a
 			}
 		}
 	}
 } //dispatchActions
 
-func Start (newAction <-chan Actioner) {
+func Start (newAction chan Actioner) {
 	lg.Println("Starting"); lg.Println()
 	saveBase()
 	openB()

@@ -40,6 +40,8 @@ const (
 	
 	storeSubsFile = "currentSubs.txt"
 	
+	maxWaitingActions = 10
+	
 )
 
 type (
@@ -277,7 +279,7 @@ func readOpNameVars  (req *http.Request) (varVals J.Json, t *A.Tree, opName, add
 	}
 	docS = req.FormValue("graphQL")
 	return
-}
+} //readOpNameVars
 
 func makeHandler (newAction chan<- B.Actioner) func (w http.ResponseWriter, req *http.Request) {
 	
@@ -371,7 +373,7 @@ func storeSubs () {
 			fmt.Fprintln(f, addr)
 		}
 	}
-}
+} //storeSubs
 
 func readSubs () {
 	f, err := os.Open(storeSubsPath)
@@ -415,7 +417,7 @@ func readSubs () {
 		ess := rs.stream.SourceStream
 		ess.EventStreamer.(*streamer).notification(ess, nil)
 	}
-}
+} //readSubs
 
 func coerceInt64 (ts G.TypeSystem, v G.Value, path G.Path, cV *G.Value) bool {
 	switch v := v.(type) {
@@ -511,16 +513,16 @@ func abstractTypeResolver (ts G.TypeSystem, td G.TypeDefinition, ov *G.OutputObj
 	return od
 } //abstractTypeResolver
 
-func (a *readSubsAction) Name () string {
-	return "readSubs"
-}
-
 func (a *readSubsAction) Activate () {
 	readSubs()
 }
 
+func (a *readSubsAction) Name () string {
+	return "readSubs"
+}
+
 func Start () {
-	newAction := make(chan B.Actioner)
+	newAction := make(chan B.Actioner, maxWaitingActions)
 	go loop(newAction)
 	B.Start(newAction)
 } //Start

@@ -19,9 +19,11 @@ import (
 	_	"util/graphQL/static"
 	_	"duniter/static"
 	
+	A	"util/avl"
 	B	"duniter/blockchain"
 	BA	"duniter/basic"
-	G	"duniter/gqlReceiver"
+	G	"util/graphQL"
+	GQ	"duniter/gqlReceiver"
 	S	"duniter/sandbox"
 	
 	_	"duniter/blocks"
@@ -40,7 +42,7 @@ import (
 
 const (
 	
-	version = "5.1.0"
+	version = "5.1.3"
 
 )
 
@@ -49,5 +51,14 @@ func Start () {
 	BA.Lg.Println("WotWizard version", version, "\n")
 	B.Initialize()
 	S.Initialize()
-	G.Start()
+	GQ.Start()
 }
+
+func versionR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	return G.MakeStringValue(version)
+} //nowR
+
+func init () {
+	ts := GQ.TS()
+	ts.FixFieldResolver("Query", "version", versionR)
+} //init

@@ -42,11 +42,12 @@ import (
 
 const (
 	
-	version = "5.1.0"
+	version = "5.1.3"
 
 )
 
 func Start () {
 	fmt.Println("WotWizard version", version, "\n")
+	W.Version = version
 	W.Start()
 }

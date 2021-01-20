@@ -73,6 +73,9 @@ type Query {
 	
 	"'parameter' displays the parameter of the money whose name is 'name''"
 	parameter (name: ParameterName): Parameter
+	
+	"'version' returns a string describing the version of the graphQL server"
+	version: String!
 
 } #Query
 

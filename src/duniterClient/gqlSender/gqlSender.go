@@ -65,21 +65,12 @@ var (
 )
 
 func send (request url.Values) J.Json {
-	/*
-	r, err := http.PostForm("http://" + BA.ServerAddress(), request)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error in duniterClient/gqlSender.send:", err)
-		os.Exit(errNoServer)
-	}
-	*/
-	/**/
 	r, err := http.PostForm("http://" + BA.ServerAddress(), request)
 	for err != nil {
-		M.Assert(strings.Index(err.Error(), "connection refused") >= 0, err, 100)
+		//M.Assert(strings.Index(err.Error(), "connection refused") >= 0, err, 100)
 		time.Sleep(sendSleepTime)
 		r, err = http.PostForm("http://" + BA.ServerAddress(), request)
 	}
-	/**/
 	M.Assert(r.StatusCode / 100 == 2, r.StatusCode, 101)
 	defer r.Body.Close()
 	b, err := ioutil.ReadAll(r.Body)
