@@ -1,4 +1,4 @@
-/* 
+/*
 WotWizard
 
 Copyright (C) 2017-2020 GérardMeunier
@@ -39,8 +39,6 @@ const (
 	typeSystemName = "TypeSystem.txt"
 	
 	storeSubsFile = "currentSubs.txt"
-	
-	maxWaitingActions = 10
 	
 )
 
@@ -522,7 +520,7 @@ func (a *readSubsAction) Name () string {
 }
 
 func Start () {
-	newAction := make(chan B.Actioner, maxWaitingActions)
+	newAction := make(chan B.Actioner)
 	go loop(newAction)
 	B.Start(newAction)
 } //Start

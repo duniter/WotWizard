@@ -3002,6 +3002,14 @@ func doAction (a Actioner) {
 
 // Cmds
 func dispatchActions (updateReady <-chan bool, newAction chan Actioner) {
+	
+	type
+		
+		actionerStack struct {
+			next *actionerStack
+			a Actioner
+		}
+	
 	if startUpdate {
 		startUpdate = false
 		mutexCmds.Lock()
@@ -3010,6 +3018,8 @@ func dispatchActions (updateReady <-chan bool, newAction chan Actioner) {
 		mutex.RUnlock()
 		mutexCmds.Unlock()
 	}
+	
+	var s *actionerStack = nil
 	for {
 		select {
 		case <-updateReady:
@@ -3019,11 +3029,12 @@ func dispatchActions (updateReady <-chan bool, newAction chan Actioner) {
 			mutex.RUnlock()
 			mutexCmds.Unlock()
 		case a := <-newAction:
-			if !firstUpdate {
-				go doAction(a)
-			} else {
-				time.Sleep(time.Second)
-				newAction <- a
+			s = &actionerStack{next: s, a: a}
+		}
+		if !firstUpdate {
+			for s != nil {
+				go doAction(s.a)
+				s = s.next
 			}
 		}
 	}
