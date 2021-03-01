@@ -105,10 +105,10 @@ type (
 		// Read and return a float32 from the slice b at position pos; put pos at the position following the float32.
 		BytesToFloat32 (b Bytes, pos *int) float32
 		
-		// Return a pointer to a slice of bytes coding for r.
+		// Return a pointer to a slice of bytes coding for f.
 		Float64ToBytes (f float64) Bytes
 		
-		// Return a pointer to a slice of bytes coding for r.
+		// Return a pointer to a slice of bytes coding for f.
 		Float32ToBytes (f float32) Bytes
 	
 	}
@@ -2188,7 +2188,7 @@ func (ir *IndexReader) Ind () *Index {
 	return ir.ind
 }
 
-// Search in the page of address p the key key (keyA in Bytes form); father is the address of the father of p, fatherNum is the rank of p in father, h is the height of p; at exit, if inc (tree has grown), el is the new link to insert (PageI inside index or stringI at its bottom), c is the new key (or prefix) to insert and lC is its length
+// Search in the page of address p the key key (keyA in Bytes form); father is the address of the father of p, fatherNum is the rank of p in father, h is the height of p; at exit, if inc (tree has grown), el is the new link to insert (pageI inside index or stringI at its bottom), c is the new key (or prefix) to insert and lC is its length
 func (iw *IndexWriter) searchIns (key Data, keyA keyT, p, father FilePos, fatherNum, h int) (found, inc bool, el FilePos, lC int, c keyT) {
 	ind := iw.ind
 	if h == 0 { // At the bottom of btree
