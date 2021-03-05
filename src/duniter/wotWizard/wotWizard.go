@@ -468,10 +468,12 @@ func propagate (f *File, step int) {
 					j--
 					c := cd.Certifs[j].(*Certif)
 					if *c.From == uid {
-						if newDate > M.Min64(cd.limit, c.limit) {
-							c.date = BA.Never
-						} else {
-							c.date = newDate
+						if c.date != BA.Already {
+							if newDate > M.Min64(cd.limit, c.limit) {
+								c.date = BA.Never
+							} else {
+								c.date = newDate
+							}
 						}
 						j = 0
 					}
