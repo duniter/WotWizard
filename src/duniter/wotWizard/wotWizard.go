@@ -775,6 +775,13 @@ func CalcEntries (f File) (sets, occurDate, occurName *A.Tree) {
 	return
 }
 
+func lastEntryMTime (pubkey B.Pubkey) int64 {
+	list, ok := B.JLPub(pubkey); M.Assert(ok, 100)
+	block, _, ok := B.JLPubLNext(&list); M.Assert(ok, 101)
+	mTime, _, ok := B.TimeOf(block); M.Assert(ok, 102)
+	return mTime
+}
+
 /*
 Q : Pour revenir, le membre doit refaire une demande d’adhésion et retrouver suffisamment de certifications.
 
@@ -817,10 +824,10 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 		var minDate int64 = 0
 		bb := !idInBC
 		if !bb {
-			var (member bool; app int32; exp int64)
-			_, member, _, _, app, exp, bb = B.IdPubComplete(to); M.Assert(bb, 101)
-			appTi, _, b := B.TimeOf(app); M.Assert(b, 102)
-			minDate = appTi + int64(B.Pars().MsPeriod)
+			var (member bool; exp int64)
+			_, member, _, _, _, exp, bb = B.IdPubComplete(to); M.Assert(bb, 101)
+			leTi := lastEntryMTime(to)
+			minDate = leTi + int64(B.Pars().MsPeriod)
 			bb = !member && exp >= 0 && exp2 > minDate
 		}
 		if bb { // identity in sandBox or (not member & not leaving & new membership application date later than previous one plus msPeriod)

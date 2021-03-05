@@ -35,7 +35,6 @@ type (
 func buildHistory (pubkey B.Pubkey) *event {
 	var ev *event = nil
 	var jb, lb int32
-	n := 0
 	list, ok := B.JLPub(pubkey)
 	if ok {
 		jb, lb, ok = B.JLPubLNext(&list); M.Assert(ok, 100)
@@ -44,11 +43,9 @@ func buildHistory (pubkey B.Pubkey) *event {
 		if lb != B.HasNotLeaved {
 			ev = &event{next: ev}
 			ev.block = lb
-			n++
 		}
 		ev = &event{next: ev}
 		ev.block = jb
-		n++
 		jb, lb, ok = B.JLPubLNext(&list)
 	}
 	return ev
