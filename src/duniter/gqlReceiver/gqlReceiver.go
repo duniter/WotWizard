@@ -28,6 +28,7 @@ import (
 		"fmt"
 		"net/http"
 		"io"
+		"io/ioutil"
 		"os"
 		"strings"
 		"net/url"
@@ -244,9 +245,19 @@ func (rs *responseStreamer) ManageResponseEvent (r G.Response) {
 }
 
 func readOpNameVars  (req *http.Request) (varVals J.Json, t *A.Tree, opName, addr string, docS string, err error) {
-	error := req.ParseForm(); M.Assert(error == nil, error, 100)
-	opName = req.FormValue("opName")
-	addr = req.FormValue("returnAddr")
+	buf, error := ioutil.ReadAll(req.Body); M.Assert(error == nil, error, 100)
+	j := J.ReadString(string(buf))
+	b := j != nil
+	var o *J.Object
+	if b {
+		o, b = j.(*J.Object)
+	}
+	if !b {
+		err = errors.New("Incorrect JSON request")
+		return
+	}
+	opName = J.GetString(o, "operationName")
+	addr = J.GetString(o, "returnAddr")
 	if addr != "" {
 		_, error = url.Parse(addr)
 		if error != nil {
@@ -254,28 +265,23 @@ func readOpNameVars  (req *http.Request) (varVals J.Json, t *A.Tree, opName, add
 			return
 		}
 	}
-	s := req.FormValue("varVals")
-	if s == "" {
-		s = "{}"
+	varVals = J.GetJson(o, "variableValues")
+	if varVals == nil {
+		varVals = J.ReadString("{}")
 	}
-	varVals = J.ReadString(s)
-	b := varVals != nil
-	var o *J.Object
-	if b {
-		o, b = varVals.(*J.Object)
-	}
+	obj, b := varVals.(*J.Object)
 	if !b {
-		err = errors.New("Incorrect varVals value")
+		err = errors.New("Incorrect variableValues value")
 		return
 	}
 	t = A.New()
-	for _, f := range o.Fields {
+	for _, f := range obj.Fields {
 		if !G.InsertJsonValue(t, f.Name, f.Value) {
 			err = errors.New("Duplicated variable value name " + f.Name)
 			return
 		}
 	}
-	docS = req.FormValue("graphQL")
+	docS = J.GetString(o, "graphQL")
 	return
 } //readOpNameVars
 
@@ -321,6 +327,9 @@ func makeHandler (newAction chan<- B.Actioner) func (w http.ResponseWriter, req 
 		if opName == "" {
 			if opList := es.ListOperations(); len(opList) == 1 {
 				opName = opList[0]
+			} else {
+				writeError(errors.New("Selected operation name not defined"))
+				return
 			}
 		}
 		if es.GetOperation(opName).OpType == G.SubscriptionOp {

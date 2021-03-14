@@ -197,42 +197,60 @@ func GetField (o *Object, name string) *Field {
 
 func GetString (o *Object, name string) string {
 	f := GetField(o, name)
-	M.Assert(f != nil && f.Value != nil, 100)
+	if f == nil {
+		return ""
+	}
+	M.Assert(f.Value != nil, 100)
 	s, ok := f.Value.(*String); M.Assert(ok, 101)
 	return s.S
 }
 
 func GetInt (o *Object, name string) int64 {
 	f := GetField(o, name)
-	M.Assert(f != nil && f.Value != nil, 100)
+	if f == nil {
+		return 0
+	}
+	M.Assert(f.Value != nil, 100)
 	i, ok := f.Value.(*Integer); M.Assert(ok, 101)
 	return i.N
 }
 
 func GetFloat (o *Object, name string) float64 {
 	f := GetField(o, name)
-	M.Assert(f != nil && f.Value != nil, 100)
+	if f == nil {
+		return 0.0
+	}
+	M.Assert(f.Value != nil, 100)
 	ff, ok := f.Value.(*Float); M.Assert(ok, 101)
 	return ff.F
 }
 
 func GetJson (o *Object, name string) Json {
 	f := GetField(o, name)
-	M.Assert(f != nil && f.Value != nil, 100)
+	if f == nil {
+		return nil
+	}
+	M.Assert(f.Value != nil, 100)
 	j, ok := f.Value.(*JsonVal); M.Assert(ok, 101)
 	return j.Json
 }
 
 func GetBool (o *Object, name string) bool {
 	f := GetField(o, name)
-	M.Assert(f != nil && f.Value != nil, 100)
+	if f == nil {
+		return false
+	}
+	M.Assert(f.Value != nil, 100)
 	b, ok := f.Value.(*Bool); M.Assert(ok, 101)
 	return b.Bool
 }
 
 func GetNull (o *Object, name string) {
 	f := GetField(o, name)
-	M.Assert(f != nil && f.Value != nil, 100)
+	if f == nil {
+		return
+	}
+	M.Assert(f.Value != nil, 100)
 	_, ok := f.Value.(*Null); M.Assert(ok, 101)
 }
 

@@ -24,7 +24,6 @@ import (
 		"strings"
 		"sync"
 		"time"
-		"net/url"
 
 )
 
@@ -64,12 +63,12 @@ var (
 
 )
 
-func send (request url.Values) J.Json {
-	r, err := http.PostForm("http://" + BA.ServerAddress(), request)
+func send (request string) J.Json {
+	r, err := http.Post("http://" + BA.ServerAddress(), "application/json", strings.NewReader(request))
 	for err != nil {
 		//M.Assert(strings.Index(err.Error(), "connection refused") >= 0, err, 100)
 		time.Sleep(sendSleepTime)
-		r, err = http.PostForm("http://" + BA.ServerAddress(), request)
+		r, err = http.Post("http://" + BA.ServerAddress(), "application/json", strings.NewReader(request))
 	}
 	M.Assert(r.StatusCode / 100 == 2, r.StatusCode, 101)
 	defer r.Body.Close()
@@ -95,15 +94,19 @@ func Send (j J.Json, doc *G.Document) J.Json {
 	}
 	
 	w := new(strings.Builder)
-	v := make(url.Values)
-	v.Set("returnAddr", subAddress)
+	mk := J.NewMaker()
+	mk.StartObject()
+	mk.PushString(subAddress)
+	mk.BuildField("returnAddr")
 	if j != nil {
+		mk.PushJson(j)
+		mk.BuildField("variableValues")
 		s := j.GetFlatString()
-		v.Set("varVals", s)
 		fmt.Fprint(w, s)
 	}
 	s := doc.GetFlatString()
-	v.Set("graphQL", s)
+	mk.PushString(s)
+	mk.BuildField("graphQL")
 	fmt.Fprint(w, s)
 	s = w.String()
 	if j, ok := queries[s]; ok {
@@ -113,7 +116,8 @@ func Send (j J.Json, doc *G.Document) J.Json {
 		return j
 	}
 	asks[s] = make(askChans, 0)
-	j = send(v)
+	mk.BuildObject()
+	j = send(mk.GetJson().GetFlatString())
 	M.Assert(j != nil && (len(j.(*J.Object).Fields) == 0 || j.(*J.Object).Fields[0].Name != "errors"), 100)
 	queries[s] = j
 	askM.Lock()
