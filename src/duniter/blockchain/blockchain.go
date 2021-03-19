@@ -337,8 +337,8 @@ type (
 	}
 	
 	certToFork struct { // Data of the certToT index
-		byPub, // sub-index(pubKey -> certification)
-		byExp B.FilePos // sub-index(filePosKey (certification) -> certification) sorted by reverse certification.expires_on
+		byPub, // sub-index (pubKey -> certification)
+		byExp B.FilePos // sub-index (filePosKey (certification) -> certification) sorted by reverse certification.expires_on; used to find the expiration date of the sigQtyth certification.
 	}
 	
 	certToForkFacT struct{
@@ -536,7 +536,7 @@ var (
 	startUpdate bool
 	
 	// UtilBTree indexes
-	certTimeT *B.Index // lIntKey -> nothing; addresses of certification sorted by expiration dates
+	certTimeT *B.Index // lIntKey -> nothing; addresses of certification sorted by expiration dates in reverse order; used to erase expired certifications
 	
 	undoList B.FilePos = B.BNil // Head of undoListT
 	
@@ -1565,17 +1565,25 @@ func AllCertifiersIO (to string) CertHists {
 	for pst.PosSet() {
 		from[i].Uid = pst.CurrentKey().(*B.String).C
 		var l *hList = nil
+		n := 0
 		cioR := pst.ReadValue()
 		for cioR != B.BNil {
 			cio := certInOutMan.ReadData(cioR).(*certInOut)
 			l = &hList{next: l, inBlock: cio.inBlock, outBlock: cio.outBlock}
+			n++
+			if l.outBlock != HasNotLeaved {
+				n++
+			}
 			cioR = cio.next
 		}
-		h := make(CertEvents, 0)
+		h := make(CertEvents, n)
+		n = 0
 		for l != nil {
-			h = append(h, CertEvent{l.inBlock, true})
+			h[n] = CertEvent{l.inBlock, true}
+			n++
 			if l.outBlock != HasNotLeaved {
-				h = append(h, CertEvent{l.outBlock, false})
+				h[n] = CertEvent{l.outBlock, false}
+				n++
 			}
 			l = l.next
 		}
@@ -1604,17 +1612,25 @@ func AllCertifiedIO (from string) CertHists {
 	for pst.PosSet() {
 		to[i].Uid = pst.CurrentKey().(*B.String).C
 		var l *hList = nil
+		n := 0
 		cioR := pst.ReadValue()
 		for cioR != B.BNil {
 			cio := certInOutMan.ReadData(cioR).(*certInOut)
 			l = &hList{next: l, inBlock: cio.inBlock, outBlock: cio.outBlock}
+			n++
+			if l.outBlock != HasNotLeaved {
+				n++
+			}
 			cioR = cio.next
 		}
-		h := make(CertEvents, 0)
+		h := make(CertEvents, n)
+		n = 0
 		for l != nil {
-			h = append(h, CertEvent{l.inBlock, true})
+			h[n] = CertEvent{l.inBlock, true}
+			n++
 			if l.outBlock != HasNotLeaved {
-				h = append(h, CertEvent{l.outBlock, false})
+				h[n] = CertEvent{l.outBlock, false}
+				n++
 			}
 			l = l.next
 		}
@@ -2138,8 +2154,9 @@ func certifications (withList bool, ssC string, nb int) {
 		c.expires_on, _, b = TimeOf(int32(n)); M.Assert(b, n, 101)
 		c.expires_on += int64(pars.SigValidity)
 		pC := certMan.WriteAllocateData(c)
-		idP := &pubKey{ref: c.from}
 		var v, vE B.FilePos
+		// Insert into certFromT
+		idP := &pubKey{ref: c.from}
 		if iwF.SearchIns(idP) {
 			v = iwF.ReadValue()
 		} else {
@@ -2148,13 +2165,12 @@ func certifications (withList bool, ssC string, nb int) {
 		}
 		idP.ref = c.to
 		iw := database.OpenIndex(v, pubKeyMan, pubKeyFac).Writer()
-		var oldPC B.FilePos
+		var oldPC B.FilePos = B.BNil
 		if iw.SearchIns(idP) {
 			oldPC = iw.ReadValue()
-		} else {
-			oldPC = B.BNil
 		}
 		iw.WriteValue(pC)
+		// Insert into certToT
 		idP.ref = c.to
 		if iwT.SearchIns(idP) {
 			ctf := certToForkMan.ReadData(iwT.ReadValue()).(*certToFork)
@@ -2166,13 +2182,16 @@ func certifications (withList bool, ssC string, nb int) {
 			ctf := &certToFork{byPub: v, byExp: vE}
 			iwT.WriteValue(certToForkMan.WriteAllocateData(ctf))
 		}
+		// Into byPub (pubKey -> certification)
 		idP.ref = c.from
 		iw = database.OpenIndex(v, pubKeyMan, pubKeyFac).Writer()
 		iw.SearchIns(idP)
 		iw.WriteValue(pC)
+		// Into byExp (filePosKey (certification) -> certification sorted by reverse certification.expires_on)
 		iw = database.OpenIndex(vE, certKTimeMan, filePosKeyFac).Writer()
 		b = iw.SearchIns(&filePosKey{ref: pC}); M.Assert(!b, 102)
-		iw.WriteValue(pC);
+		iw.WriteValue(pC)
+		// Erase old certification, if any, in byExp
 		if oldPC != B.BNil {
 			b = iw.Erase(&filePosKey{ref: oldPC}); M.Assert(b, 103)
 		}
@@ -2183,12 +2202,14 @@ func certifications (withList bool, ssC string, nb int) {
 			idRef := iwP.ReadValue()
 			id := idMan.ReadData(idRef).(*identity)
 			idU.C, b = IdPub(c.to); M.Assert(b, c.to, 105)
+			// Add c.to to id.certified, where id is the identity of c.from
 			if id.certified == B.BNil {
 				id.certified = database.CreateIndex(0)
 				idMan.WriteData(idRef, id)
 			}
 			iw = database.OpenIndex(id.certified, uidKeyMan, uidKeyFac).Writer()
 			iw.SearchIns(idU)
+			// Add c to id.certifiedIO, where id is the identity of c.from
 			if id.certifiedIO == B.BNil {
 				id.certifiedIO = database.CreateIndex(0)
 				idMan.WriteData(idRef, id)
@@ -2212,12 +2233,14 @@ func certifications (withList bool, ssC string, nb int) {
 			idRef = iwP.ReadValue()
 			id = idMan.ReadData(idRef).(*identity)
 			idU.C, b = IdPub(c.from); M.Assert(b, c.from, 108)
+			// Add c.from to id.certifiers, where id is the identity of c.to
 			if id.certifiers == B.BNil {
 				id.certifiers = database.CreateIndex(0)
 				idMan.WriteData(idRef, id)
 			}
 			iw = database.OpenIndex(id.certifiers, uidKeyMan, uidKeyFac).Writer()
 			iw.SearchIns(idU)
+			// Add c to id.certifiersIO, where id is the identity of c.to
 			if id.certifiersIO == B.BNil {
 				id.certifiersIO = database.CreateIndex(0)
 				idMan.WriteData(idRef, id)
@@ -2696,17 +2719,22 @@ func scanBlocksUpdt (d *Q.DB) {
 	if err == nil {
 		maxN = r
 	}
-	s := C.Itoa(int(lastBlock - secureGap + 1))
-	rs, err := d.Query("SELECT number, medianTime, time, joiners, actives, leavers, revoked, excluded, certifications FROM block WHERE NOT fork AND number >= " + s + " ORDER BY number ASC")
-	M.Assert(err == nil, err, 100)
-	defer rs.Close()
 	var secureNow int64 = M.MaxInt64
-	var medianTime int64 = -1
 	var n = 0
 	if maxN >= secureGap {
 		n = maxN - secureGap + 1
 	}
-	getSecureNow := true
+	s := C.Itoa(n)
+	row = d.QueryRow("SELECT medianTime FROM block WHERE NOT fork AND number = " + s)
+	var m time.Time
+	err = row.Scan(&m)
+	if err == nil {
+		secureNow = m.Unix()
+	}
+	s = C.Itoa(int(lastBlock - secureGap + 1))
+	rs, err := d.Query("SELECT number, medianTime, time, joiners, actives, leavers, revoked, excluded, certifications FROM block WHERE NOT fork AND number >= " + s + " ORDER BY number ASC")
+	M.Assert(err == nil, err, 100)
+	defer rs.Close()
 	for rs.Next() {
 		var (
 			number int
@@ -2721,12 +2749,8 @@ func scanBlocksUpdt (d *Q.DB) {
 		)
 		err = rs.Scan(&number, &m, &t, &j, &a, &l, &r, &e, &c)
 		M.Assert(err == nil, err, 101)
-		medianTime = m.Unix()
+		medianTime := m.Unix()
 		time := t.Unix()
-		if getSecureNow && number >= n {
-			getSecureNow = false
-			secureNow = medianTime
-		}
 		M.Assert(j.Valid, 102); joiners := j.String
 		M.Assert(a.Valid, 103); actives := a.String
 		M.Assert(l.Valid, 104); leavers := l.String
@@ -2738,14 +2762,12 @@ func scanBlocksUpdt (d *Q.DB) {
 		}
 		withList := number >= n
 		times(withList , number, medianTime, time)
+		revokeExpiredIds(medianTime, secureNow)
 		identities(withList, joiners, actives, leavers, revoked, excluded, number, d)
+		removeExpiredCerts(medianTime, secureNow) // Élimine toutes les certifications expirées avec réversibilité dans secureGap
 		certifications(withList, certificationList, number)
 	}
 	M.Assert(rs.Err() == nil, rs.Err(), 60)
-	if medianTime >= 0 {
-		revokeExpiredIds(medianTime, secureNow)
-		removeExpiredCerts(medianTime, secureNow) // Élimine toutes les certifications expirées avec réversibilité dans secureGap
-	}
 	database.WritePlace(undoListPlace, int64(undoList))
 	lastBlock = int32(maxN)
 	database.WritePlace(lastNPlace, int64(lastBlock))
