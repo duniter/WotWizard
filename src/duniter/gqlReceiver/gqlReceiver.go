@@ -227,7 +227,7 @@ func (rs *responseStreamer) ManageResponseEvent (r G.Response) {
 	mk := J.NewMaker()
 	mk.StartObject()
 	mk.PushString(rs.name)
-	mk.BuildField("opName")
+	mk.BuildField("operationName")
 	mk.PushJson(j)
 	mk.BuildField("result")
 	mk.BuildObject()

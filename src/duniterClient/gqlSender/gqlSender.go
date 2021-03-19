@@ -137,7 +137,7 @@ func subHandler (_ http.ResponseWriter, req *http.Request) {
 	b, err := ioutil.ReadAll(req.Body); M.Assert(err == nil, err, 100)
 	j := J.ReadString(string(b)); M.Assert(j != nil, 101)
 	o, ok := j.(*J.Object); M.Assert(ok, 102)
-	opName := J.GetString(o, "opName"); M.Assert(opName != "", 103)
+	opName := J.GetString(o, "operationName"); M.Assert(opName != "", 103)
 	if opName == "ResetQueryMap" {
 		asks = make(askMap)
 		queries = make(bufferMap)
