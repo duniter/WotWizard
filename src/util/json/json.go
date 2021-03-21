@@ -424,14 +424,28 @@ func (c *compilationer) Execution (fNum, parsNb int, pars C.ObjectsList) (o *C.O
 	} //MakeString
 	
 	//Execution
-	o = pars[0]
 	switch fNum {
 	case json:
+		o = pars[0]
+		if o.ErrorIn() {
+			ok = false
+			return
+		}
 		c.json = eval(o)
 	case stringC:
+		o = pars[0]
+		if o.ErrorIn() {
+			ok = false
+			return
+		}
 		r := []rune(o.ObjString())
 		res = &String{MakeString(r[1:len(r) - 1])}
 	case number:
+		o = pars[0]
+		if o.ErrorIn() {
+			ok = false
+			return
+		}
 		s := o.ObjString()
 		i, err := SC.ParseInt(s, 0, 64)
 		if err == nil {

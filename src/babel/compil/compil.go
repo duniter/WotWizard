@@ -1470,12 +1470,12 @@ func (o *Object) ObjNum () int {
 
 func (o *Object) ObjFunc () int {
 	switch oo := o.o.(type) {
-		case *objetCOUtilObj:
-			return oo.foncU
-		case *objetCOTermeObj:
-			return oo.foncT
-		default:
-			panic(8)
+	case *objetCOUtilObj:
+		return oo.foncU
+	case *objetCOTermeObj:
+		return oo.foncT
+	default:
+		panic(8)
 	}
 }
 
