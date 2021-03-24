@@ -1076,12 +1076,13 @@ func (base *Database) createPage (pageSize int, pos FilePos) *pageT {
 							qq.pageP.Write(&w)
 							aP := w.write()
 							base.writeBase(po, aP)
-						} else { // Write a series of zeroes
-							var a = Bytes{0} 
-							base.ref.PosWriter(po);
-							for i := 0; i < qq.sizeP; i++ {
-								base.ref.Write(a)
-							}
+						// Useless on Linux (Ext4)
+						//} else { // Write a series of zeroes
+						//	var a = Bytes{0} 
+						//	base.ref.PosWriter(po);
+						//	for i := 0; i < qq.sizeP; i++ {
+						//		base.ref.Write(a)
+						//	}
 						}
 					}
 					q = base.pages.Next(q)
@@ -1217,12 +1218,13 @@ func (base *Database) updatePagesA () {
 				p.pageP.Write(&w)
 				aP := w.write()
 				base.writeBase(n, aP)
-			} else if p.posP >= base.writtenLim {
-				a := Bytes{0}
-				base.ref.PosWriter(n)
-				for i := 0; i < p.sizeP; i++ {
-					base.ref.Write(a)
-				}
+			// Useless on Linux (Ext4)
+			//} else if p.posP >= base.writtenLim {
+			//	a := Bytes{0}
+			//	base.ref.PosWriter(n)
+			//	for i := 0; i < p.sizeP; i++ {
+			//		base.ref.Write(a)
+			//	}
 			}
 		}
 	base.pages.WalkThrough(do)

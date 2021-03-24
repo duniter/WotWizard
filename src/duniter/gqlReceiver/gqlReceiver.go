@@ -282,6 +282,9 @@ func readOpNameVars  (req *http.Request) (varVals J.Json, t *A.Tree, opName, add
 		}
 	}
 	docS = J.GetString(o, "graphQL")
+	if docS == "" {
+		err = errors.New("No graphQL string")
+	}
 	return
 } //readOpNameVars
 
@@ -390,7 +393,9 @@ func readSubs () {
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
-	ok := sc.Scan(); M.Assert(ok, 100)
+	if !sc.Scan() {
+		return
+	}
 	n, err := SC.Atoi(sc.Text()); M.Assert(err == nil, err, 101)
 	for ; n > 0; n-- {
 		ok := sc.Scan(); M.Assert(ok, 102)

@@ -472,7 +472,7 @@ func Compile (rs io.ReadSeeker) Json {
 	r := []rune(string(b))
 	co := &compilationer{r: r, size: len(r), pos: 0, json: nil}
 	c := C.NewCompilation(co)
-	if c.Compile(comp, false) {
+	if c.Compile(comp, true) {
 		return co.json
 	}
 	return nil
