@@ -545,7 +545,7 @@ func identityAllRecCertsR (rootValue *G.OutputObjectValue, argumentValues *A.Tre
 				l.Append(GQ.Wrap(h)) // Status == newcomer means certification is future
 			}
 		}
-			return l
+		return l
 	case *G.NullValue:
 		return hash
 	default:
@@ -587,7 +587,7 @@ func identityAllRecCertsIOR (rootValue *G.OutputObjectValue, argumentValues *A.T
 				l.Append(GQ.Wrap(h, ch.Hist)) // Status == newcomer means certification is future
 			}
 		}
-			return l
+		return l
 	case *G.NullValue:
 		return hash
 	default:

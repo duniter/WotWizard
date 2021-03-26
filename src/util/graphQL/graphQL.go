@@ -961,6 +961,10 @@ func (n1 *NameMapItem) Compare (n2 A.Comparer) A.Comp {
 	return A.Eq
 } //Compare
 
+func (n *NameMapItem) Copy () A.Copier {
+	return n
+} //Copy
+
 func (err1 *ErrorElem) Compare (err2 A.Comparer) A.Comp {
 	er2 := err2.(*ErrorElem)
 	if err1.Location != nil && er2.Location == nil {
@@ -3594,14 +3598,15 @@ func (es *execSystem) detectCycles (fragmentDefinition *FragmentDefinition, visi
 	Descendants(fragmentDefinition, spreads)
 	e := spreads.Next(nil)
 	for e != nil {
+		v := visited.Copy()
 		el := e.Val().(*NameMapItem)
-		if addName(visited, el.Name) {
+		if addName(v, el.Name) {
 			pathB := newPathBuilder()
 			pathB = pathB.pushPathString(fragmentDefinition.Name)
 			es.Error("CycleThrough", el.Name.S, "", el.Name.P, pathB.getPath())
 			return true
 		}
-		if es.detectCycles(es.getFragmentDefinition(el.Name), visited) {
+		if es.detectCycles(es.getFragmentDefinition(el.Name), v) {
 			return true
 		}
 		e = spreads.Next(e)
