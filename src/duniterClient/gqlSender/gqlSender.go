@@ -100,13 +100,13 @@ func Send (j J.Json, doc *G.Document) J.Json {
 	mk.BuildField("returnAddr")
 	if j != nil {
 		mk.PushJson(j)
-		mk.BuildField("variableValues")
+		mk.BuildField("variables")
 		s := j.GetFlatString()
 		fmt.Fprint(w, s)
 	}
 	s := doc.GetFlatString()
 	mk.PushString(s)
-	mk.BuildField("graphQL")
+	mk.BuildField("query")
 	fmt.Fprint(w, s)
 	s = w.String()
 	if j, ok := queries[s]; ok {

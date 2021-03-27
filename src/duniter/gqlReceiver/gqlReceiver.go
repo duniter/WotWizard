@@ -265,25 +265,25 @@ func readOpNameVars  (req *http.Request) (varVals J.Json, t *A.Tree, opName, add
 			return
 		}
 	}
-	varVals = J.GetJson(o, "variableValues")
+	varVals = J.GetJson(o, "variables")
 	if varVals == nil {
 		varVals = J.ReadString("{}")
 	}
 	obj, b := varVals.(*J.Object)
 	if !b {
-		err = errors.New("Incorrect variableValues value")
+		err = errors.New("Incorrect variables value")
 		return
 	}
 	t = A.New()
 	for _, f := range obj.Fields {
 		if !G.InsertJsonValue(t, f.Name, f.Value) {
-			err = errors.New("Duplicated variable value name " + f.Name)
+			err = errors.New("Duplicated variable name " + f.Name)
 			return
 		}
 	}
-	docS = J.GetString(o, "graphQL")
+	docS = J.GetString(o, "query")
 	if docS == "" {
-		err = errors.New("No graphQL string")
+		err = errors.New("No query string")
 	}
 	return
 } //readOpNameVars
