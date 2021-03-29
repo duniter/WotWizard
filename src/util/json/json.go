@@ -195,63 +195,91 @@ func GetField (o *Object, name string) *Field {
 	return nil
 }
 
-func GetString (o *Object, name string) string {
+func GetString (o *Object, name string) (string, bool) {
 	f := GetField(o, name)
 	if f == nil {
-		return ""
+		return "", false
 	}
-	M.Assert(f.Value != nil, 100)
-	s, ok := f.Value.(*String); M.Assert(ok, 101)
-	return s.S
+	if f.Value == nil {
+		return "", false
+	}
+	s, ok := f.Value.(*String)
+	if !ok {
+		return "", false
+	}
+	return s.S, true
 }
 
-func GetInt (o *Object, name string) int64 {
+func GetInt (o *Object, name string) (int64, bool) {
 	f := GetField(o, name)
 	if f == nil {
-		return 0
+		return 0, false
 	}
-	M.Assert(f.Value != nil, 100)
-	i, ok := f.Value.(*Integer); M.Assert(ok, 101)
-	return i.N
+	if f.Value == nil {
+		return 0, false
+	}
+	i, ok := f.Value.(*Integer)
+	if !ok {
+		return 0, false
+	}
+	return i.N, true
 }
 
-func GetFloat (o *Object, name string) float64 {
+func GetFloat (o *Object, name string) (float64, bool) {
 	f := GetField(o, name)
 	if f == nil {
-		return 0.0
+		return 0.0, false
 	}
-	M.Assert(f.Value != nil, 100)
-	ff, ok := f.Value.(*Float); M.Assert(ok, 101)
-	return ff.F
+	if f.Value == nil {
+		return 0.0, false
+	}
+	ff, ok := f.Value.(*Float)
+	if !ok {
+		return 0, false
+	}
+	return ff.F, true
 }
 
-func GetJson (o *Object, name string) Json {
+func GetJson (o *Object, name string) (Json, bool) {
 	f := GetField(o, name)
 	if f == nil {
-		return nil
+		return nil, false
 	}
-	M.Assert(f.Value != nil, 100)
-	j, ok := f.Value.(*JsonVal); M.Assert(ok, 101)
-	return j.Json
+	if f.Value == nil {
+		return nil, false
+	}
+	j, ok := f.Value.(*JsonVal)
+	if !ok {
+		return nil, false
+	}
+	return j.Json, true
 }
 
-func GetBool (o *Object, name string) bool {
+func GetBool (o *Object, name string) (bool, bool) {
+	f := GetField(o, name)
+	if f == nil {
+		return false, false
+	}
+	if f.Value == nil {
+		return false, false
+	}
+	b, ok := f.Value.(*Bool)
+	if !ok {
+		return false, false
+	}
+	return b.Bool, true
+}
+
+func GetNull (o *Object, name string) bool {
 	f := GetField(o, name)
 	if f == nil {
 		return false
 	}
-	M.Assert(f.Value != nil, 100)
-	b, ok := f.Value.(*Bool); M.Assert(ok, 101)
-	return b.Bool
-}
-
-func GetNull (o *Object, name string) {
-	f := GetField(o, name)
-	if f == nil {
-		return
+	if f.Value == nil {
+		return false
 	}
-	M.Assert(f.Value != nil, 100)
-	_, ok := f.Value.(*Null); M.Assert(ok, 101)
+	_, ok := f.Value.(*Null)
+	return ok
 }
 
 //*********** Json -> Go ***********

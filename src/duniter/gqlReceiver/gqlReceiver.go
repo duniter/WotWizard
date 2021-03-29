@@ -256,8 +256,8 @@ func readOpNameVars  (req *http.Request) (varVals J.Json, t *A.Tree, opName, add
 		err = errors.New("Incorrect JSON request")
 		return
 	}
-	opName = J.GetString(o, "operationName")
-	addr = J.GetString(o, "returnAddr")
+	opName, _ = J.GetString(o, "operationName")
+	addr, _ = J.GetString(o, "returnAddr")
 	if addr != "" {
 		_, error = url.Parse(addr)
 		if error != nil {
@@ -265,8 +265,8 @@ func readOpNameVars  (req *http.Request) (varVals J.Json, t *A.Tree, opName, add
 			return
 		}
 	}
-	varVals = J.GetJson(o, "variables")
-	if varVals == nil {
+	varVals, b = J.GetJson(o, "variables")
+	if !b {
 		varVals = J.ReadString("{}")
 	}
 	obj, b := varVals.(*J.Object)
@@ -281,7 +281,7 @@ func readOpNameVars  (req *http.Request) (varVals J.Json, t *A.Tree, opName, add
 			return
 		}
 	}
-	docS = J.GetString(o, "query")
+	docS, _ = J.GetString(o, "query")
 	if docS == "" {
 		err = errors.New("No query string")
 	}

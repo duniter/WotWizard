@@ -10,6 +10,7 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
 
+// Random numbers generator
 package alea
 
 import (
@@ -134,22 +135,27 @@ func New () *Generator {
 	return g
 }
 
+// Same as Generator.Random () with the default generator.
 func Random () float64 {
 	return gen.Random();
 }
 
+// Same as Generator.IntRand () with the default generator.
 func IntRand (min, max int64) int64 {
 	return gen.IntRand (min, max)
 }
 
+// Same as Generator.UintRand () with the default generator.
 func UintRand (min, max uint64) uint64 {
 	return gen.UintRand (min, max)
 }
 
+// Same as Generator.GaussRand () with the default generator.
 func GaussRand () float64 {
 		return gen.GaussRand();
 }
 
+// Same as Generator.Randomize () with the default generator.
 func Randomize (seed int64) {
 		gen.Randomize(seed);
 }

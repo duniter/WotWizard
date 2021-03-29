@@ -14,14 +14,13 @@ type comp int
 
 func (i comp) Compare (j Comparer) Comp {
 	switch {
-		case i < j.(comp): {
-			return Lt
-		}
-		case i > j.(comp): {
-			return Gt
-		}
+	case i < j.(comp):
+		return Lt
+	case i > j.(comp):
+		return Gt
+	default:
+		return Eq
 	}
-	return Eq
 }
 
 func (i comp) Copy () Copier {

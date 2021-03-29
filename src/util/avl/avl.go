@@ -10,32 +10,49 @@ This program is distributed in the hope that it will be useful, but WITHOUT ANY 
 You should have received a copy of the GNU General Public License along with this program; if not, write to the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
 
-//This module implements balanced and threaded trees.
-
+//This package implements balanced and threaded trees (D. E. Knuth, The Art of Computer Programming, vol. 3, Sorting and Searching).
+// Trees may be sorted or not; they are guaranteed to be sorted if insertion of values are made through the method 'SearchIns' (with a correct total 'Comparer'); if methods 'Insert', 'Prepend', 'Append' or 'Cat' are used, sorting may not be maintained.
+// With sorted trees, methods 'SearchIns', 'Search', 'SearchNext' and 'Delete' can be used, but not with unsorted trees; all other methods may be used with all trees.
 package avl
 
-type
+type (
+	
+	// Result of a comparison.
 	Comp int8
+	
+	// Type of function used by 'WalkThrough'; 'v' is the value of an element of tree, 'p' are parameters.
+	DoFunc func (v interface{}, p ...interface{})
+
+)
 
 //Results of comparison.
 const (
+	
 	Lt = Comp(-1) //less than
 	Eq = Comp(0) //equal
 	Gt = Comp(+1) //greater than
+
 )
 
-const maxint int = 0x7fffffff
+const
+	maxint int = 0x7fffffff
 
 type (
+	
+	// Values in elements of trees must verify the interface 'Comparer' if these trees implement the methods 'SearchIns', 'Search', 'SearchNext' or 'Delete'; in this case, if the methods 'Insert', 'Prepend', 'Append' and 'Cat' are not used, trees remain sorted.
 	Comparer interface {
+		// Compare two values; the comparison must be reflexive, transitive, antisymmetric and total.
 		Compare(Comparer) Comp
 	}
-
+	
+	// Values in elements of trees must verify the interface 'Copier' if these trees should be copied.
 	Copier interface {
+		// Copy a value.
 		Copy() Copier
 	}
-
-	Elem struct { //Element of a tree.
+	
+	// Element of a tree.
+	Elem struct {
 		left, right *Elem
 		lTag, rTag  bool
 		bal  Comp
@@ -43,53 +60,54 @@ type (
 		cop *Elem
 		val interface{}
 	}
-
+	
+	// A tree.
 	Tree struct {
 		root *Elem
 	}
+
 )
 
-// Is t empty?
+// Is 't' empty?
 func (t *Tree) IsEmpty () bool {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {panic("Invalid Tree")}
 	return !t.root.lTag
-}
+} //IsEmpty
 
+// 'Empty' empties 't'
 func (t *Tree) Empty () {
 	if t == nil {panic("Nil Tree")}
 	e := Elem{lTag: false, rTag: true}
 	e.left = &e
 	e.right = &e
 	t.root = &e
-}
+} //Empty
 
+// New creates a new tree.
 func New () *Tree {
 	t := &Tree{}
 	t.Empty()
 	return t
-}
-
-func (t *Tree) Valid () bool {
-	if t == nil {panic("Nil Tree")}
-	return t.root != nil
-}
+} //New
 
 func newElem (data interface{}) *Elem {
 	return &Elem{val: data}
-}
+} //newElem
 
+// 'Val' returns the value contained in the element 'e'.
 func (e *Elem) Val () interface{} {
 	if e == nil {panic("Invalid Elem")}
 	return e.val
-}
+} //Val
 
+// 'SetVal' sets the value 'v' into the element 'e'.
 func (e *Elem) SetVal (v interface{}) {
 	if e == nil {panic("Invalid Elem")}
 	e.val = v
-}
+} //SetVal
 
-func copie1 (e *Elem, t bool) {
+func copy1 (e *Elem, t bool) {
 	if t {
 		f := new(Elem)
 		f.lTag = e.lTag
@@ -98,30 +116,31 @@ func copie1 (e *Elem, t bool) {
 		f.rank = e.rank
 		f.val = e.val.(Copier).Copy()
 		e.cop = f
-		copie1(e.left, e.lTag)
-		copie1(e.right, e.rTag)
+		copy1(e.left, e.lTag)
+		copy1(e.right, e.rTag)
 	}
-}
+} //copy1
 
-func copie2 (e *Elem, t bool) *Elem {
+func copy2 (e *Elem, t bool) *Elem {
 	f := e.cop
 	if t {
-		f.left = copie2(e.left, e.lTag)
-		f.right = copie2(e.right, e.rTag)
+		f.left = copy2(e.left, e.lTag)
+		f.right = copy2(e.right, e.rTag)
 	}
 	return f
-}
+} //copy2
 
+// 'Copy' returns a copy of 't'; values owned by elements of 't' must verify the interface 'Copier'
 func (t *Tree) Copy () *Tree {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {panic("Invalid Tree")}
 	u := New()
 	t.root.cop = u.root
-	copie1(t.root.left, t.root.lTag)
-	u.root.left = copie2(t.root.left, t.root.lTag)
+	copy1(t.root.left, t.root.lTag)
+	u.root.left = copy2(t.root.left, t.root.lTag)
 	u.root.lTag = t.root.lTag
 	return u
-}
+} //Copy
 
 func balLI (pp **Elem, h *bool) {
 	switch (*pp).bal {
@@ -183,7 +202,7 @@ func balLI (pp **Elem, h *bool) {
 			*h = false
 		}
 	}
-}
+} //balLI
 
 func balRI (pp **Elem, h *bool) {
 	switch (*pp).bal {
@@ -245,7 +264,7 @@ func balRI (pp **Elem, h *bool) {
 			*h = false
 		}
 	}
-}
+} //balRI
 
 func balLE (pp **Elem, h *bool) {
 	switch (*pp).bal {
@@ -312,7 +331,7 @@ func balLE (pp **Elem, h *bool) {
 			}
 		}
 	}
-}
+} //balLE
 
 func balRE (pp **Elem, h *bool) {
 	switch (*pp).bal {
@@ -379,7 +398,7 @@ func balRE (pp **Elem, h *bool) {
 			}
 		}
 	}
-}
+} //balRE
 
 func delL (first bool, pr **Elem, t *bool) (s *Elem, h bool) {
 	if !(*pr).rTag {
@@ -396,7 +415,7 @@ func delL (first bool, pr **Elem, t *bool) (s *Elem, h bool) {
 		}
 	}
 	return
-}
+} //delL
 
 func sIns (q *Elem, l bool, pkey, pp **Elem, rank *int, t, h, found *bool) {
 	key := *pkey
@@ -443,8 +462,10 @@ func sIns (q *Elem, l bool, pkey, pp **Elem, rank *int, t, h, found *bool) {
 			}
 		}
 	}
-}
+} //sIns
 
+// 'SearchIns' searches the value 'key' in the sorted tree 't'; if 'key' is found, 'found' is true, the element containing this value is returned in 'res' and its rank in the tree in 'rank'; if 'key' is not found, it is inserted into a new element returned in 'res', 'found' is false and 'rank' returns the rank of the new element.
+// The rank of the first element in a tree is 1.
 func (t *Tree) SearchIns (key Comparer) (res *Elem, found bool, rank int) {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
@@ -459,8 +480,10 @@ func (t *Tree) SearchIns (key Comparer) (res *Elem, found bool, rank int) {
 	sIns(t.root, true, kp, &t.root.left, &rank, &t.root.lTag, &h, &found)
 	res = *kp
 	return
-}
+} //SearchIns
 
+// 'Search' searches the value 'key' in the sorted tree 't'; if 'key' is found, 'found' is true, the element containing this value is returned in 'res' and its rank in the tree in 'rank'; if 'key' is not found, 'res' is nil, 'found' is false and 'rank' is 0.
+// The rank of the first element in a tree is 1.
 func (t *Tree) Search  (key Comparer) (res *Elem, found bool, rank int) {
 	if t == nil {
 		panic("Nil Tree")
@@ -501,8 +524,10 @@ func (t *Tree) Search  (key Comparer) (res *Elem, found bool, rank int) {
 		}
 	}
 	return
-}
+} //Search
 
+// SearchNext searches the value 'key' in the sorted tree 't', or the next value if not found; if 'key' is found, 'found' is true, the element containing this value is returned in 'res' and its rank in the tree in 'rank'; if 'key' is not found, 'found' is false, 'res' returns the element containing the next value and its rank is returned in 'rank'; if 'key' is not found and there is no next value, 'res' is nil and 'rank' is 0.
+// The rank of the first element in a tree is 1.
 func (t *Tree) SearchNext (key Comparer) (res *Elem, found bool, rank int) {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
@@ -551,21 +576,21 @@ func (t *Tree) SearchNext (key Comparer) (res *Elem, found bool, rank int) {
 			}
 		}
 	}
-}
+} //SearchNext
 
 func fixLThread (p, q *Elem) {
 	for p.lTag {
 		p = p.left
 	}
 	p.left = q
-}
+} //fixLThread
 
 func fixRThread (p, q *Elem) {
 	for p.rTag {
 		p = p.right
 	}
 	p.right = q
-}
+} //fixRThread
 
 func delD (key Comparer, l bool, pp **Elem, t *bool) (h, found bool) {
 	if !*t {
@@ -625,8 +650,9 @@ func delD (key Comparer, l bool, pp **Elem, t *bool) (h, found bool) {
 		}
 	}
 	return
-}
+} //delD
 
+// 'Delete' erases the value 'key', if it exists, in the sorted tree 't'; returns true if 'key' is found, else does nothing.
 func (t *Tree) Delete (key Comparer) bool {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
@@ -637,7 +663,7 @@ func (t *Tree) Delete (key Comparer) bool {
 	}
 	_, found := delD(key, true, &t.root.left, &t.root.lTag)
 	return found
-}
+} //Delete
 
 func nOE (p *Elem, tag bool) int {
 	n := 0
@@ -647,15 +673,16 @@ func nOE (p *Elem, tag bool) int {
 		p = p.right
 	}
 	return n
-}
+} //nOE
 
+// 'NumberOfElems' returns the number of elements in the tree 't'.
 func (t *Tree) NumberOfElems () int {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
 	return nOE(t.root.left, t.root.lTag)
-}
+} //NumberOfElems
 
 func ins (pos int, key, q *Elem, l bool, pp **Elem, t *bool) (h bool) {
 	if !*t {
@@ -687,8 +714,10 @@ func ins (pos int, key, q *Elem, l bool, pp **Elem, t *bool) (h bool) {
 		}
 	}
 	return
-}
+} //ins
 
+// 'Insert' inserts the value 'key' at the position Min(Max(rank, 1), t.NumberOfElems() + 1) in the tree 't'.
+// The rank of the first element in a tree is 1.
 func (t *Tree) Insert (key interface{}, rank int) {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
@@ -698,17 +727,19 @@ func (t *Tree) Insert (key interface{}, rank int) {
 		panic("Nil Key")
 	}
 	ins(rank, newElem(key), t.root, true, &t.root.left, &t.root.lTag)
-}
+} //Insert
 
+// 'Prepend' inserts the value 'key' at the first place into the tree 't'.
 func (t *Tree) Prepend (key interface{}) {
 	if t == nil {panic("Nil Tree")}
 	t.Insert(key, 0)
-}
+} //Prepend
 
+// 'Append' inserts the value 'key' at the last place into the tree 't'.
 func (t *Tree) Append (key interface{}) {
 	if t == nil {panic("Nil Tree")}
 	t.Insert(key, maxint)
-}
+} //Append
 
 func delE (l bool, pp **Elem, t *bool, rank *int) (h bool) {
 	if !*t {
@@ -758,16 +789,18 @@ func delE (l bool, pp **Elem, t *bool, rank *int) (h bool) {
 		}
 	}
 	return
-}
+} //delE
 
+// 'Erase' erases the element at position 'rank' in the tree 't'; 'rank' must verify 1 <= rank <= t.NumberOfElems().
 func (t *Tree) Erase (rank int) {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
 	delE(true, &t.root.left, &t.root.lTag, &rank)
-}
+} //Erase
 
+// 'Find' finds and returns in 'res' the element at position 'rank' in the tree 't'; if the element does not exist, 'found' is false and 'res' returns nil.
 func (t *Tree) Find (rank int) (res *Elem, found bool) {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
@@ -795,11 +828,11 @@ func (t *Tree) Find (rank int) (res *Elem, found bool) {
 		}
 	}
 	return
-}
+} //Find
 
 func fixLRoot (root *Elem) {
 	fixLThread(root, root)
-}
+} //fixLRoot
 
 func fixRRoot (root *Elem) {
 	if root.lTag {
@@ -807,7 +840,7 @@ func fixRRoot (root *Elem) {
 	} else {
 		root.left = root
 	}
-}
+} //fixRRoot
 
 func height (e *Elem, t bool) int {
 	h := 0
@@ -825,7 +858,7 @@ func height (e *Elem, t bool) int {
 		}
 	}
 	return h
-}
+} //height
 
 func bindLeft (q1, p1 *Elem, t1 bool, h1 int, j *Elem, p2 **Elem, t2 *bool, h2 int, q2 *Elem) (h bool) {
 	if !((t1 == (h1 > 0)) && (*t2 == (h2 > 0))) {
@@ -870,7 +903,7 @@ func bindLeft (q1, p1 *Elem, t1 bool, h1 int, j *Elem, p2 **Elem, t2 *bool, h2 i
 		*t2 = true
 	}
 	return
-}
+} //bindLeft
 
 func bindRight (q1 *Elem, p1 **Elem, t1 *bool, h1 int, j *Elem, p2 *Elem, t2 bool, h2 int, q2 *Elem) (h bool) {
 	if !((*t1 == (h1 > 0)) && (t2 == (h2 > 0))) {
@@ -914,7 +947,7 @@ func bindRight (q1 *Elem, p1 **Elem, t1 *bool, h1 int, j *Elem, p2 *Elem, t2 boo
 		*t1 = true
 	}
 	return
-}
+} //bindRight
 
 func eraseLeft (p **Elem, t *bool) (j *Elem, h bool) {
 	if (*p).lTag {
@@ -935,7 +968,7 @@ func eraseLeft (p **Elem, t *bool) (j *Elem, h bool) {
 		h = true
 	}
 	return
-}
+} //eraseLeft
 
 func eraseRight (p **Elem, t *bool) (j *Elem, h bool) {
 	if (*p).rTag {
@@ -955,8 +988,9 @@ func eraseRight (p **Elem, t *bool) (j *Elem, h bool) {
 		h = true
 	}
 	return
-}
+} //eraseRight
 
+// 'Cat' concatenates the trees 't1' and 't2'; it returns the result in 't1', and 't2' is no more valid.
 func (t1 *Tree) Cat (t2 *Tree) {
 	if t1 == nil {panic("Nil Tree")}
 	if t1.root == nil {
@@ -994,7 +1028,7 @@ func (t1 *Tree) Cat (t2 *Tree) {
 		}
 	}
 	t2.root = nil
-}
+} //Cat
 
 func doSplit (t1 *Tree, after int, p *Elem, t bool, t2 *Tree) (e1, e2 *Elem, tag1, tag2 bool, h1, h2, hh int) {
 	if after < p.rank {
@@ -1069,8 +1103,9 @@ func doSplit (t1 *Tree, after int, p *Elem, t bool, t2 *Tree) (e1, e2 *Elem, tag
 		}
 	}
 	return
-}
+} //doSplit
 
+// Splits the tree 't1' after the element of rank 'after'; the result is returned in 't1' and 't2'.
 func (t1 *Tree) Split (after int) (t2 *Tree) {
 	if t1 == nil {panic("Nil Tree")}
 	if t1.root == nil {panic("Invalid Tree")}
@@ -1088,9 +1123,7 @@ func (t1 *Tree) Split (after int) (t2 *Tree) {
 		}
 	}
 	return
-}
-
-type DoFunc func (v interface{}, p ...interface{})
+} //Split
 
 func ahead (e *Elem, t bool, do DoFunc, p ...interface{}) {
 	if t {
@@ -1098,16 +1131,18 @@ func ahead (e *Elem, t bool, do DoFunc, p ...interface{}) {
 		do(e.val, p...)
 		ahead(e.right, e.rTag, do, p...)
 	}
-}
+} //ahead
 
+// 'WalkThrough' traverses the tree 't' in inorder and calls the function 'do', with 'p' as parameters, on the value of each element.
 func (t *Tree) WalkThrough (do DoFunc, p ...interface{}) {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
 		panic("Invalid Tree")
 	}
 	ahead(t.root.left, t.root.lTag, do, p...)
-}
+} //WalkThrough
 
+// 'Next' returns the element following 'e' in the tree 't'; if 'e' is nil, the first element is returned; if 'e' is the last element of the tree, nil is returned.
 func (t *Tree) Next (e *Elem) *Elem {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
@@ -1127,8 +1162,9 @@ func (t *Tree) Next (e *Elem) *Elem {
 		return nil
 	}
 	return e
-}
+} //Next
 
+// 'Previous' returns the element preceding 'e' in the tree 't'; if 'e' is nil, the last element is returned; if 'e' is the first element of the tree, nil is returned.
 func (t *Tree) Previous (e *Elem) *Elem {
 	if t == nil {panic("Nil Tree")}
 	if t.root == nil {
@@ -1148,4 +1184,4 @@ func (t *Tree) Previous (e *Elem) *Elem {
 		return nil
 	}
 	return e
-}
+} //Previous
