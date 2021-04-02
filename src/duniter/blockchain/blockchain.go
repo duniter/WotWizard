@@ -43,7 +43,6 @@ const (
 	syncName = "updating.txt";
 	syncDelay = 15 * time.Second // Waiting time of Duniter after its creation of syncName
 	verifyPeriod = 2 * time.Second // Minimum delay between two verifications of the presence of syncName
-	checkPeriod = 2 * time.Second // Delay between two verifications of the end of update
 	secureDelay = 2 * time.Second // Security delay before the end of syncDelay
 	addDelay = 5 * time.Second // Increment of syncDelay when approching the end and update is not finished
 	
@@ -2882,21 +2881,20 @@ func updateAllUpdt (stopProg <-chan os.Signal, updateReady chan<- bool) {
 		M.Assert(err == nil, err, 101)
 		f.Close()
 		lg.Println("\"" + syncName + "\" seen; reading it")
-		t1 := time.Now().Add(syncDelay).Add(-verifyPeriod).Add(-secureDelay)
-		t0 := readSyncTime()
 		var done = make(chan bool)
+		t0 := readSyncTime()
+		ct1 := time.NewTimer(syncDelay - verifyPeriod - secureDelay)
 		go doUpdates(done, updateReady)
 		innerLoop:
 		for {
 			select {
 			case <- done:
+				ct1.Stop()
 				break innerLoop
-			default:
-				if time.Now().After(t1) {
-					t0 += addDelayInt
-					writeSyncTime(t0)
-				}
-				time.Sleep(checkPeriod)
+			case <- ct1.C:
+				ct1.Reset(addDelay)
+				t0 += addDelayInt
+				writeSyncTime(t0)
 			}
 		}
 	}
