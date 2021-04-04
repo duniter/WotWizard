@@ -246,14 +246,19 @@ func (rs *responseStreamer) ManageResponseEvent (r G.Response) {
 
 func readOpNameVars  (req *http.Request) (varVals J.Json, t *A.Tree, opName, addr string, docS string, err error) {
 	buf, error := ioutil.ReadAll(req.Body); M.Assert(error == nil, error, 100)
-	j := J.ReadString(string(buf))
+	sB := string(buf)
+	j := J.ReadString(sB)
 	b := j != nil
 	var o *J.Object
 	if b {
 		o, b = j.(*J.Object)
 	}
 	if !b {
-		err = errors.New("Incorrect JSON request")
+		s := "Incorrect JSON request"
+		if sB != "" {
+			s += ": " + sB
+		}
+		err = errors.New(s)
 		return
 	}
 	opName, _ = J.GetString(o, "operationName")

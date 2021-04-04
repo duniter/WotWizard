@@ -2883,18 +2883,23 @@ func updateAllUpdt (stopProg <-chan os.Signal, updateReady chan<- bool) {
 		lg.Println("\"" + syncName + "\" seen; reading it")
 		var done = make(chan bool)
 		t0 := readSyncTime()
-		ct1 := time.NewTimer(syncDelay - verifyPeriod - secureDelay)
+		ct1 := time.NewTicker(syncDelay - verifyPeriod - addDelay - secureDelay)
 		go doUpdates(done, updateReady)
-		innerLoop:
-		for {
-			select {
-			case <- done:
-				ct1.Stop()
-				break innerLoop
-			case <- ct1.C:
-				ct1.Reset(addDelay)
-				t0 += addDelayInt
-				writeSyncTime(t0)
+		select {
+		case <- done:
+			ct1.Stop()
+		case <- ct1.C:
+			ct1.Reset(addDelay)
+			innerLoop:
+			for {
+				select {
+				case <- done:
+					ct1.Stop()
+					break innerLoop
+				case <- ct1.C:
+					t0 += addDelayInt
+					writeSyncTime(t0)
+				}
 			}
 		}
 	}
