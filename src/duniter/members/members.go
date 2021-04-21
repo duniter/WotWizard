@@ -23,13 +23,6 @@ import (
 
 )
 
-const (
-	
-	defaultPointsNb = 80
-	defaultdegree = 2
-
-)
-
 type (
 	
 	idList struct {
@@ -53,13 +46,6 @@ type (
 	}
 	
 	eventsR []eventR
-
-)
-
-var (
-	
-	pointsNb = defaultPointsNb
-	degree = defaultdegree
 
 )
 

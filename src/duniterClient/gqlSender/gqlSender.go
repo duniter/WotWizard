@@ -56,7 +56,9 @@ var (
 	
 	subAddress = BA.SubAddress()
 	
-	askM sync.Mutex
+	askM,
+	queryM,
+	subsM sync.Mutex
 	asks = make(askMap)
 	queries = make(bufferMap)
 	subs = make(bufferMap)
@@ -119,7 +121,9 @@ func Send (j J.Json, doc *G.Document) J.Json {
 	mk.BuildObject()
 	j = send(mk.GetJson().GetFlatString())
 	M.Assert(j != nil && (len(j.(*J.Object).Fields) == 0 || j.(*J.Object).Fields[0].Name != "errors"), 100)
+	queryM.Lock()
 	queries[s] = j
+	queryM.Unlock()
 	askM.Lock()
 	for _, c := range asks[s] {
 		c <- j
@@ -143,7 +147,9 @@ func subHandler (_ http.ResponseWriter, req *http.Request) {
 		queries = make(bufferMap)
 	} else {
 		j, ok := J.GetJson(o, "result"); M.Assert(ok,104)
+		subsM.Lock()
 		subs[opName] = j
+		subsM.Unlock()
 	}
 }
 

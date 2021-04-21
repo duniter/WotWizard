@@ -36,12 +36,6 @@ type (
 
 )
 
-var (
-	
-	ptsNb, degree int
-
-)
-
 func (d Dot) X () float64 {
 	return d.x
 }
