@@ -599,14 +599,6 @@ type (
 		Value Value
 	}
 	
-	/*
-	ObjectValue struct { // Value
-		inputFields *A.Tree // *ValMapItem
-		outputFields *ObjectField // Queue
-		Fields FieldsArray // Array
-	}
-	*/
-	
 	InputObjectValue struct { // Value
 		inputFields *ObjectField // List
 	}
@@ -4517,7 +4509,11 @@ func (ts *typeSystem) coerceValue (value Value, targetType Type, cValue *Value, 
 						}
 					}
 					if !hasValue && defaultValue != nil {
-						ov.insertInputField(argumentName, defaultValue)
+						if !ts.coerceValue(defaultValue,  argumentType, &coercedValue, variableDefinitions, variableValues, pathBB) {
+							ts.Error("UnableToCoerce", "", "", nil, pathBB.getPath())
+							return false
+						}
+						ov.insertInputField(argumentName, coercedValue)
 					} else {
 						_, nul := argumentType.(*NonNullType)
 						if nul {
@@ -4528,15 +4524,15 @@ func (ts *typeSystem) coerceValue (value Value, targetType Type, cValue *Value, 
 						}
 						if nul {
 							ts.Error("NullValueWithNonNullType", "", "", nil, pathBB.getPath())
-						} else if hasValue {
+							return false
+						}
+						if hasValue {
 							_, b := value.(*NullValue)
-							if !b {
-								_, b = argumentValue.(*Variable)
-							}
 							if b {
 								ov.insertInputField(argumentName, value)
 							} else if !ts.coerceValue(value, argumentType, &coercedValue, variableDefinitions, variableValues, pathBB) {
 								ts.Error("UnableToCoerce", "", "", nil, pathBB.getPath())
+								return false
 							} else {
 								ov.insertInputField(argumentName, coercedValue)
 							}
@@ -4599,7 +4595,10 @@ func (ts *typeSystem) coerceArgumentValues (objectType *ObjectTypeDefinition, fi
 			}
 		}
 		if !hasValue && defaultValue != nil {
-			newEntry(coercedValues, argumentName, defaultValue)
+			if !ts.coerceValue(defaultValue,  argumentType, &coercedValue, variableDefinitions, variableValues, pathBB) {
+				ts.Error("UnableToCoerce", "", "", nil, pathBB.getPath())
+			}
+			newEntry(coercedValues, argumentName, coercedValue)
 		} else {
 			_, nul := argumentType.(*NonNullType)
 			if nul {
@@ -4612,9 +4611,6 @@ func (ts *typeSystem) coerceArgumentValues (objectType *ObjectTypeDefinition, fi
 				ts.Error("NullValueWithNonNullType", "", "", nil, pathBB.getPath())
 			} else if hasValue {
 				_, b := value.(*NullValue)
-				if !b {
-					_, b = argumentValue.(*Variable)
-				}
 				if b {
 					newEntry(coercedValues, argumentName, value)
 				} else if !ts.coerceValue(value, argumentType, &coercedValue, variableDefinitions, variableValues, pathBB) {

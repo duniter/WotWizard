@@ -23,13 +23,6 @@ import (
 
 )
 
-const (
-	
-	defaultPointsNb = 80
-	defaultdegree = 2
-
-)
-
 type (
 	
 	idList struct {
@@ -53,13 +46,6 @@ type (
 	}
 	
 	eventsR []eventR
-
-)
-
-var (
-	
-	pointsNb = defaultPointsNb
-	degree = defaultdegree
 
 )
 
@@ -132,7 +118,7 @@ func doCount (from, to int64) (counts events) {
 }
 
 // Flux of members, event by event
-func doCountFlux (from, to, timeUnit int64) (countsR eventsR, counts events) {
+func doCountFlux (from, to, timeUnit int64, pointsNb, degree int) (countsR eventsR, counts events) {
 	counts = doCount(from, to)
 	dots := make(O.Dots, len(counts))
 	for i := 0; i < len(counts); i++ {
@@ -148,8 +134,8 @@ func doCountFlux (from, to, timeUnit int64) (countsR eventsR, counts events) {
 }
 
 	// Flux of first entries per member, event by event
-func doCountFluxPerMember (from, to, timeUnit int64) (countsR eventsR) {
-	countsR, counts := doCountFlux(from, to, timeUnit)
+func doCountFluxPerMember (from, to, timeUnit int64, pointsNb, degree int) (countsR eventsR) {
+	countsR, counts := doCountFlux(from, to, timeUnit, pointsNb, degree)
 	for c := 0; c < len(countsR); c++ {
 		countsR[c].value /= float64(counts[c].number)
 	}
@@ -201,7 +187,7 @@ func doFirstEntries (from, to int64) (fE events) {
 }
 
 // Flux of first entries, event by event
-func doFEFlux (from, to, timeUnit int64) (fER eventsR) {
+func doFEFlux (from, to, timeUnit int64, pointsNb, degree int) (fER eventsR) {
 	
 	fE := doFirstEntries(from, to)
 	dots := make(O.Dots, len(fE))
@@ -218,8 +204,8 @@ func doFEFlux (from, to, timeUnit int64) (fER eventsR) {
 }
 
 // Flux of first entries per member, event by event
-func doFEFluxPerMember (from, to, timeUnit int64) (fER eventsR) {
-	fER = doFEFlux(from, to, timeUnit)
+func doFEFluxPerMember (from, to, timeUnit int64, pointsNb, degree int) (fER eventsR) {
+	fER = doFEFlux(from, to, timeUnit, pointsNb, degree)
 	counts := doCount(from, to)
 	c := 0;
 	for f := 0; f < len(fER); f++ {
@@ -285,7 +271,7 @@ func doLoss (from, to int64) (losses events) {
 }
 
 // Flux of losses, event by event
-func doLossFlux (from, to, timeUnit int64) (lossesR eventsR) {
+func doLossFlux (from, to, timeUnit int64, pointsNb, degree int) (lossesR eventsR) {
 	
 	losses := doLoss(from, to)
 	dots := make(O.Dots, len(losses))
@@ -302,8 +288,8 @@ func doLossFlux (from, to, timeUnit int64) (lossesR eventsR) {
 }
 
 // Flux of losses per member, event by event
-func doLossFluxPerMember (from, to, timeUnit int64) (lossesR eventsR) {
-	lossesR = doLossFlux(from, to, timeUnit)
+func doLossFluxPerMember (from, to, timeUnit int64, pointsNb, degree int) (lossesR eventsR) {
+	lossesR = doLossFlux(from, to, timeUnit, pointsNb, degree)
 	counts := doCount(from, to)
 	M.Assert(counts != nil && len(counts) == len(lossesR), 100)
 	for l := 0; l < len(lossesR); l++ {
@@ -342,23 +328,44 @@ func getStartEnd (as *A.Tree) (start, end int64) {
 } //getStartEnd
 
 func getTimeUnit (as *A.Tree) (timeUnit int64) {
-	const timeUnitDefault = 2629800 // s = 1 month
 	var v G.Value
 	if G.GetValue(as, "timeUnit", &v) {
 		switch v := v.(type) {
 		case *G.IntValue:
 			timeUnit = v.Int
-		case *G.NullValue:
-			timeUnit = timeUnitDefault
 		default:
 			M.Halt(v, 100)
 			return
 		}
 	} else {
-		timeUnit = timeUnitDefault
+		M.Halt(v, 101)
 	}
 	return
 } //getTimeUnit
+
+func getDiffPars (as *A.Tree) (pointsNb, degree int) {
+	
+	extractInt := func (dP *G.InputObjectValue, name string) int {
+		var v G.Value
+		ok := G.GetObjectValueInputField(dP, name, &v); M.Assert(ok, 100)
+		iV, ok := v.(*G.IntValue); M.Assert(ok, 101)
+		return int(iV.Int)
+	} //extractInt
+	
+	var dP G.Value
+	if G.GetValue(as, "diffPars", &dP) {
+		switch dP := dP.(type) {
+		case *G.InputObjectValue:
+			pointsNb = extractInt(dP, "pointsNb")
+			degree = extractInt(dP, "degree")
+		default:
+			M.Halt(dP, 102)
+		}
+	} else {
+		M.Halt(dP, 103)
+	}
+	return
+} //getDiffPars
 
 func countMinR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
 	min, _ := countLimits()
@@ -386,7 +393,8 @@ func membersFluxR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Val
 	start, end := getStartEnd(argumentValues)
 	timeUnit := getTimeUnit(argumentValues)
 	if start <= end && timeUnit > 0 {
-		countsR, _ := doCountFlux(start, end, timeUnit)
+		pointsNb, degree := getDiffPars(argumentValues)
+		countsR, _ := doCountFlux(start, end, timeUnit, pointsNb, degree)
 		for _, f := range countsR {
 			l.Append(GQ.Wrap(f))
 		}
@@ -399,7 +407,8 @@ func membersFluxPMR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.V
 	start, end := getStartEnd(argumentValues)
 	timeUnit := getTimeUnit(argumentValues)
 	if start <= end && timeUnit > 0 {
-		for _, f := range doCountFluxPerMember(start, end, timeUnit) {
+		pointsNb, degree := getDiffPars(argumentValues)
+		for _, f := range doCountFluxPerMember(start, end, timeUnit, pointsNb, degree) {
 			l.Append(GQ.Wrap(f))
 		}
 	}
@@ -422,7 +431,8 @@ func fEFluxR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
 	start, end := getStartEnd(argumentValues)
 	timeUnit := getTimeUnit(argumentValues)
 	if start <= end && timeUnit > 0 {
-		for _, f := range doFEFlux(start, end, timeUnit) {
+		pointsNb, degree := getDiffPars(argumentValues)
+		for _, f := range doFEFlux(start, end, timeUnit, pointsNb, degree) {
 			l.Append(GQ.Wrap(f))
 		}
 	}
@@ -434,7 +444,8 @@ func fEFluxPMR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value 
 	start, end := getStartEnd(argumentValues)
 	timeUnit := getTimeUnit(argumentValues)
 	if start <= end && timeUnit > 0 {
-		for _, f := range doFEFluxPerMember(start, end, timeUnit) {
+		pointsNb, degree := getDiffPars(argumentValues)
+		for _, f := range doFEFluxPerMember(start, end, timeUnit, pointsNb, degree) {
 			l.Append(GQ.Wrap(f))
 		}
 	}
@@ -457,7 +468,8 @@ func lossFluxR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value 
 	start, end := getStartEnd(argumentValues)
 	timeUnit := getTimeUnit(argumentValues)
 	if start <= end && timeUnit > 0 {
-		for _, f := range doLossFlux(start, end, timeUnit) {
+		pointsNb, degree := getDiffPars(argumentValues)
+		for _, f := range doLossFlux(start, end, timeUnit, pointsNb, degree) {
 			l.Append(GQ.Wrap(f))
 		}
 	}
@@ -469,7 +481,8 @@ func lossFluxPMR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Valu
 	start, end := getStartEnd(argumentValues)
 	timeUnit := getTimeUnit(argumentValues)
 	if start <= end && timeUnit > 0 {
-		for _, f := range doLossFluxPerMember(start, end, timeUnit) {
+		pointsNb, degree := getDiffPars(argumentValues)
+		for _, f := range doLossFluxPerMember(start, end, timeUnit, pointsNb, degree) {
 			l.Append(GQ.Wrap(f))
 		}
 	}
@@ -552,50 +565,6 @@ func fluxValueR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value
 	}
 } //fluxValueR
 
-func differParamsR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
-	old := GQ.Wrap(pointsNb, degree)
-	var v G.Value
-	if G.GetValue(argumentValues, "pointsNb", &v) {
-		switch v := v.(type) {
-		case *G.IntValue:
-			pointsNb = int(v.Int)
-		case *G.NullValue:
-		default:
-			M.Halt(v, 100)
-		}
-	}
-	if G.GetValue(argumentValues, "degree", &v) {
-		switch v := v.(type) {
-		case *G.IntValue:
-			degree = int(v.Int)
-		case *G.NullValue:
-		default:
-			M.Halt(v, 100)
-		}
-	}
-	return old
-} //differParamsR
-
-func differPointsNbR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
-	switch pN := GQ.Unwrap(rootValue, 0).(type) {
-	case int:
-		return G.MakeIntValue(pN)
-	default:
-		M.Halt(pN, 100)
-		return nil
-	}
-} //differPointsNbR
-
-func differDegreeR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
-	switch d := GQ.Unwrap(rootValue, 1).(type) {
-	case int:
-		return G.MakeIntValue(d)
-	default:
-		M.Halt(d, 100)
-		return nil
-	}
-} //differDegreeR
-
 func fixFieldResolvers (ts G.TypeSystem) {
 	ts.FixFieldResolver("Query", "countMin", countMinR)
 	ts.FixFieldResolver("Query", "countMax", countMaxR)
@@ -615,9 +584,6 @@ func fixFieldResolvers (ts G.TypeSystem) {
 	ts.FixFieldResolver("EventId", "inOut", eventIdInOutR)
 	ts.FixFieldResolver("FluxEvent", "block", fluxBlockR)
 	ts.FixFieldResolver("FluxEvent", "value", fluxValueR)
-	ts.FixFieldResolver("Mutation", "changeDifferParams", differParamsR)
-	ts.FixFieldResolver("DifferParams", "pointsNb", differPointsNbR)
-	ts.FixFieldResolver("DifferParams", "degree", differDegreeR)
 } //fixFieldResolvers
 
 func init () {
