@@ -16,5 +16,5 @@ The version of the associated Duniter node must be 1.7.17 at least. Versions 1.8
 
 All included softwares have a GPLv3 license.
 
-The graphQL type system definition text for the WotWizard server can be found in Help/Typesystem.txt.
+The graphQL type system definition text for the WotWizard server can be found in Help/TypeSystem.txt.
 
