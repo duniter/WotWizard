@@ -62,28 +62,28 @@ type Query {
 	membersCount (start: Int64, end: Int64): [Event!]!
 	
 	"'membersFlux' displays the flux of active members by <timeUnit (s)>; if 'start' is absent or null, the display starts at 'countMin', and ends at 'countMax' if 'end' is absent or null"
-	membersFlux (start: Int64, end: Int64, timeUnit: Int64! = 2629800, diffPars: DifferParams! = {}): [FluxEvent!]!
+	membersFlux (start: Int64, end: Int64, timeUnit: Int64! = 2629800): [FluxEvent!]!
 	
 	"'membersFluxPM' displays the flux of active members by <timeUnit (s)> and by member; if 'start' is absent or null, the display starts at 'countMin', and ends at 'countMax' if 'end' is absent or null"
-	membersFluxPM (start: Int64, end: Int64, timeUnit: Int64! = 2629800, diffPars: DifferParams! = {}): [FluxEvent!]!
+	membersFluxPM (start: Int64, end: Int64, timeUnit: Int64! = 2629800): [FluxEvent!]!
 	
 	"'fECount' displays the number of first entries into the wot, sorted by dates (utc0) of events (entries); if 'start' is absent or null, the display starts at 'countMin', and ends at 'countMax' if 'end' is absent or null"
 	fECount (start: Int64, end: Int64): [Event!]!
 	
 	"'fEFlux' displays the flux of first entries by <timeUnit (s)>; if 'start' is absent or null, the display starts at 'countMin', and ends at 'countMax' if 'end' is absent or null"
-	fEFlux (start: Int64, end: Int64, timeUnit: Int64! = 2629800, diffPars: DifferParams! = {}): [FluxEvent!]!
+	fEFlux (start: Int64, end: Int64, timeUnit: Int64! = 2629800): [FluxEvent!]!
 	
 	"'fEFluxPM' displays the flux of first entries by <timeUnit (s)> and by member; if 'start' is absent or null, the display starts at 'countMin', and ends at 'countMax' if 'end' is absent or null"
-	fEFluxPM (start: Int64, end: Int64, timeUnit: Int64! = 2629800, diffPars: DifferParams! = {}): [FluxEvent!]!
+	fEFluxPM (start: Int64, end: Int64, timeUnit: Int64! = 2629800): [FluxEvent!]!
 	
 	"'lossCount' displays the number of members exiting the wot, minus the number of reentries (losses), sorted by dates (utc0) of events (in or out the wot); if 'start' is absent or null, the display starts at 'countMin', and ends at 'countMax' if 'end' is absent or null"
 	lossCount (start: Int64, end: Int64): [Event!]!
 	
 	"'lossFlux' displays the flux of losses by <timeUnit (s)>; if 'start' is absent or null, the display starts at 'countMin', and ends at 'countMax' if 'end' is absent or null"
-	lossFlux (start: Int64, end: Int64, timeUnit: Int64! = 2629800, diffPars: DifferParams! = {}): [FluxEvent!]!
+	lossFlux (start: Int64, end: Int64, timeUnit: Int64! = 2629800): [FluxEvent!]!
 	
 	"'lossFluxPM' displays the flux of losses by <timeUnit (s)> and by member; if 'start' is absent or null, the display starts at 'countMin', and ends at 'countMax' if 'end' is absent or null"
-	lossFluxPM (start: Int64, end: Int64, timeUnit: Int64! = 2629800, diffPars: DifferParams! = {}): [FluxEvent!]!
+	lossFluxPM (start: Int64, end: Int64, timeUnit: Int64! = 2629800): [FluxEvent!]!
 	
 	"'allParameters' displays all parameters of the money"
 	allParameters: [Parameter!]!
@@ -100,6 +100,9 @@ type Mutation {
 	
 	"'stopSubscription' erases the subscription whose name is 'name', which sends results at address 'returnAddr'; 'varVals' is a JSON object whose fields keys are the names of the variables (without '$') used in the subscription and whose fields values are their values"
 	stopSubscription (returnAddr: String!, name: String!, varVals: String): Void
+	
+	"changeDifferParams modifies two parameters of the differentiation process used in 'Query.membersFlux', 'Query.membersFluxPM', 'Query.fEFlux', 'Query.fEFluxPM', 'Query.lossFlux' and 'Query.lossFluxPM': 'pointsNb', the number of points over which the filter (Savitzky-Golay filter) is calculated, and 'degree',  the degree of the used polynomial (usually 2 or 4); do not change a parameter if absent or null. It returns the previous values of these two parameters."
+	changeDifferParams (pointsNb: Int, degree: Int): DifferParams!
 
 } #Mutation
 
@@ -350,14 +353,14 @@ type Block {
 
 } #Block
 
-"Differentiation filter parameters (Savitzky-Golay filter)"
-input DifferParams {
+"Differentiation filter parameters"
+type DifferParams {
 
-	"Number of points over which the filter is calculated"
-	pointsNb: Int! = 80
+	"Number of points used by the filter"
+	pointsNb: Int!
 	
-	"Degree of polynomial used by the filter (usually 2 or 4)"
-	degree: Int! = 2
+	"Degree of polynomial used by the filter"
+	degree: Int!
 	
 } #DifferParams
 
