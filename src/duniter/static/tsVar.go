@@ -367,7 +367,7 @@ interface File {
 	"List of internal certifications and membership application dossiers"
 	certifs_dossiers: [CertifOrDossier!]!
 	
-	"Number od dossiers"
+	"Number of dossiers"
 	dossiers_nb: Int!
 	
 	"Number of internal certifications"
@@ -384,7 +384,7 @@ type FileS implements File {
 	"List of internal certifications and membership application dossiers"
 	certifs_dossiers: [CertifOrDossier!]!
 	
-	"Number od dossiers"
+	"Number of dossiers"
 	dossiers_nb: Int!
 	
 	"Number of internal certifications"

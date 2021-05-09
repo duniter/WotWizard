@@ -31,6 +31,7 @@ import (
 		"io/ioutil"
 		"os"
 		"strings"
+		"sync"
 		"net/url"
 
 )
@@ -100,6 +101,8 @@ var (
 	
 	responseStreamsByDoc = make(responseStreamers)
 	responseStreamsByAddr = make(responseStreamers)
+	
+	mapM sync.Mutex
 
 )
 
@@ -207,12 +210,14 @@ func unsubscribe (returnAddr, streamName string, varVals J.Json) {
 	key := buildResponseStreamerByAddrKey(returnAddr, streamName, varVals)
 	if r, ok := responseStreamsByAddr[key]; ok {
 		if _, ok := r.returnAddrs[returnAddr]; ok {
+			mapM.Lock()
 			delete(r.returnAddrs, returnAddr)
 			delete(responseStreamsByAddr, key)
 			if len(r.returnAddrs) == 0 {
 				delete(responseStreamsByDoc, buildResponseStreamerByDocKey(r.doc, streamName, varVals))
 				G.Unsubscribe(r.stream)
 			}
+			mapM.Unlock()
 			storeSubs()
 		}
 	}
@@ -347,12 +352,14 @@ func makeHandler (newAction chan<- B.Actioner) func (w http.ResponseWriter, req 
 			}
 			key := buildResponseStreamerByDocKey(doc, opName, j)
 			var (rs *responseStreamer; ok bool)
+			mapM.Lock()
 			if rs, ok = responseStreamsByDoc[key]; !ok {
 				rs = &responseStreamer{doc: doc, name: opName, varVals: j, returnAddrs: make(addresses)}
 				responseStreamsByDoc[key] = rs
 			}
 			rs.returnAddrs[returnAddr] = nil
 			responseStreamsByAddr[buildResponseStreamerByAddrKey(returnAddr, opName, j)] = rs
+			mapM.Unlock()
 		}
 		a := &action{es: es, doc: doc, opName: opName, varVals: j, variableValues: variableValues, w: w, c: make(chan bool)}
 		newAction <- a
@@ -413,6 +420,7 @@ func readSubs () {
 		returnAddrs := make(addresses)
 		rs := &responseStreamer{doc: doc, name: opName, varVals: j, returnAddrs: returnAddrs}
 		m, err := SC.Atoi(sc.Text()); M.Assert(err == nil, err, 108)
+		mapM.Lock()
 		for ; m > 0; m-- {
 			ok := sc.Scan(); M.Assert(ok, 109)
 			returnAddr := sc.Text()
@@ -420,6 +428,7 @@ func readSubs () {
 			responseStreamsByAddr[buildResponseStreamerByAddrKey(returnAddr, opName, j)] = rs
 		}
 		responseStreamsByDoc[buildResponseStreamerByDocKey(doc, opName, j)] = rs
+		mapM.Unlock()
 		t := A.New()
 		for _, f := range j.(*J.Object).Fields {
 			ok := G.InsertJsonValue(t, f.Name, f.Value); M.Assert(ok, 110)

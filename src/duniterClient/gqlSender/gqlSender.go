@@ -117,7 +117,9 @@ func Send (j J.Json, doc *G.Document) J.Json {
 	if j := wait(s); j != nil {
 		return j
 	}
+	askM.Lock()
 	asks[s] = make(askChans, 0)
+	askM.Unlock()
 	mk.BuildObject()
 	j = send(mk.GetJson().GetFlatString())
 	M.Assert(j != nil && (len(j.(*J.Object).Fields) == 0 || j.(*J.Object).Fields[0].Name != "errors"), 100)

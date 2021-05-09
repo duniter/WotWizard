@@ -1668,7 +1668,7 @@ func (c *compilationer) Execution (fNum, parsNb int, pars C.ObjectsList) (o *C.O
 				l = l.next
 			}
 			for l != ll {
-				sps += string(line_feed) + l.line
+				sps += fmt.Sprint(line_feed) + l.line
 				l = l.next
 			}
 			s.S = sps
