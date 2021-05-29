@@ -14,7 +14,12 @@ package leftist
 	
 // Implements leftist trees, which may be used for priority queues. Cf. Knuth, The art of computer programming, vol. 3, ch. 5.2.3 and exercises 32 & 35.
 
-import M "util/misc"
+import (
+	
+	M "util/misc"
+		"sync"
+
+)
 
 // Results of comparison.
 
@@ -49,6 +54,12 @@ type (
 	Tree struct { // Leftist tree.
 		root *Elem
 	}
+
+)
+
+var (
+	
+	mut = new(sync.RWMutex)
 
 )
 
@@ -103,28 +114,34 @@ func merge (p *Elem, q *Elem) *Elem {
 
 // Inserts the value v in the tree t and returns the *Elem containing it.
 func (t *Tree) Insert (v Comparer) *Elem {
-		e := new(Elem)
-		e.dist = 1
-		e.left = nil
-		e.right = nil
-		e.up = nil
-		e.val = v
-		t.root = merge(t.root, e)
-		return e
-	}
+	e := new(Elem)
+	e.dist = 1
+	e.left = nil
+	e.right = nil
+	e.up = nil
+	e.val = v
+	mut.Lock()
+	t.root = merge(t.root, e)
+	mut.Unlock()
+	return e
+}
 
 // Returns one of the first values of the tree t, and the *Elem containing it in e. Returns nil and nil if the tree is empty.
 func (t *Tree) First (e **Elem) Comparer {
-	*e = t.root
-	if t.root == nil {
+	mut.RLock()
+	r := t.root
+	mut.RUnlock()
+	*e = r
+	if r == nil {
 		return nil
 	}
-	return t.root.val
+	return r.val
 }
 
 // Deletes the *Elem e of the tree t.
 func (t *Tree) Erase (e *Elem) {
 	M.Assert(e != nil, 20)
+	mut.Lock()
 	e.left = merge(e.left, e.right)
 	p := e.up
 	if e.left != nil {
@@ -155,6 +172,7 @@ func (t *Tree) Erase (e *Elem) {
 			if p == nil || l == d {break}
 		}
 	}
+	mut.Unlock()
 }
 
 // Returns true if t is empty.
@@ -164,13 +182,15 @@ func (t *Tree) IsEmpty () bool {
 
 // Empties the tree t.
 func (t *Tree) Empty () {
+	mut.Lock()
 	t.root = nil
+	mut.Unlock()
 }
 
 // Creates a new empty tree t. *)
 func New () *Tree {
 	t := new(Tree)
-	t.Empty()
+	t.root = nil
 	return t
 }
 

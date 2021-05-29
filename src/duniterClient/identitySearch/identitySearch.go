@@ -844,10 +844,19 @@ func get (res *Identity, lang *SM.Lang) *Idty {
 	} else {
 		block = fmt.Sprint(lang.Map("#duniterClient:Written_block"), "    ", doBlock(res.Id_written_block, lang))
 	}
-	if res.Status == "REVOKED" {
-		res.LimitDate = BA.Revoked
+	var limitDate string
+	switch res.Status {
+	case "REVOKED":
+		limitDate = BA.Ts2s(BA.Revoked, lang)
+	case "MISSING":
+		limitDate = fmt.Sprint(lang.Map("#duniterClient:AppRLimitDate"), "    ", BA.Ts2s(res.LimitDate, lang))
+	case "MEMBER":
+		limitDate = fmt.Sprint(lang.Map("#duniterClient:AppMLimitDate"), "    ", BA.Ts2s(res.LimitDate, lang))
+	case "NEWCOMER":
+		limitDate = fmt.Sprint(lang.Map("#duniterClient:AppNLimitDate"), "    ", BA.Ts2s(res.LimitDate, lang))
+	default:
+		M.Halt(res.Status, 101)
 	}
-	limitDate := fmt.Sprint(lang.Map("#duniterClient:AppLimitDate"), "    ", BA.Ts2s(res.LimitDate, lang))
 	var availability string
 	if res.MinDate == 0 {
 		availability = ""

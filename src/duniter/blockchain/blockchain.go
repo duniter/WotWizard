@@ -2737,7 +2737,6 @@ func scanBlocksUpdt (d *Q.DB) {
 	for rs.Next() {
 		var (
 			number int
-			m,
 			t time.Time
 			j,
 			a,
@@ -2772,6 +2771,7 @@ func scanBlocksUpdt (d *Q.DB) {
 	database.WritePlace(lastNPlace, int64(lastBlock))
 	database.WritePlace(idLenPlace, int64(idLenM))
 	lg.Println("\"" + dBaseName + "\" updated")
+	lg.Println("Median Time:", m.Local().Format("2/01/2006 15:04:05"))
 	lg.Println("Number of members: ", idLenM)
 } //scanBlocksUpdt
 

@@ -321,7 +321,7 @@ func (doc *Document) writeCommon (flat bool) string {
 					
 					//WriteVariableDefinitions
 					if len(vds) > 0 {
-						w.WriteString("(")
+						sepC(w, flat); w.WriteString("(")
 						*mS = false
 						for _, vd := range vds {
 							WriteVariableDefinition(vd, mS)

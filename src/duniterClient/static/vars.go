@@ -23,7 +23,9 @@ AllCertifiedIO	History of all sent certifications (start ↑ and end ↓):
 AllCertifiers	All Known Non-Revoked Certifiers:
 AllCertifiersIO	History of all received certifications (start ↑ and end ↓):
 50allParameters	Informations: Blockchain Parameters
-AppLimitDate	Limit Date of Membership or Exclusion
+AppMLimitDate	Limit Date of Membership Renewal
+AppNLimitDate	Limit Date of Membership Application
+AppRLimitDate	Date of Revocation
 Availability	Availability of next sent certification
 Bct	Blockchain Median Time
 Block	Block
@@ -169,7 +171,9 @@ AllCertifiedIO	Débuts (↑) et fins (↓) de validité de toutes les certificat
 AllCertifiers	Tous les certificateurs connus et non-révoqués :
 AllCertifiersIO	Débuts (↑) et fins (↓) de validité de toutes les certifications reçues :
 50allParameters	Informations : Paramètres de la chaîne de blocs
-AppLimitDate	Date limite d'adhésion ou d'exclusion
+AppMLimitDate	Date limite de réadhésion
+AppNLimitDate	Date limite de la demande d'adhésion
+AppRLimitDate	Date de révocation
 Availability	Disponibilité du prochain envoi de certification
 Bct	Temps médian de la chaîne de blocs
 Block	Bloc
