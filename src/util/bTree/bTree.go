@@ -122,8 +122,7 @@ type (
 	Database struct {
 		ref *File // File containing the database.
 		root, // Root of the leftist tree of free clusters.
-		end, // Length of file, or at least its used part.
-		writtenLim FilePos // Position following the last cluster actually written on disk
+		end FilePos // Length of file, or at least its used part.
 		max int64 // Size of the largest free cluster.
 		placeNb, // Number of fixed places in database.
 		pageNb int // Number of allocated pages.
@@ -1042,6 +1041,7 @@ func adjustPos (d Data, size int, pos *FilePos) {
 	}
 }
 
+/*
 // Create an empty buffer page in ram for position pos and size pageSize on disk; if buffer is already full, remove the least promoted page
 func (base *Database) createPage (pageSize int, pos FilePos) *pageT {
 	var p *pageT
@@ -1114,6 +1114,47 @@ func (base *Database) createPage (pageSize int, pos FilePos) *pageT {
 	M.Assert(!b, 110)
 	return p
 }
+*/
+
+/**/
+// Create an empty buffer page in ram for position pos and size pageSize on disk; if buffer is already full, remove the least promoted page
+func (base *Database) createPage (pageSize int, pos FilePos) *pageT {
+	var p *pageT
+	if base.pages.NumberOfElems() < base.pageNb { // Allocate a new buffer page
+		p = new(pageT)
+		p.nextP = base.pagesRing.nextP
+		p.prevP = base.pagesRing
+		base.pagesRing.nextP.prevP = p
+		base.pagesRing.nextP = p
+		p.locked = 1 // Keep it in RAM
+	} else { // No more new page available: recycle an old one, the oldest
+		p = base.pagesRing.prevP
+		for p != base.pagesRing && p.locked > 0 { //Don't erase a locked page
+			p = p.prevP
+		}
+		M.Assert(p != base.pagesRing, 100) //Not enough pages, increase base.pageNb
+		base.promotePage(p)
+		if p.dirty { // Page not up to date on disk: write it
+			po := p.posP
+			adjustPos(p.pageP, p.sizeP, &po)
+			var w Writer
+			w.initWriter(base.ref)
+			p.pageP.Write(&w);
+			aP := w.write()
+			base.writeBase(po, aP)
+		}
+		b := base.pages.Delete(p)
+		M.Assert(b, 109)
+	}
+	p.dirty = false
+	p.posP = pos
+	p.pageP = nil
+	p.sizeP = pageSize
+	_, b, _ := base.pages.SearchIns(p)
+	M.Assert(!b, 110)
+	return p
+}
+/**/
 
 // Create a new buffer page in ram for position pos and size pageSize (on disk); create a new empty Data in it with the help of fac and return it
 func (base *Database) newPageA (pageSize int, fac DataFac, pos FilePos) Data {
@@ -1218,17 +1259,9 @@ func (base *Database) updatePagesA () {
 				p.pageP.Write(&w)
 				aP := w.write()
 				base.writeBase(n, aP)
-			// Useless on Linux (Ext4)
-			//} else if p.posP >= base.writtenLim {
-			//	a := Bytes{0}
-			//	base.ref.PosWriter(n)
-			//	for i := 0; i < p.sizeP; i++ {
-			//		base.ref.Write(a)
-			//	}
 			}
 		}
 	base.pages.WalkThrough(do)
-	base.writtenLim = base.end
 }
 
 // Write all buffer pages marked for writing on disk
@@ -1274,7 +1307,6 @@ func (fac *Factory) OpenBase (nF string, pageNb int) *Database {
 	base.ref.PosWriter(FilePos((base.placeNb + 1) * LIS + 3 * INS))
 	base.ref.writeBool(true)
 	base.end = base.ref.End()
-	base.writtenLim = base.end
 	base.pageNb = M.Max(pageNb, minPageNb)
 	base.pages = A.New()
 	base.pagesRing = new(pageT)
@@ -1716,9 +1748,6 @@ func (base *Database) deleteBase (ptr FilePos) {
 		base.release(ptr + szPos - 1)
 		base.baseInsertFree(ptr, contHF, &base.root, &base.max)
 		base.release(ptr)
-	}
-	if base.end < base.writtenLim {
-		base.writtenLim = base.end
 	}
 }
 

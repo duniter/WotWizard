@@ -230,9 +230,9 @@ func TestG1 (tt *testing.T) {
 	
 	const (
 		
-		nbElems = 50000
+		nbElems = 5000
 		dureeMin = 100
-		dureeMax = 10000
+		dureeMax = 1000
 		taMin = 100
 		taMax = 1000
 		
@@ -287,9 +287,9 @@ func TestG2 (tt *testing.T) {
 
 	const (
 		
-		nbElems = 50000
+		nbElems = 5000
 		dureeMin = 100
-		dureeMax = 10000
+		dureeMax = 1000
 		taMin = 100
 		taMax = 1000
 		
@@ -356,7 +356,7 @@ func TestG3 (tt *testing.T) {
 		nomBase = "BaseC2.dat"
 		nbPages = 2000
 		maxCles = 100
-		nbCles = 200000
+		nbCles = 20000
 	)
 	Fac.CloseBase(nomBase)
 	ok := Fac.CreateBase(nomBase, 1); M.Assert(ok, 100)
@@ -430,7 +430,7 @@ func TestG4 (tt *testing.T) {
 	const (
 		nomBase = "BaseI2.dat"
 		nbPages = 2000
-		nbCles = 200000
+		nbCles = 20000
 	)
 	Fac.CloseBase(nomBase)
 	ok := Fac.CreateBase(nomBase, 1); M.Assert(ok)
@@ -481,7 +481,7 @@ func TestG5 (tt *testing.T) {
 	fmt.Println("TestG5, Continuous Insertion / Deletions in Index of Strings")
 	gen.Randomize(5)
 	const (
-		nbElems = 100000
+		nbElems = 10000
 		dureeMin = 1
 		dureeMax = 20000
 		taMin = 1
@@ -547,7 +547,7 @@ func TestG6 (tt *testing.T) {
 	fmt.Println("TestG6, Continuous Insertion / Deletions in Index of Strings")
 	gen.Randomize(6)
 	const (
-		nbElems = 100000
+		nbElems = 10000
 		dureeMin = 100
 		dureeMax = 20000
 		taMin = 1
@@ -612,7 +612,7 @@ func TestG7 (tt *testing.T) {
 	const (
 		nomBase = "BaseJ2.dat"
 		nbPages = 2000
-		nbCles = 200000
+		nbCles = 20000
 	)
 	Fac.CloseBase(nomBase)
 	ok := Fac.CreateBase(nomBase, 1); M.Assert(ok)
@@ -659,7 +659,7 @@ func TestG8 (tt *testing.T) {
 	fmt.Println("TestG8")
 	gen.Randomize(8)
 	const (
-		nbElems = 100000
+		nbElems = 10000
 		dureeMin = 1
 		dureeMax = 20000
 		taMin = 1
