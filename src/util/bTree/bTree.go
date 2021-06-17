@@ -24,10 +24,13 @@ import (
 
 	A "util/avl"
 	M "util/misc"
+		"time"
 
 )
 	
 const (
+	
+	backgroundUpdtDurationStr = "1s"
 	
 	// Minimal number of allocated pages.
 	minPageNb = 256
@@ -132,6 +135,7 @@ type (
 		stopPM,
 		detPIn,
 		updtPIn,
+		updt1PIn,
 		verIn chan<- bool
 		eraPIn,
 		freHIn,
@@ -147,6 +151,7 @@ type (
 		eraPOut,
 		relOut,
 		updtPOut,
+		updt1POut,
 		verOut,
 		wriPOut <-chan bool
 		readPLOut <-chan int
@@ -461,6 +466,8 @@ type (
 )
 
 var (
+	
+	backgroundUpdtDuration time.Duration
 	
 	fCH fClusterHeadFac
 	rCH rClusterHeadFac
@@ -982,7 +989,7 @@ type (
 
 )
 
-func (base *Database) pageManager (stopPM, detPIn, updtPIn, verIn <-chan bool, eraPIn, freHIn, freTIn, readPLIn, relIn, wriPIn <-chan FilePos, readPIn <-chan *fpData, newPIn, readSPIn <-chan *fpIntData, detPOut, eraPOut, relOut, updtPOut, verOut, wriPOut chan<- bool, readPLOut chan<- int, newPOut, readPOut, readSPOut chan<- Data, freHOut, freTOut chan<- *dataBool) {
+func (base *Database) pageManager (stopPM, detPIn, updtPIn, updt1PIn, verIn <-chan bool, eraPIn, freHIn, freTIn, readPLIn, relIn, wriPIn <-chan FilePos, readPIn <-chan *fpData, newPIn, readSPIn <-chan *fpIntData, detPOut, eraPOut, relOut, updtPOut, updt1POut, verOut, wriPOut chan<- bool, readPLOut chan<- int, newPOut, readPOut, readSPOut chan<- Data, freHOut, freTOut chan<- *dataBool) {
 	for {
 		select {
 		case <-stopPM:
@@ -1013,6 +1020,9 @@ func (base *Database) pageManager (stopPM, detPIn, updtPIn, verIn <-chan bool, e
 		case <-updtPIn:
 			base.updatePagesA()
 			updtPOut <- true
+		case <-updt1PIn:
+			base.updateOnePageA()
+			updt1POut <- true
 		case <-verIn:
 			base.verifyNotLockedA()
 			verOut <- true
@@ -1041,82 +1051,17 @@ func adjustPos (d Data, size int, pos *FilePos) {
 	}
 }
 
-/*
-// Create an empty buffer page in ram for position pos and size pageSize on disk; if buffer is already full, remove the least promoted page
-func (base *Database) createPage (pageSize int, pos FilePos) *pageT {
-	var p *pageT
-	if base.pages.NumberOfElems() < base.pageNb { // Allocate a new buffer page
-		p = new(pageT)
-		p.nextP = base.pagesRing.nextP
-		p.prevP = base.pagesRing
-		base.pagesRing.nextP.prevP = p
-		base.pagesRing.nextP = p
-		p.locked = 1 // Keep it in RAM
-	} else { // No more new page available: recycle an old one, the oldest
-		p = base.pagesRing.prevP
-		for p != base.pagesRing && p.locked > 0 { //Don't erase a locked page
-			p = p.prevP
-		}
-		M.Assert(p != base.pagesRing, 100) //Not enough pages, increase base.pageNb
-		base.promotePage(p)
-		if p.dirty { // Page not up to date on disk: write it
-			if p.posP >= base.writtenLim { // Not yet written: write all pages with smaller addresses that are not still written (no hole on disk file)
-				pp := new(pageT)
-				pp.posP = base.writtenLim
-				q, _, _ := base.pages.SearchNext(pp)
-				for q != nil && q.Val().(*pageT).posP <= p.posP {
-					switch qq := q.Val().(type) {
-					case *pageT:
-						po := qq.posP
-						adjustPos(qq.pageP, qq.sizeP, &po)
-						if qq.dirty { // Write it normally
-							qq.dirty = false
-							var w Writer
-							w.initWriter(base.ref)
-							qq.pageP.Write(&w)
-							aP := w.write()
-							base.writeBase(po, aP)
-						// Useless on Linux (Ext4)
-						//} else { // Write a series of zeroes
-						//	var a = Bytes{0} 
-						//	base.ref.PosWriter(po);
-						//	for i := 0; i < qq.sizeP; i++ {
-						//		base.ref.Write(a)
-						//	}
-						}
-					}
-					q = base.pages.Next(q)
-				}
-				// Update the limit of written clusters
-				if q == nil {
-					base.writtenLim = base.end
-				} else {
-					base.writtenLim = q.Val().(*pageT).posP
-				}
-			} else { // Write the oldest dirty page
-				po := p.posP
-				adjustPos(p.pageP, p.sizeP, &po)
-				var w Writer
-				w.initWriter(base.ref)
-				p.pageP.Write(&w);
-				aP := w.write()
-				base.writeBase(po, aP)
-			}
-		}
-		b := base.pages.Delete(p)
-		M.Assert(b, 109)
-	}
+func (base *Database) updatePage (p *pageT) {
 	p.dirty = false
-	p.posP = pos
-	p.pageP = nil
-	p.sizeP = pageSize
-	_, b, _ := base.pages.SearchIns(p)
-	M.Assert(!b, 110)
-	return p
+	var w Writer
+	w.initWriter(base.ref)
+	p.pageP.Write(&w)
+	aP := w.write()
+	n := p.posP
+	adjustPos(p.pageP, p.sizeP, &n)
+	base.writeBase(n, aP)
 }
-*/
 
-/**/
 // Create an empty buffer page in ram for position pos and size pageSize on disk; if buffer is already full, remove the least promoted page
 func (base *Database) createPage (pageSize int, pos FilePos) *pageT {
 	var p *pageT
@@ -1126,6 +1071,7 @@ func (base *Database) createPage (pageSize int, pos FilePos) *pageT {
 		p.prevP = base.pagesRing
 		base.pagesRing.nextP.prevP = p
 		base.pagesRing.nextP = p
+		p.dirty = false
 		p.locked = 1 // Keep it in RAM
 	} else { // No more new page available: recycle an old one, the oldest
 		p = base.pagesRing.prevP
@@ -1135,18 +1081,11 @@ func (base *Database) createPage (pageSize int, pos FilePos) *pageT {
 		M.Assert(p != base.pagesRing, 100) //Not enough pages, increase base.pageNb
 		base.promotePage(p)
 		if p.dirty { // Page not up to date on disk: write it
-			po := p.posP
-			adjustPos(p.pageP, p.sizeP, &po)
-			var w Writer
-			w.initWriter(base.ref)
-			p.pageP.Write(&w);
-			aP := w.write()
-			base.writeBase(po, aP)
+			base.updatePage(p)
 		}
 		b := base.pages.Delete(p)
 		M.Assert(b, 109)
 	}
-	p.dirty = false
 	p.posP = pos
 	p.pageP = nil
 	p.sizeP = pageSize
@@ -1154,7 +1093,6 @@ func (base *Database) createPage (pageSize int, pos FilePos) *pageT {
 	M.Assert(!b, 110)
 	return p
 }
-/**/
 
 // Create a new buffer page in ram for position pos and size pageSize (on disk); create a new empty Data in it with the help of fac and return it
 func (base *Database) newPageA (pageSize int, fac DataFac, pos FilePos) Data {
@@ -1250,15 +1188,8 @@ func (base *Database) updatePagesA () {
 	do :=
 		func (v interface{}, _ ...interface{}) {
 			p := v.(*pageT)
-			n := p.posP
-			adjustPos(p.pageP, p.sizeP, &n)
 			if p.dirty {
-				p.dirty = false
-				var w Writer
-				w.initWriter(base.ref)
-				p.pageP.Write(&w)
-				aP := w.write()
-				base.writeBase(n, aP)
+				base.updatePage(p)
 			}
 		}
 	base.pages.WalkThrough(do)
@@ -1268,6 +1199,24 @@ func (base *Database) updatePagesA () {
 func (base *Database) updatePages () {
 	base.updtPIn <- true
 	<-base.updtPOut
+}
+
+func (base *Database) updateOnePageA () {
+	p := base.pagesRing.prevP
+	for p != base.pagesRing && !p.dirty {
+		p = p.prevP
+	}
+	if p != base.pagesRing {
+		base.updatePage(p)
+	}
+}
+
+func (base *Database) backgroundUpdate () {
+	for {
+		time.Sleep(backgroundUpdtDuration)
+		base.updt1PIn <- true
+		<- base.updt1POut
+	}
 }
 
 // Create a new file of name nF, with the help of fac, and a database inside this file, with placeNb fixed places. Don't open this database. Fixed places are locations where can be recorded integers, i.e. data pointers.
@@ -1316,6 +1265,7 @@ func (fac *Factory) OpenBase (nF string, pageNb int) *Database {
 	stopPM := make(chan bool); base.stopPM = stopPM
 	detPIn := make(chan bool); base.detPIn = detPIn
 	updtPIn := make(chan bool); base.updtPIn = updtPIn
+	updt1PIn := make(chan bool); base.updt1PIn = updt1PIn
 	verIn := make(chan bool); base.verIn = verIn
 	eraPIn := make(chan FilePos); base.eraPIn = eraPIn
 	freHIn := make(chan FilePos); base.freHIn = freHIn
@@ -1331,6 +1281,7 @@ func (fac *Factory) OpenBase (nF string, pageNb int) *Database {
 	eraPOut := make(chan bool); base.eraPOut = eraPOut
 	relOut := make(chan bool); base.relOut = relOut
 	updtPOut := make(chan bool); base.updtPOut = updtPOut
+	updt1POut := make(chan bool); base.updt1POut = updt1POut
 	verOut := make(chan bool); base.verOut = verOut
 	wriPOut := make(chan bool); base.wriPOut = wriPOut
 	readPLOut := make(chan int); base.readPLOut = readPLOut
@@ -1340,7 +1291,7 @@ func (fac *Factory) OpenBase (nF string, pageNb int) *Database {
 	freHOut := make(chan *dataBool); base.freHOut = freHOut
 	freTOut := make(chan *dataBool); base.freTOut = freTOut
 	
-	go base.pageManager(stopPM, detPIn, updtPIn, verIn, eraPIn, freHIn, freTIn, readPLIn, relIn, wriPIn, readPIn, newPIn, readSPIn, detPOut, eraPOut, relOut, updtPOut, verOut, wriPOut, readPLOut, newPOut, readPOut, readSPOut, freHOut, freTOut)
+	go base.pageManager(stopPM, detPIn, updtPIn, updt1PIn, verIn, eraPIn, freHIn, freTIn, readPLIn, relIn, wriPIn, readPIn, newPIn, readSPIn, detPOut, eraPOut, relOut, updtPOut, updt1POut, verOut, wriPOut, readPLOut, newPOut, readPOut, readSPOut, freHOut, freTOut)
 	
 	if base.root == BNil {
 		base.max = 0
@@ -1348,6 +1299,8 @@ func (fac *Factory) OpenBase (nF string, pageNb int) *Database {
 		base.max = base.readSysPage(base.root, fClusterHeadSize, fCH).(*fClusterHead).size
 		base.release(base.root)
 	}
+	
+	go base.backgroundUpdate()
 	
 	return base
 }
@@ -2810,4 +2763,10 @@ func (iw *IndexWriter) WriteValue (val FilePos) {
 	ind.baseI.readPage(iw.posI, sif).(*stringI).dataPos = val
 	ind.baseI.writePage(iw.posI)
 	ind.baseI.release(iw.posI)
+}
+
+func init () {
+	var err error
+	backgroundUpdtDuration, err = time.ParseDuration(backgroundUpdtDurationStr)
+	M.Assert(err == nil, err, 100)
 }
