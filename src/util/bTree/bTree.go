@@ -24,13 +24,13 @@ import (
 
 	A "util/avl"
 	M "util/misc"
-		"time"
+//		"time"
 
 )
 	
 const (
 	
-	backgroundUpdtDurationStr = "1s"
+//	backgroundUpdtDurationStr = "1s"
 	
 	// Minimal number of allocated pages.
 	minPageNb = 256
@@ -467,7 +467,7 @@ type (
 
 var (
 	
-	backgroundUpdtDuration time.Duration
+//	backgroundUpdtDuration time.Duration
 	
 	fCH fClusterHeadFac
 	rCH rClusterHeadFac
@@ -1210,14 +1210,14 @@ func (base *Database) updateOnePageA () {
 		base.updatePage(p)
 	}
 }
-
-func (base *Database) backgroundUpdate () {
-	for {
-		time.Sleep(backgroundUpdtDuration)
-		base.updt1PIn <- true
-		<- base.updt1POut
-	}
-}
+//
+//func (base *Database) backgroundUpdate () {
+//	for {
+//		time.Sleep(backgroundUpdtDuration)
+//		base.updt1PIn <- true
+//		<- base.updt1POut
+//	}
+//}
 
 // Create a new file of name nF, with the help of fac, and a database inside this file, with placeNb fixed places. Don't open this database. Fixed places are locations where can be recorded integers, i.e. data pointers.
 func (fac *Factory) CreateBase (nF string, placeNb int) bool {
@@ -1300,7 +1300,7 @@ func (fac *Factory) OpenBase (nF string, pageNb int) *Database {
 		base.release(base.root)
 	}
 	
-	go base.backgroundUpdate()
+//	go base.backgroundUpdate()
 	
 	return base
 }
@@ -2764,9 +2764,9 @@ func (iw *IndexWriter) WriteValue (val FilePos) {
 	ind.baseI.writePage(iw.posI)
 	ind.baseI.release(iw.posI)
 }
-
-func init () {
-	var err error
-	backgroundUpdtDuration, err = time.ParseDuration(backgroundUpdtDurationStr)
-	M.Assert(err == nil, err, 100)
-}
+//
+//func init () {
+//	var err error
+//	backgroundUpdtDuration, err = time.ParseDuration(backgroundUpdtDurationStr)
+//	M.Assert(err == nil, err, 100)
+//}
