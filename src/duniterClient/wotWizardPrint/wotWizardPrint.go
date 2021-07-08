@@ -15,7 +15,6 @@ package wotWizardPrint
 import (
 	
 	BA	"duniterClient/basicPrint"
-	G	"util/graphQL"
 	GS	"duniterClient/gqlSender"
 	J	"util/json"
 	M	"util/misc"
@@ -23,6 +22,7 @@ import (
 	W	"duniterClient/web"
 		"fmt"
 		"net/http"
+	S	"strconv"
 		"strings"
 		"html/template"
 
@@ -114,13 +114,13 @@ const (
 					{{if .Second}}
 						<br>
 						{{.Second}}
-						<blockquote>
-							{{range .Certs}}
-								{{.}}
-								<br>
-							{{end}}
-						</blockquote>
 					{{end}}
+					<blockquote>
+						{{range .Certs}}
+							{{.}}
+							<br>
+						{{end}}
+					</blockquote>
 				</p>
 			{{end}}
 			<p>
@@ -314,9 +314,8 @@ type (
 
 var (
 	
-	wwFileDoc,
-	wwPermsDoc *G.Document
-	voidJson J.Json
+	wwFileDoc = GS.ExtractDocument(queryWWFile)
+	wwPermsDoc = GS.ExtractDocument(queryWWPerms)
 
 )
 
@@ -353,15 +352,24 @@ func printFile (f *File, lang *SM.Lang) *DispF {
 			} //PrintCerts
 			
 			//PrintDossier
-			fi := fmt.Sprint(d.Main_certifs, " ", d.Newcomer.Uid, " (", BA.Ts2s(d.Date, lang), " ≥ ", BA.Ts2s(d.MinDate, lang), ")")
+			fi := fmt.Sprint(d.Newcomer.Uid, " ", BA.Ts2s(d.Date, lang), " (→ ", BA.Ts2s(d.Expires_on, lang), ") ", lang.Map("#duniterClient:distanceRule", S.Itoa(int(d.Newcomer.Distance.Value))))
 			w := new(strings.Builder)
-			fmt.Fprint(w, "(→ ", BA.Ts2s(d.Expires_on, lang), ") (", int(d.Newcomer.Distance.Value), "%) (")
-			if d.Newcomer.Distance.Dist_ok && d.Main_certifs >= sigQty {
-				fmt.Fprint(w, lang.Map("#duniterClient:OK"))
+			if d.Main_certifs >= sigQty {
+				fmt.Fprint(w, lang.Map("#duniterClient:requiredCertsNb", S.Itoa(len(d.Certifications)), S.Itoa(d.Main_certifs)))
 			} else {
-				fmt.Fprint(w, lang.Map("#duniterClient:KO"))
+				fmt.Fprint(w, lang.Map("#duniterClient:certsNb", S.Itoa(len(d.Certifications))))
 			}
-			fmt.Fprint(w, ") |")
+			if d.Date == d.MinDate && d.Date >= f.Data.Now.Bct {
+				fmt.Fprint(w, ". ", lang.Map("#duniterClient:minApplicationDate"))
+			}
+			if d.Newcomer.Distance.Dist_ok && d.Main_certifs >= sigQty {
+				fmt.Fprint(w, ". ", lang.Map("#duniterClient:OK"))
+			} else {
+				fmt.Fprint(w, ". ", lang.Map("#duniterClient:KO"))
+				if !d.Newcomer.Distance.Dist_ok && d.Main_certifs >= sigQty {
+					fmt.Fprint(w, " (", lang.Map("#duniterClient:Distance"), ")")
+				}
+			}
 			sd := w.String()
 			return &DossCertT{First: fi, Second: sd, Certs: PrintCerts(d.Certifications)}
 		} //PrintDossier
@@ -464,8 +472,6 @@ func endP (name string, temp *template.Template, _ *http.Request, w http.Respons
 } //endP
 
 func init() {
-	wwFileDoc = GS.ExtractDocument(queryWWFile)
-	wwPermsDoc = GS.ExtractDocument(queryWWPerms)
 	W.RegisterPackage(wwFileName, htmlWWFile, endF, true)
 	W.RegisterPackage(wwPermsName, htmlWWPerms, endP, true)
 } //init

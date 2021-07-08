@@ -239,8 +239,14 @@ var (
 	props, propsId := count(qual == distancesName, d.Identities)
 	m := len(props)
 	qs := make(Quals, m)
+	pp := -1.0
+	ii := 0
 	for i, p := range props {
-		qs[i] = fmt.Sprintf("%v    %05.2f    %v", i + 1, p.prop, p.id)
+		if p.prop != pp {
+			pp = p.prop
+			ii = i
+		}
+		qs[i] = fmt.Sprintf("%v    %05.2f    %v", ii + 1, pp, p.id)
 	}
 	qsId := make(Quals, m)
 	for i, p := range propsId {

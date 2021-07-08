@@ -24,6 +24,7 @@ import (
 	W	"duniterClient/web"
 		"fmt"
 		"net/http"
+	S	"strconv"
 		"strings"
 		"html/template"
 
@@ -107,7 +108,6 @@ const (
 									from {
 										uid
 									}
-									pending
 									expires_on
 								}
 							}
@@ -174,13 +174,13 @@ const (
 						{{if .Second}}
 							<br>
 							{{.Second}}
-							<blockquote>
-								{{range .Certs}}
-									{{.}}
-									<br>
-								{{end}}
-							</blockquote>
 						{{end}}
+						<blockquote>
+							{{range .Certs}}
+								{{.}}
+								<br>
+							{{end}}
+						</blockquote>
 					</p>
 				{{end}}
 			{{end}}
@@ -420,8 +420,13 @@ func printMeta (cds Certifs_DossiersT, lang *SM.Lang) DossCertsT {
 			} //PrintCerts
 			
 			//PrintDossier
-			fi := fmt.Sprint(d.Main_certifs, " ", d.Newcomer.Uid, " (", BA.Ts2s(d.Date, lang), " ≥ ", BA.Ts2s(d.MinDate, lang), ")")
-			sd := fmt.Sprint("(→ ", BA.Ts2s(d.Expires_on, lang), ") (", int(d.Newcomer.Distance.Value), "%) |")
+			fi := fmt.Sprint(d.Newcomer.Uid, " ", BA.Ts2s(d.Date, lang), " (→ ", BA.Ts2s(d.Expires_on, lang), ") ", lang.Map("#duniterClient:distanceRule", S.Itoa(int(d.Newcomer.Distance.Value))))
+			w := new(strings.Builder)
+			fmt.Fprint(w, lang.Map("#duniterClient:requiredCertsNb", S.Itoa(len(d.Certifications)), S.Itoa(d.Main_certifs)))
+			if d.Date == d.MinDate {
+				fmt.Fprint(w, ". ", lang.Map("#duniterClient:minApplicationDate"))
+			}
+			sd := w.String()
 			return &DossCertT{First: fi, Second: sd, Certs: PrintCerts(d.Certifications)}
 		} //PrintDossier
 		
@@ -433,7 +438,7 @@ func printMeta (cds Certifs_DossiersT, lang *SM.Lang) DossCertsT {
 		return &DossCertT{First: PrintCertif(cd.DatedCertification), Second: ""}
 	} //PrintCertOrDoss
 	
-	//printFile
+	//printMeta
 	dcs := make(DossCertsT, len(cds))
 	for i, cd := range cds {
 		dcs[i] = *PrintCertOrDoss(&cd)

@@ -92,7 +92,7 @@ const (
 	secureGap = 100
 	
 	// Number of pages used by UtilBTree
-	pageNb = 512000
+	pageNb = 256000
 	
 	// Numbers of the places of the indexes in dBase
 	timePlace = iota // Index timeT

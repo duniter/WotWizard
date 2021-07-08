@@ -39,12 +39,14 @@ certificationsFrom	Certifications From Members
 56certificationsTo	Informations: Certifications To Members
 certificationsTo	Certifications To Members
 34certLim	Limits: Certifications Limits Dates by Dates
+certsNb	^0 certifications
 Client	Client Version: 
 Computation_duration	Computation Duration
 Day	Day
 day	day(s)
 Delay	Delay (days)
 Distance	Distance Rule
+distanceRule	Distance Rule: ^0%
 20distances	Properties: Distances (rule)
 distances	Distances (rule)
 Distribution	Distribution
@@ -105,6 +107,7 @@ MembersFluxPM	Flux of Members per Member
 402membersLossT	Evolution: Losses (list)
 MembersNb	Number of members
 33memLim	Limits: Memberships Limits Date by Date
+minApplicationDate	Wait at least two months between two applications
 minute	minute(s)
 Missing	Excluded Identities - Needing a new application
 52missingIdentities	Informations: List of Excluded Identities - Needing a new application
@@ -133,6 +136,7 @@ Pubkey	Public Key
 21qualities	Properties: Qualities
 qualities	Qualities
 Quality	Quality
+requiredCertsNb	^0 certifications, at least ^1 needed for distance rule
 Revoked	Revoked
 51revokedIdentities	Informations: List of Revoked Identities
 RevokedM	Revoked Identities
@@ -187,12 +191,14 @@ certificationsFrom	Certifications depuis les membres
 56certificationsTo	Informations : Certifications vers les membres
 certificationsTo	Certifications vers les membres
 34certLim	Limites : Limites des certifications par date
+certsNb	^0 certifications
 Client	Version client : 
 Computation_duration	Durée du calcul
 Day	Jour
 day	jour(s)
 Delay	Durée (jours)
 Distance	Règle de distance
+distanceRule	Règle de distance: ^0%
 20distances	Propriétés : Distances (règle de)
 distances	Distances (règle de)
 Distribution	Distribution
@@ -253,6 +259,7 @@ MembersFluxPM	Flux de membres par membre
 402membersLossT	Evolution : Pertes (liste)
 MembersNb	Nombre de membres
 33memLim	Limites : Limites des adhésions par date
+minApplicationDate	Au moins deux mois d'attente entre deux adhésions
 minute	minute(s)
 Missing	Exclu(e)s en attente de réadhésion
 52missingIdentities	Informations : Liste des identités exclues en attente de réadhésion
@@ -281,6 +288,7 @@ Pubkey	Clef publique
 21qualities	Propriétés : Qualités
 qualities	Qualités
 Quality	Qualité
+requiredCertsNb	^0 certifications, ^1 au moins nécessaires pour la règle de distance
 Revoked	Révoqué(e)
 51revokedIdentities	Informations : Liste des identités révoquées
 RevokedM	Identités révoquées

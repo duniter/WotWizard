@@ -12,8 +12,10 @@ import (
 )
 
 const (
-
+	
 	maxInt = 0x7FFFFFFF
+	
+	nbPages = 32000
 
 )
 
@@ -237,7 +239,6 @@ func TestG1 (tt *testing.T) {
 		taMax = 1000
 		
 		nomBase = "BaseL2.dat"
-		nbPages = 2000
 	
 	)
 	fmt.Println("TestG1, AllocateSize")
@@ -294,7 +295,6 @@ func TestG2 (tt *testing.T) {
 		taMax = 1000
 		
 		nomBase = "BaseLL2.dat"
-		nbPages = 2000
 		
 	)
 	
@@ -354,7 +354,6 @@ func TestG3 (tt *testing.T) {
 	gen.Randomize(3)
 	const (
 		nomBase = "BaseC2.dat"
-		nbPages = 2000
 		maxCles = 100
 		nbCles = 20000
 	)
@@ -429,7 +428,6 @@ func TestG4 (tt *testing.T) {
 	gen.Randomize(4)
 	const (
 		nomBase = "BaseI2.dat"
-		nbPages = 2000
 		nbCles = 20000
 	)
 	Fac.CloseBase(nomBase)
@@ -487,7 +485,6 @@ func TestG5 (tt *testing.T) {
 		taMin = 1
 		taMax = 100
 		nomBase = "BaseM2.dat"
-		nbPages = 2000
 	)
 	t := L.New()
 	Fac.CloseBase(nomBase)
@@ -553,7 +550,6 @@ func TestG6 (tt *testing.T) {
 		taMin = 1
 		taMax = 100
 		nomBase = "BaseN2.dat"
-		nbPages = 2000
 	)
 	t := L.New()
 	Fac.CloseBase(nomBase)
@@ -611,7 +607,6 @@ func TestG7 (tt *testing.T) {
 	gen.Randomize(7)
 	const (
 		nomBase = "BaseJ2.dat"
-		nbPages = 2000
 		nbCles = 20000
 	)
 	Fac.CloseBase(nomBase)
@@ -665,7 +660,6 @@ func TestG8 (tt *testing.T) {
 		taMin = 1
 		taMax = 100
 		nomBase = "BaseCC2.dat"
-		nbPages = 2000
 		minChar = 'a'
 		nbChar = 26
 		pAlpha = 0.8

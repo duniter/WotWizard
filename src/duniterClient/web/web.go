@@ -201,7 +201,7 @@ func manageIndex (name string, temp *template.Template, _ *http.Request, w http.
 		}
 	
 	j := GS.Send(nil, versionDoc); M.Assert(j != nil, 100)
-	err := temp.ExecuteTemplate(w, name, &output{VersionS: j.(*J.Object).Fields[0].Value.(*J.JsonVal).Json.(*J.Object).Fields[0].Value.(*J.String).S,VersionC: Version, P: packagesD})
+	err := temp.ExecuteTemplate(w, name, &output{VersionS: j.(*J.Object).Fields[0].Value.(*J.JsonVal).Json.(*J.Object).Fields[0].Value.(*J.String).S, VersionC: Version, P: packagesD})
 	M.Assert(err == nil, err, 101)
 }
 
