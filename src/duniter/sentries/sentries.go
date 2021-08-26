@@ -45,7 +45,7 @@ func sentryTR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
 func sentriesR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
 	l := G.NewListValue()
 	ids := A.New()
-	var is = new(U.SetIterator)
+	is := new(U.SetIterator)
 	pubkey, ok := B.NextSentry(true, &is)
 	for ok {
 		var b bool

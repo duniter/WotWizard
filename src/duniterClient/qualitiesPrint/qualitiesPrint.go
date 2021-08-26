@@ -246,11 +246,11 @@ var (
 			pp = p.prop
 			ii = i
 		}
-		qs[i] = fmt.Sprintf("%v    %05.2f    %v", ii + 1, pp, p.id)
+		qs[i] = fmt.Sprintf("%v%v%05.2f%v%v%v", ii + 1, BA.SpL, pp, BA.SpL, p.id, BA.SpS)
 	}
 	qsId := make(Quals, m)
 	for i, p := range propsId {
-		qsId[i] = fmt.Sprintf("%v    %05.2f", p.id, p.prop)
+		qsId[i] = fmt.Sprintf("%v%v%05.2f", p.id, BA.SpL, p.prop)
 	}
 	return &QualT{Title: t, Now: now, Qs: qs, QsId: qsId}
 	/*

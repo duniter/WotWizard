@@ -264,7 +264,7 @@ func print (t string, now *Block, forward string, fw int, props props, title, co
 	warnNum := fmt.Sprint(lang.Map("#duniterClient:WarnNum"), " ", len(props))
 	warnings := make(Warnings, len(props))
 	for i, p := range props {
-		content := fmt.Sprint(BA.Ts2s(p.prop, lang), "    ", p.id)
+		content := fmt.Sprint(BA.Ts2s(p.prop, lang), BA.SpL, p.id)
 		warnings[i] = &Warning{titleE, compE, content, certE, p.aux}
 	}
 	return &Out{tE, nowS, forwardE, ok, warnNum, fw, warnings}

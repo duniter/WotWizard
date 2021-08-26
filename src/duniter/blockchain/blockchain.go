@@ -1731,7 +1731,7 @@ func PercentOfSentriesS (pubkeys PubkeysT) (set_1, set_2 U.Set, poS float64) {
 			}
 		}
 		set_1 = set.Inter(sentriesS)
-		poS = float64(set_1.NbElems()) / float64(sentriesS.NbElems())
+		poS = float64(set_1.NbElems()) / float64(SentriesLen())
 		store(poSE, set_1, set_2, poS)
 	}
 	return

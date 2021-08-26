@@ -64,6 +64,7 @@ type (
 	// Dossier of external certifications
 	Dossier struct {
 		date, // Entry date
+		LastAppDate, // Last membership application date
 		MinDate, // Minimum date: last membership application + msPeriod
 		limit int64 // Expiration date
 		Id Uid // Certified identity
@@ -777,13 +778,6 @@ func CalcEntries (f File) (sets, occurDate, occurName *A.Tree) {
 	return
 }
 
-func lastEntryMTime (pubkey B.Pubkey) int64 {
-	list, ok := B.JLPub(pubkey); M.Assert(ok, 100)
-	block, _, ok := B.JLPubLNext(&list); M.Assert(ok, 101)
-	mTime, _, ok := B.TimeOf(block); M.Assert(ok, 102)
-	return mTime
-}
-
 /*
 Q : Pour revenir, le membre doit refaire une demande d’adhésion et retrouver suffisamment de certifications.
 
@@ -816,6 +810,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 	
 	)
 	
+	msPeriod := int64(B.Pars().MsPeriod)
 	cdL := new(cdList); l := cdL // Chained list of Dossier and Certif
 	dNb = 0 // Number of Dossier(s)
 	useful := A.New()
@@ -823,13 +818,13 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 	toHash, ok := S.IdNextHash(true, &el)
 	for ok { // For all identity hash in sandbox
 		idInBC, to, _, _, exp2, b := S.IdHash(toHash); M.Assert(b, 100)
-		var minDate int64 = 0
+		var (minDate int64 = 0; leTi int64 = 0)
 		bb := !idInBC
 		if !bb {
-			var (member bool; exp int64)
-			_, member, _, _, _, exp, bb = B.IdPubComplete(to); M.Assert(bb, 101)
-			leTi := lastEntryMTime(to)
-			minDate = leTi + int64(B.Pars().MsPeriod)
+			var (member bool; exp int64; app int32)
+			_, member, _, _, app, exp, bb = B.IdPubComplete(to); M.Assert(bb, 101)
+			leTi, _, bb = B.TimeOf(app); M.Assert(bb, 102)
+			minDate = leTi + msPeriod
 			bb = !member && exp >= 0 && exp2 > minDate
 		}
 		if bb { // identity in sandBox or (not member & not leaving & new membership application date later than previous one plus msPeriod)
@@ -893,7 +888,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 			}
 			if bb {
 				dNb++
-				d := &Dossier{MinDate: minDate, PrincCertif: princCertif, ProportionOfSentries: proportionOfSentries, Id: new(string), Hash: new(B.Hash), pub: new(B.Pubkey)}
+				d := &Dossier{LastAppDate: leTi,MinDate: minDate, PrincCertif: princCertif, ProportionOfSentries: proportionOfSentries, Id: new(string), Hash: new(B.Hash), pub: new(B.Pubkey)}
 				l.next = new(cdList); l = l.next
 				l.cd = d
 				var idInBC bool

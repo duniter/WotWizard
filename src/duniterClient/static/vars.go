@@ -107,7 +107,7 @@ MembersFluxPM	Flux of Members per Member
 402membersLossT	Evolution: Losses (list)
 MembersNb	Number of members
 33memLim	Limits: Memberships Limits Date by Date
-minApplicationDate	Wait at least two months between two applications
+minApplicationDate	Wait at least two months after the last application (^0)
 minute	minute(s)
 Missing	Excluded Identities - Needing a new application
 52missingIdentities	Informations: List of Excluded Identities - Needing a new application
@@ -259,7 +259,7 @@ MembersFluxPM	Flux de membres par membre
 402membersLossT	Evolution : Pertes (liste)
 MembersNb	Nombre de membres
 33memLim	Limites : Limites des adhésions par date
-minApplicationDate	Au moins deux mois d'attente entre deux adhésions
+minApplicationDate	Au moins deux mois d'attente après la dernière adhésion (^0)
 minute	minute(s)
 Missing	Exclu(e)s en attente de réadhésion
 52missingIdentities	Informations : Liste des identités exclues en attente de réadhésion

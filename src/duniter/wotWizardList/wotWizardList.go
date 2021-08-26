@@ -399,6 +399,16 @@ func dossierCertsR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Va
 	}
 } //dossierCertsR
 
+func dossierLastAppDateR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
+	switch d := GQ.Unwrap(rootValue, 0).(type) {
+	case *W.Dossier:
+		return G.MakeInt64Value(d.LastAppDate)
+	default:
+		M.Halt(d, 100)
+		return nil
+	}
+} //dossierLastAppDateR
+
 func dossierMinDateR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
 	switch d := GQ.Unwrap(rootValue, 0).(type) {
 	case *W.Dossier:
@@ -443,6 +453,7 @@ func fixFieldResolvers (ts G.TypeSystem) {
 	ts.FixFieldResolver("Dossier", "newcomer", dossierNewcomerR)
 	ts.FixFieldResolver("Dossier", "main_certifs", dossierMainCR)
 	ts.FixFieldResolver("Dossier", "certifications", dossierCertsR)
+	ts.FixFieldResolver("Dossier", "lastAppDate", dossierLastAppDateR)
 	ts.FixFieldResolver("Dossier", "minDate", dossierMinDateR)
 	ts.FixFieldResolver("Dossier", "date", dossierDateR)
 	ts.FixFieldResolver("Dossier", "limit", dossierLimitR)

@@ -30,6 +30,9 @@ import (
 
 const (
 	
+	SpS = "\u00A0" // Short space
+	SpL = SpS + SpS + SpS + SpS // Long space
+	
 	enTimeFormat = "01/02 03:04:05PM 2006"
 	frTimeFormat = "02/01/2006 15:04:05"
 	

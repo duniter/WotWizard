@@ -419,7 +419,7 @@ func printT (a EventsT, now *NowT, title, period string, lang *SM.Lang) *Out {
 	l := make(ListE, la)
 	la--
 	for i, ai := range a {
-		d := fmt.Sprint(block, ": ", ai.Block.Number,  "    ", actual, ": ", BA.Ts2s(ai.Block.Utc0, lang), "    ", median, ": ", BA.Ts2s(ai.Block.Bct, lang))
+		d := fmt.Sprint(block, ": ", ai.Block.Number,  BA.SpL, actual, ": ", BA.Ts2s(ai.Block.Utc0, lang), BA.SpL, median, ": ", BA.Ts2s(ai.Block.Bct, lang))
 		in := make(InOutsT, len(ai.IdList))
 		for j, id := range ai.IdList {
 			w := new(strings.Builder)
@@ -428,7 +428,7 @@ func printT (a EventsT, now *NowT, title, period string, lang *SM.Lang) *Out {
 			} else {
 				fmt.Fprint(w, exit)
 			}
-			fmt.Fprint(w, id.Id.Uid)
+			fmt.Fprint(w, id.Id.Uid, BA.SpS)
 			in[j] = w.String()
 		}
 		l[la - i] = &Evt{Dates: d, InOuts: in, Number: ai.Number}
@@ -447,7 +447,7 @@ func printG (a EventsT, now *NowT, title, period, label, unit string, lang *SM.L
 	}
 	l := make(ListS, len(a))
 	for i, ai := range a {
-		l[i] = fmt.Sprintf("%21.16f    %v", float64(ai.Block.Utc0 - t0) / float64(month), ai.Number)
+		l[i] = fmt.Sprintf("%21.16f%v%v", float64(ai.Block.Utc0 - t0) / float64(month), BA.SpL, ai.Number)
 	}
 	return &Out{Title: t, Now: nowS, Delay: dy, Period: period, Submit: s, ListG: l}
 	
@@ -478,8 +478,8 @@ func printR (a EventsRT, now *NowT, title, period, label, unit string, percent b
 		t0 = a[0].Block.Utc0
 	}
 	for i, ai := range a {
-		lT[i] = fmt.Sprint(BA.Ts2s(ai.Block.Utc0, lang), "    ", ai.Value)
-		lG[i] = fmt.Sprintf("%21.16f    %v", float64(ai.Block.Utc0 - t0) / float64(month), ai.Value)
+		lT[i] = fmt.Sprint(BA.Ts2s(ai.Block.Utc0, lang), BA.SpL, ai.Value)
+		lG[i] = fmt.Sprintf("%21.16f%v%v", float64(ai.Block.Utc0 - t0) / float64(month), BA.SpL, ai.Value)
 	}
 	return &Out{Title: t, Now: nowS, Delay: dy, Period: period, Submit: s, ListT: lT, ListG: lG}
 	

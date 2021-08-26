@@ -214,13 +214,13 @@ func print (limits *Limits, what, title string, lang *SM.Lang) *Disp {
 	ps := make(PropList, len(props))
 	for i, p := range props {
 		w := new(strings.Builder)
-		fmt.Fprint(w, BA.Ts2s(p.prop, lang), "     ")
+		fmt.Fprint(w, BA.Ts2s(p.prop, lang), BA.SpL)
 		if p.aux {
-			fmt.Fprint(w, "  ")
+			fmt.Fprint(w, BA.SpS, BA.SpS)
 		} else {
 			fmt.Fprint(w, BA.OldIcon)
 		}
-		fmt.Fprint(w, p.id)
+		fmt.Fprint(w, p.id, BA.SpS)
 		ps[i] = w.String()
 	}
 	return &Disp{Now: now, Title: t, Ps: ps}

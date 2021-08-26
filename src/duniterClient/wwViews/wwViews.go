@@ -100,6 +100,7 @@ const (
 								}
 							}
 							date
+							lastAppDate
 							minDate
 							expires_on:limit
 							certifications {
@@ -247,6 +248,7 @@ type (
 			}
 		}
 		Date,
+		LastAppDate,
 		MinDate,
 		Expires_on int64
 		Certifications DatedCertifications
@@ -336,7 +338,7 @@ func printByDates (fs Forecasts, lang *SM.Lang) CorpusA {
 			c = &CorpusT{Label: l, Seconds: make(Details, 0)}
 			cs = append(cs, c)
 		}
-		s := fmt.Sprintf("%v%v%v%v%.f%%", f.Id.Uid, "    ", proba, " = ", f.Proba * 100)
+		s := fmt.Sprintf("%v%v%v%v%.f%%", f.Id.Uid, BA.SpL, proba, " = ", f.Proba * 100)
 		c.Seconds = append(c.Seconds, s)
 	}
 	return cs
@@ -359,7 +361,7 @@ func printByNames (fs Forecasts, lang *SM.Lang) CorpusA {
 		} else {
 			d += " "
 		}
-		s := fmt.Sprintf("%v%v%v%v%.f%%", d, "    ", proba, " = ", f.Proba * 100)
+		s := fmt.Sprintf("%v%v%v%v%.f%%", d, BA.SpL, proba, " = ", f.Proba * 100)
 		c.Seconds = append(c.Seconds, s)
 	}
 	return cs
@@ -424,7 +426,7 @@ func printMeta (cds Certifs_DossiersT, lang *SM.Lang) DossCertsT {
 			w := new(strings.Builder)
 			fmt.Fprint(w, lang.Map("#duniterClient:requiredCertsNb", S.Itoa(len(d.Certifications)), S.Itoa(d.Main_certifs)))
 			if d.Date == d.MinDate {
-				fmt.Fprint(w, ". ", lang.Map("#duniterClient:minApplicationDate"))
+				fmt.Fprint(w, ". ", lang.Map("#duniterClient:minApplicationDate", BA.Ts2s(d.LastAppDate, lang)))
 			}
 			sd := w.String()
 			return &DossCertT{First: fi, Second: sd, Certs: PrintCerts(d.Certifications)}

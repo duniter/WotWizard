@@ -69,6 +69,7 @@ const (
 								}
 							}
 							date
+							lastAppDate
 							minDate
 							expires_on:limit
 							certifications {
@@ -213,6 +214,7 @@ type (
 		Main_certifs int
 		Newcomer *IdentityT
 		Date,
+		LastAppDate,
 		MinDate,
 		Expires_on int64
 		Certifications DatedCertifications
@@ -360,7 +362,7 @@ func printFile (f *File, lang *SM.Lang) *DispF {
 				fmt.Fprint(w, lang.Map("#duniterClient:certsNb", S.Itoa(len(d.Certifications))))
 			}
 			if d.Date == d.MinDate && d.Date >= f.Data.Now.Bct {
-				fmt.Fprint(w, ". ", lang.Map("#duniterClient:minApplicationDate"))
+				fmt.Fprint(w, ". ", lang.Map("#duniterClient:minApplicationDate", BA.Ts2s(d.LastAppDate, lang)))
 			}
 			if d.Newcomer.Distance.Dist_ok && d.Main_certifs >= sigQty {
 				fmt.Fprint(w, ". ", lang.Map("#duniterClient:OK"))
@@ -427,7 +429,7 @@ func printPermutations (ps *Perms, lang *SM.Lang) *DispP {
 			if p.After {
 				fmt.Fprint(w, "+")
 			} else {
-				fmt.Fprint(w, " ")
+				fmt.Fprint(w, BA.SpS)
 			}
 			fmt.Fprint(w, "\t", p.Id.Uid)
 			return w.String()

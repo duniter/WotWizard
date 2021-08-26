@@ -227,9 +227,11 @@ const (
 						<p>
 							{{.Member}}
 						</p>
-						<p>
-							{{.Sentry}}
-						</p>
+						{{if .Sentry}}
+							<p>
+								{{.Sentry}}
+							</p>
+						{{end}}
 					{{end}}
 					{{if .Dist}}
 						<p>
@@ -305,84 +307,88 @@ const (
 								</p>
 							</blockquote>
 						</blockquote>
-						<h5>
-							{{.AllCertifiers}}
-						</h5>
-						<p>
-							<blockquote>
-								{{range .ReceivedAllCerts}}
-									{{.}}
-									<br>
-								{{end}}
-							</blockquote>
-						</p>
-						<h5>
-							{{.AllCertifiersIO}}
-						</h5>
-						<p>
-							<blockquote>
-								{{range .ReceivedAllCertsIO}}
-									{{.Uid}}
-									<blockquote>
-										{{range .Hist}}
-											{{.}}
-											<br>
-										{{end}}
-									</blockquote>
-									<br>
-								{{end}}
-							</blockquote>
-						</p>
-						<h5>
-							{{.PresentCertified}}
-						</h5>
-						<blockquote>
+						{{if .AllCertifiers}}
+							<h5>
+								{{.AllCertifiers}}
+							</h5>
 							<p>
-								{{range .SentCerts}}
-									{{.}}
-									<br>
-								{{end}}
+								<blockquote>
+									{{range .ReceivedAllCerts}}
+										{{.}}
+										<br>
+									{{end}}
+								</blockquote>
 							</p>
 							<h5>
-								{{.SortedByDate}}
+								{{.AllCertifiersIO}}
+							</h5>
+							<p>
+								<blockquote>
+									{{range .ReceivedAllCertsIO}}
+										{{.Uid}}
+										<blockquote>
+											{{range .Hist}}
+												{{.}}
+												<br>
+											{{end}}
+										</blockquote>
+										<br>
+									{{end}}
+								</blockquote>
+							</p>
+						{{end}}
+						{{if .PresentCertified}}
+							<h5>
+								{{.PresentCertified}}
 							</h5>
 							<blockquote>
 								<p>
-									{{range .SentByLimits}}
+									{{range .SentCerts}}
 										{{.}}
 										<br>
 									{{end}}
 								</p>
-							</blockquote>
-						</blockquote>
-						<h5>
-							{{.AllCertified}}
-						</h5>
-						<p>
-							<blockquote>
-								{{range .SentAllCerts}}
-									{{.}}
-									<br>
-								{{end}}
-							</blockquote>
-						</p>
-						<h5>
-							{{.AllCertifiedIO}}
-						</h5>
-						<p>
-							<blockquote>
-								{{range .SentAllCertsIO}}
-									{{.Uid}}
-									<blockquote>
-										{{range .Hist}}
+								<h5>
+									{{.SortedByDate}}
+								</h5>
+								<blockquote>
+									<p>
+										{{range .SentByLimits}}
 											{{.}}
 											<br>
 										{{end}}
-									</blockquote>
-									<br>
-								{{end}}
+									</p>
+								</blockquote>
 							</blockquote>
-						</p>
+							<h5>
+								{{.AllCertified}}
+							</h5>
+							<p>
+								<blockquote>
+									{{range .SentAllCerts}}
+										{{.}}
+										<br>
+									{{end}}
+								</blockquote>
+							</p>
+							<h5>
+								{{.AllCertifiedIO}}
+							</h5>
+							<p>
+								<blockquote>
+									{{range .SentAllCertsIO}}
+										{{.Uid}}
+										<blockquote>
+											{{range .Hist}}
+												{{.}}
+												<br>
+											{{end}}
+										</blockquote>
+										<br>
+									{{end}}
+								</blockquote>
+							</p>
+						{{end}}
 					{{end}}
 				{{end}}
 			{{end}}
@@ -659,7 +665,7 @@ func doFind (idso *IdSearchOutput, selectedHash string, distC, qualC, centrC boo
 	if idso == nil {
 		return nil
 	}
-	idNumbers := fmt.Sprint(idso.RevokedNb, " ", lang.Map("#duniterClient:Revokeds"), "    ", idso.MissingNb, " ", lang.Map("#duniterClient:Missings"), "    ", idso.MemberNb, " ", lang.Map("#duniterClient:Members"), "    ", idso.NewcomerNb, " ", lang.Map("#duniterClient:Newcomers"))
+	idNumbers := fmt.Sprint(idso.RevokedNb, " ", lang.Map("#duniterClient:Revokeds"), BA.SpL, idso.MissingNb, " ", lang.Map("#duniterClient:Missings"), BA.SpL, idso.MemberNb, " ", lang.Map("#duniterClient:Members"), BA.SpL, idso.NewcomerNb, " ", lang.Map("#duniterClient:Newcomers"))
 	selectIt := lang.Map("#duniterClient:Select")
 	distChecked := fixChecked(distC)
 	checkDist := lang.Map("#duniterClient:Distance")
@@ -705,51 +711,57 @@ func certs (res *Identity, lang *SM.Lang) *Certifics {
 	es := new(expSort)
 	ts.Sorter = es
 	
-	certifs := res.Sent_certifications
-	sentCertsNb, sentCertsFutNb := countCerts(certifs)
-	presentCertified := fmt.Sprint(lang.Map("#duniterClient:PresentCertified"), " (", sentCertsNb, " + ", sentCertsFutNb, ")")
-	sentCerts := make(ListS, sentCertsNb + sentCertsFutNb)
-	es.exps = make(ListI, len(sentCerts))
-	for i, c := range certifs {
-		if c.Pending {
-			sentCerts[i] = string(newcomerIcon) + " " + c.To.Uid
-		} else {
-			sentCerts[i] = c.To.Uid
-		}
-		es.exps[i] = c.Expires_on
-	}
-	es.ids = make(ListS, len(es.exps))
-	copy(es.ids, sentCerts)
-	ts.QuickSort(0, len(es.ids) - 1)
-	sentByLimits := make(ListS, len(es.ids))
-	for i := 0; i < len(es.ids); i++ {
-		sentByLimits[i] = fmt.Sprint(BA.Ts2s(es.exps[i], lang), "    ", es.ids[i])
-	}
-	allCertified := lang.Map("#duniterClient:AllCertified")
-	sentAllCerts := make(ListS, len(res.All_certified))
-	for i, a := range res.All_certified {
-		sentAllCerts[i] = a.Uid
-	}
-	allCertifiedIO := lang.Map("#duniterClient:AllCertifiedIO")
-	sentAllCertsIO := make(ListCH, len(res.All_certifiedIO))
-	for i, a := range res.All_certifiedIO {
-		sentAllCertsIO[i].Uid = a.Id.Uid
-		h := make(ListS, len(a.Hist))
-		for j, ce := range a.Hist {
-			w := new(strings.Builder)
-			if ce.In {
-				fmt.Fprint(w, "↑")
+	presentCertified := ""
+	allCertified := ""
+	allCertifiedIO := ""
+	var (sentCerts, sentByLimits, sentAllCerts ListS; sentAllCertsIO ListCH)
+	if res.Status != "NEWCOMER" {
+		certifs := res.Sent_certifications
+		sentCertsNb, sentCertsFutNb := countCerts(certifs)
+		presentCertified = fmt.Sprint(lang.Map("#duniterClient:PresentCertified"), " (", sentCertsNb, " + ", sentCertsFutNb, ")")
+		sentCerts = make(ListS, sentCertsNb + sentCertsFutNb)
+		es.exps = make(ListI, len(sentCerts))
+		for i, c := range certifs {
+			if c.Pending {
+				sentCerts[i] = string(newcomerIcon) + " " + c.To.Uid
 			} else {
-				fmt.Fprint(w, "↓")
+				sentCerts[i] = c.To.Uid
 			}
-			b := ce.Block
-			fmt.Fprint(w, "    ", b.Number, " ", BA.Ts2s(b.Bct, lang))
-			h[j] = w.String()
+			es.exps[i] = c.Expires_on
 		}
-		sentAllCertsIO[i].Hist = h
+		es.ids = make(ListS, len(es.exps))
+		copy(es.ids, sentCerts)
+		ts.QuickSort(0, len(es.ids) - 1)
+		sentByLimits = make(ListS, len(es.ids))
+		for i := 0; i < len(es.ids); i++ {
+			sentByLimits[i] = fmt.Sprint(BA.Ts2s(es.exps[i], lang), BA.SpL, es.ids[i])
+		}
+		allCertified = lang.Map("#duniterClient:AllCertified")
+		sentAllCerts = make(ListS, len(res.All_certified))
+		for i, a := range res.All_certified {
+			sentAllCerts[i] = a.Uid
+		}
+		allCertifiedIO = lang.Map("#duniterClient:AllCertifiedIO")
+		sentAllCertsIO = make(ListCH, len(res.All_certifiedIO))
+		for i, a := range res.All_certifiedIO {
+			sentAllCertsIO[i].Uid = a.Id.Uid
+			h := make(ListS, len(a.Hist))
+			for j, ce := range a.Hist {
+				w := new(strings.Builder)
+				if ce.In {
+					fmt.Fprint(w, "↑")
+				} else {
+					fmt.Fprint(w, "↓")
+				}
+				b := ce.Block
+				fmt.Fprint(w, BA.SpL, b.Number, " ", BA.Ts2s(b.Bct, lang))
+				h[j] = w.String()
+			}
+			sentAllCertsIO[i].Hist = h
+		}
 	}
 	
-	certifs = res.Received_certifications.Certifications
+	certifs := res.Received_certifications.Certifications
 	receivedCertsNb, receivedCertsFutNb := countCerts(certifs)
 	presentCertifiers := fmt.Sprint(lang.Map("#duniterClient:PresentCertifiers"), " (", receivedCertsNb, " + ", receivedCertsFutNb, ")")
 	receivedCerts := make(ListS, receivedCertsNb + receivedCertsFutNb)
@@ -767,33 +779,38 @@ func certs (res *Identity, lang *SM.Lang) *Certifics {
 	ts.QuickSort(0, len(es.ids) - 1)
 	receivedByLimits := make(ListS, len(es.ids))
 	for i := 0; i < len(es.ids); i++ {
-		receivedByLimits[i] = fmt.Sprint(BA.Ts2s(es.exps[i], lang), "    ", es.ids[i])
+		receivedByLimits[i] = fmt.Sprint(BA.Ts2s(es.exps[i], lang), BA.SpL, es.ids[i])
 		if es.exps[i] == res.Received_certifications.Limit {
 			receivedByLimits[i] = "→ " + receivedByLimits[i]
 		}
 	}
-	allCertifiers := lang.Map("#duniterClient:AllCertifiers")
-	receivedAllCerts := make(ListS, len(res.All_certifiers))
-	for i, a := range res.All_certifiers {
-		receivedAllCerts[i] = a.Uid
-	}
-	allCertifiersIO := lang.Map("#duniterClient:AllCertifiersIO")
-	receivedAllCertsIO := make(ListCH, len(res.All_certifiersIO))
-	for i, a := range res.All_certifiersIO {
-		receivedAllCertsIO[i].Uid = a.Id.Uid
-		h := make(ListS, len(a.Hist))
-		for j, ce := range a.Hist {
-			w := new(strings.Builder)
-			if ce.In {
-				fmt.Fprint(w, "↑")
-			} else {
-				fmt.Fprint(w, "↓")
-			}
-			b := ce.Block
-			fmt.Fprint(w, "    ", b.Number, " ", BA.Ts2s(b.Bct, lang))
-			h[j] = w.String()
+	allCertifiers := ""
+	allCertifiersIO := ""
+	var (receivedAllCerts ListS; receivedAllCertsIO ListCH)
+	if res.Status != "NEWCOMER" {
+		allCertifiers = lang.Map("#duniterClient:AllCertifiers")
+		receivedAllCerts = make(ListS, len(res.All_certifiers))
+		for i, a := range res.All_certifiers {
+			receivedAllCerts[i] = a.Uid
 		}
-		receivedAllCertsIO[i].Hist = h
+		allCertifiersIO = lang.Map("#duniterClient:AllCertifiersIO")
+		receivedAllCertsIO = make(ListCH, len(res.All_certifiersIO))
+		for i, a := range res.All_certifiersIO {
+			receivedAllCertsIO[i].Uid = a.Id.Uid
+			h := make(ListS, len(a.Hist))
+			for j, ce := range a.Hist {
+				w := new(strings.Builder)
+				if ce.In {
+					fmt.Fprint(w, "↑")
+				} else {
+					fmt.Fprint(w, "↓")
+				}
+				b := ce.Block
+				fmt.Fprint(w, BA.SpL, b.Number, " ", BA.Ts2s(b.Bct, lang))
+				h[j] = w.String()
+			}
+			receivedAllCertsIO[i].Hist = h
+		}
 	}
 	
 	return &Certifics{presentCertifiers, presentCertified, receivedCerts, sentCerts, sortedByDate, receivedByLimits, sentByLimits, allCertifiers, allCertified, receivedAllCerts, sentAllCerts, allCertifiersIO, allCertifiedIO, receivedAllCertsIO, sentAllCertsIO}
@@ -804,7 +821,7 @@ func printHistory (h History, lang *SM.Lang) *Hist {
 		return nil
 	}
 	la := lang.Map("#duniterClient:history")
-	lg := fmt.Sprint("↑  ", lang.Map("#duniterClient:In"), "    ", "↓  ", lang.Map("#duniterClient:Out"))
+	lg := fmt.Sprint("↑  ", lang.Map("#duniterClient:In"), BA.SpL, "↓  ", lang.Map("#duniterClient:Out"))
 	ls := make(ListS, len(h))
 	for i, hi := range h {
 		w := new(strings.Builder)
@@ -814,7 +831,7 @@ func printHistory (h History, lang *SM.Lang) *Hist {
 			fmt.Fprint(w, "↓")
 		}
 		b := hi.Block
-		fmt.Fprint(w, "    ", b.Number, " ", BA.Ts2s(b.Bct, lang))
+		fmt.Fprint(w, BA.SpL, b.Number, " ", BA.Ts2s(b.Bct, lang))
 		ls[i] = w.String()
 	}
 	return &Hist{la, lg, ls}
@@ -823,58 +840,57 @@ func printHistory (h History, lang *SM.Lang) *Hist {
 func get (res *Identity, lang *SM.Lang) *Idty {
 	yes := lang.Map("#duniterClient:yes")
 	no := lang.Map("#duniterClient:no")
-	uid := fmt.Sprint(lang.Map("#duniterClient:Nickname"), "    ", res.Uid)
-	hash := fmt.Sprint(lang.Map("#duniterClient:Hash"), "    ", string(res.Hash))
-	pubkey := fmt.Sprint(lang.Map("#duniterClient:Pubkey"), "    ", string(res.Pubkey))
-	member := fmt.Sprint(lang.Map("#duniterClient:Member"), "    ")
+	uid := fmt.Sprint(lang.Map("#duniterClient:Nickname"), BA.SpL, res.Uid)
+	hash := fmt.Sprint(lang.Map("#duniterClient:Hash"), BA.SpL, string(res.Hash))
+	pubkey := fmt.Sprint(lang.Map("#duniterClient:Pubkey"), BA.SpL, string(res.Pubkey))
+	member := fmt.Sprint(lang.Map("#duniterClient:Member"), BA.SpL)
+	sentry := ""
+	availability := ""
 	if res.Status == "MEMBER" {
 		member += yes
+		sentry = fmt.Sprint(lang.Map("#duniterClient:Sentry"), BA.SpL)
+		if res.Sentry {
+			sentry += yes
+		} else {
+			sentry += no
+		}
+		if res.MinDate != 0 {
+			availability = BA.Ts2s(res.MinDate, lang) + BA.SpL
+		}
+		if res.MinDatePassed {
+			availability += lang.Map("#duniterClient:OK")
+		} else {
+			availability += lang.Map("#duniterClient:KO")
+		}
+		if availability != "" {
+			availability = fmt.Sprint(lang.Map("#duniterClient:Availability"), BA.SpL, availability)
+		}
 	} else {
 		member += no
-	}
-	sentry := fmt.Sprint(lang.Map("#duniterClient:Sentry"), "    ")
-	if res.Sentry {
-		sentry += yes
-	} else {
-		sentry += no
 	}
 	var block string
 	if res.Id_written_block == nil {
 		block = ""
 	} else {
-		block = fmt.Sprint(lang.Map("#duniterClient:Written_block"), "    ", doBlock(res.Id_written_block, lang))
+		block = fmt.Sprint(lang.Map("#duniterClient:Written_block"), BA.SpL, doBlock(res.Id_written_block, lang))
 	}
 	var limitDate string
 	switch res.Status {
 	case "REVOKED":
 		limitDate = BA.Ts2s(BA.Revoked, lang)
 	case "MISSING":
-		limitDate = fmt.Sprint(lang.Map("#duniterClient:AppRLimitDate"), "    ", BA.Ts2s(res.LimitDate, lang))
+		limitDate = fmt.Sprint(lang.Map("#duniterClient:AppRLimitDate"), BA.SpL, BA.Ts2s(res.LimitDate, lang))
 	case "MEMBER":
-		limitDate = fmt.Sprint(lang.Map("#duniterClient:AppMLimitDate"), "    ", BA.Ts2s(res.LimitDate, lang))
+		limitDate = fmt.Sprint(lang.Map("#duniterClient:AppMLimitDate"), BA.SpL, BA.Ts2s(res.LimitDate, lang))
 	case "NEWCOMER":
-		limitDate = fmt.Sprint(lang.Map("#duniterClient:AppNLimitDate"), "    ", BA.Ts2s(res.LimitDate, lang))
+		limitDate = fmt.Sprint(lang.Map("#duniterClient:AppNLimitDate"), BA.SpL, BA.Ts2s(res.LimitDate, lang))
 	default:
 		M.Halt(res.Status, 101)
-	}
-	var availability string
-	if res.MinDate == 0 {
-		availability = ""
-	} else {
-		availability = BA.Ts2s(res.MinDate, lang) + "    "
-	}
-	if res.MinDatePassed {
-		availability += lang.Map("#duniterClient:OK")
-	} else {
-		availability += lang.Map("#duniterClient:KO")
-	}
-	if availability != "" {
-		availability = fmt.Sprint(lang.Map("#duniterClient:Availability"), "    ", availability)
 	}
 	var pending string
 	isPending := res.Membership_pending && (res.Status == "MISSING" || res.Status == "MEMBER")
 	if isPending {
-		pending = fmt.Sprint(lang.Map("#duniterClient:pending"), "    ", lang.Map("#duniterClient:LimitDate"), "    ", BA.Ts2s(res.Membership_pending_limitDate, lang))
+		pending = fmt.Sprint(lang.Map("#duniterClient:pending"), BA.SpL, lang.Map("#duniterClient:LimitDate"), BA.SpL, BA.Ts2s(res.Membership_pending_limitDate, lang))
 	} else {
 		pending = ""
 	}
@@ -888,7 +904,7 @@ func notTooFar (res *Identity, lang *SM.Lang) string {
 	}
 	d := res.Distance
 	b := new(strings.Builder)
-	fmt.Fprint(b, lang.Map("#duniterClient:Distance"), "    ", strconv.FormatFloat(d.Value, 'f', 2, 64), "%", "    ")
+	fmt.Fprint(b, lang.Map("#duniterClient:Distance"), BA.SpL, strconv.FormatFloat(d.Value, 'f', 2, 64), "%", BA.SpL)
 	if d.Dist_ok {
 		fmt.Fprint(b, lang.Map("#duniterClient:OK"))
 	} else {
@@ -901,14 +917,14 @@ func calcQuality (res *Identity, lang *SM.Lang) string {
 	if res.Quality == 0 {
 		return ""
 	}
-	return fmt.Sprint(lang.Map("#duniterClient:Quality"), "    ", strconv.FormatFloat(res.Quality, 'f', 2, 64), "%")
+	return fmt.Sprint(lang.Map("#duniterClient:Quality"), BA.SpL, strconv.FormatFloat(res.Quality, 'f', 2, 64), "%")
 } //calcQuality
 
 func calcCentrality (res *Identity, lang *SM.Lang) string {
 	if res.Centrality == 0 {
 		return ""
 	}
-	return fmt.Sprint(lang.Map("#duniterClient:Centrality"), "    ", strconv.FormatFloat(res.Centrality, 'f', 2, 64), "%")
+	return fmt.Sprint(lang.Map("#duniterClient:Centrality"), BA.SpL, strconv.FormatFloat(res.Centrality, 'f', 2, 64), "%")
 } //calcCentrality
 
 func doFix (res *Identity, lang *SM.Lang) *Fix {
@@ -1009,13 +1025,17 @@ func end (name string, temp *template.Template, r *http.Request, w http.Response
 	fd := new(FindRes)
 	J.ApplyTo(j, fd)
 	if !isFix {
-		out := printFind(t, hint, selHash, reC, miC, meC, neC, dC, qC, cC, fd, lang)
-		err := temp.ExecuteTemplate(w, name, out); M.Assert(err == nil, err, 102)
-		return
+		if fd.Data.IdSearch == nil || len(fd.Data.IdSearch.Ids) != 1 {
+			out := printFind(t, hint, selHash, reC, miC, meC, neC, dC, qC, cC, fd, lang)
+			err := temp.ExecuteTemplate(w, name, out); M.Assert(err == nil, err, 102)
+			return
+		}
+		selHash = string(fd.Data.IdSearch.Ids[0].Hash)
+	} else {
+		dC = r.PostFormValue("dist") != ""
+		qC = r.PostFormValue("qual") != ""
+		cC = r.PostFormValue("centr") != ""
 	}
-	dC = r.PostFormValue("dist") != ""
-	qC = r.PostFormValue("qual") != ""
-	cC = r.PostFormValue("centr") != ""
 	mk = J.NewMaker()
 	mk.StartObject()
 	mk.PushString(selHash)
