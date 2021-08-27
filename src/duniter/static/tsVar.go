@@ -426,9 +426,6 @@ type Dossier {
 	"External certifications"
 	certifications: [DatedCertification!]!
 	
-	"Last membership application date"
-	lastAppDate: Int64!
-	
 	"'ParameterName.msPeriod' after the last membership application (or 0 if none)"
 	minDate: Int64!
 	

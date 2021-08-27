@@ -64,7 +64,6 @@ type (
 	// Dossier of external certifications
 	Dossier struct {
 		date, // Entry date
-		LastAppDate, // Last membership application date
 		MinDate, // Minimum date: last membership application + msPeriod
 		limit int64 // Expiration date
 		Id Uid // Certified identity
@@ -888,7 +887,7 @@ func FillFile (minCertifs int) (f File, cNb, dNb int) {
 			}
 			if bb {
 				dNb++
-				d := &Dossier{LastAppDate: leTi,MinDate: minDate, PrincCertif: princCertif, ProportionOfSentries: proportionOfSentries, Id: new(string), Hash: new(B.Hash), pub: new(B.Pubkey)}
+				d := &Dossier{MinDate: minDate, PrincCertif: princCertif, ProportionOfSentries: proportionOfSentries, Id: new(string), Hash: new(B.Hash), pub: new(B.Pubkey)}
 				l.next = new(cdList); l = l.next
 				l.cd = d
 				var idInBC bool

@@ -63,13 +63,15 @@ const (
 							main_certifs
 							newcomer {
 								uid
+								lastApplication {
+									lastAppDate: bct
+								}
 								distance {
 									value
 									dist_ok
 								}
 							}
 							date
-							lastAppDate
 							minDate
 							expires_on:limit
 							certifications {
@@ -191,6 +193,9 @@ type (
 	
 	IdentityT struct {
 		Uid string
+		LastApplication struct {
+			LastAppDate int64
+		}
 		Distance struct {
 			Value float64
 			Dist_ok bool
@@ -214,7 +219,6 @@ type (
 		Main_certifs int
 		Newcomer *IdentityT
 		Date,
-		LastAppDate,
 		MinDate,
 		Expires_on int64
 		Certifications DatedCertifications
@@ -362,7 +366,7 @@ func printFile (f *File, lang *SM.Lang) *DispF {
 				fmt.Fprint(w, lang.Map("#duniterClient:certsNb", S.Itoa(len(d.Certifications))))
 			}
 			if d.Date == d.MinDate && d.Date >= f.Data.Now.Bct {
-				fmt.Fprint(w, ". ", lang.Map("#duniterClient:minApplicationDate", BA.Ts2s(d.LastAppDate, lang)))
+				fmt.Fprint(w, ". ", lang.Map("#duniterClient:minApplicationDate", BA.Ts2s(d.Newcomer.LastApplication.LastAppDate, lang)))
 			}
 			if d.Newcomer.Distance.Dist_ok && d.Main_certifs >= sigQty {
 				fmt.Fprint(w, ". ", lang.Map("#duniterClient:OK"))

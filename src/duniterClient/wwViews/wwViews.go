@@ -95,12 +95,14 @@ const (
 							main_certifs
 							newcomer {
 								uid
+								lastApplication {
+									lastAppDate: bct
+								}
 								distance {
 									value
 								}
 							}
 							date
-							lastAppDate
 							minDate
 							expires_on:limit
 							certifications {
@@ -243,12 +245,14 @@ type (
 		Main_certifs int
 		Newcomer struct {
 			Uid string
+			LastApplication struct {
+				LastAppDate int64
+			}
 			Distance struct {
 				Value float64
 			}
 		}
 		Date,
-		LastAppDate,
 		MinDate,
 		Expires_on int64
 		Certifications DatedCertifications
@@ -426,7 +430,7 @@ func printMeta (cds Certifs_DossiersT, lang *SM.Lang) DossCertsT {
 			w := new(strings.Builder)
 			fmt.Fprint(w, lang.Map("#duniterClient:requiredCertsNb", S.Itoa(len(d.Certifications)), S.Itoa(d.Main_certifs)))
 			if d.Date == d.MinDate {
-				fmt.Fprint(w, ". ", lang.Map("#duniterClient:minApplicationDate", BA.Ts2s(d.LastAppDate, lang)))
+				fmt.Fprint(w, ". ", lang.Map("#duniterClient:minApplicationDate", BA.Ts2s(d.Newcomer.LastApplication.LastAppDate, lang)))
 			}
 			sd := w.String()
 			return &DossCertT{First: fi, Second: sd, Certs: PrintCerts(d.Certifications)}
