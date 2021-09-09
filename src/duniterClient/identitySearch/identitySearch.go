@@ -296,7 +296,7 @@ const (
 								{{end}}
 							</p>
 							<h5>
-								{{.SortedByDate}}
+								{{.SortedByDateL}}
 							</h5>
 							<blockquote>
 								<p>
@@ -559,6 +559,7 @@ type (
 		PresentCertified string
 		ReceivedCerts,
 		SentCerts ListS
+		SortedByDateL,
 		SortedByDate string
 		ReceivedByLimits,
 		SentByLimits ListS
@@ -708,6 +709,10 @@ func certs (res *Identity, lang *SM.Lang) *Certifics {
 	//certs
 	var ts sort.TS
 	sortedByDate := lang.Map("#duniterClient:SortedByCExpDates")
+	sortedByDateL := sortedByDate
+	if res.Status == "MISSING" && res.Received_certifications.Limit != 0 || res.Status == "MEMBER" {
+		sortedByDateL = lang.Map("#duniterClient:SortedByCExpDatesL")
+	}
 	es := new(expSort)
 	ts.Sorter = es
 	
@@ -813,7 +818,7 @@ func certs (res *Identity, lang *SM.Lang) *Certifics {
 		}
 	}
 	
-	return &Certifics{presentCertifiers, presentCertified, receivedCerts, sentCerts, sortedByDate, receivedByLimits, sentByLimits, allCertifiers, allCertified, receivedAllCerts, sentAllCerts, allCertifiersIO, allCertifiedIO, receivedAllCertsIO, sentAllCertsIO}
+	return &Certifics{presentCertifiers, presentCertified, receivedCerts, sentCerts, sortedByDateL, sortedByDate, receivedByLimits, sentByLimits, allCertifiers, allCertified, receivedAllCerts, sentAllCerts, allCertifiersIO, allCertifiedIO, receivedAllCertsIO, sentAllCertsIO}
 } //certs
 
 func printHistory (h History, lang *SM.Lang) *Hist {

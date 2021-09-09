@@ -136,7 +136,7 @@ Pubkey	Public Key
 21qualities	Properties: Qualities
 qualities	Qualities
 Quality	Quality
-requiredCertsNb	^0 certifications, at least ^1 needed for distance rule
+requiredCertsNb	^0 certifications, ^1 needed for distance rule
 Revoked	Revoked
 51revokedIdentities	Informations: List of Revoked Identities
 RevokedM	Revoked Identities
@@ -154,6 +154,7 @@ Sentry	Sentry
 Server	Server Version: 
 ShowFile	Dossier
 SortedByCExpDates	Sorted by Expiration Dates of Certifications
+SortedByCExpDatesL	Sorted by Expiration Dates of Certifications (→: limit date)
 Threshold	Threshold
 TypeUidOrPubkey	Start of Nickname or Public Key
 Utc	Blockchain Actual Time
@@ -288,7 +289,7 @@ Pubkey	Clef publique
 21qualities	Propriétés : Qualités
 qualities	Qualités
 Quality	Qualité
-requiredCertsNb	^0 certifications, ^1 au moins nécessaires pour la règle de distance
+requiredCertsNb	^0 certifications, ^1 nécessaires pour la règle de distance
 Revoked	Révoqué(e)
 51revokedIdentities	Informations : Liste des identités révoquées
 RevokedM	Identités révoquées
@@ -306,6 +307,7 @@ Sentry	Référent
 Server	Version serveur : 
 ShowFile	Fichier
 SortedByCExpDates	Tri par dates d'expiration des certifications
+SortedByCExpDatesL	Tri par dates d'expiration des certifications (→ : date limite)
 Threshold	Seuil
 TypeUidOrPubkey	Début de pseudo ou de clef publique
 Utc	Temps réel de la chaîne de blocs

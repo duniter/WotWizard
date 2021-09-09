@@ -131,7 +131,7 @@ func (i1 *idUidE) Compare (i2 A.Comparer) A.Comp {
 		return A.Gt
 	}
 	return A.Eq
-}
+} //Compare
 
 func (i1 *idPubE) Compare (i2 A.Comparer) A.Comp {
 	ii2 := i2.(*idPubE)
@@ -148,7 +148,7 @@ func (i1 *idPubE) Compare (i2 A.Comparer) A.Comp {
 		return A.Gt
 	}
 	return A.Eq
-}
+} //Compare
 
 func (i1 *idHashE) Compare (i2 A.Comparer) A.Comp {
 	ii2 := i2.(*idHashE)
@@ -159,7 +159,7 @@ func (i1 *idHashE) Compare (i2 A.Comparer) A.Comp {
 		return A.Gt
 	}
 	return A.Eq
-}
+} //Compare
 
 func (c1 *certFromE) Compare (c2 A.Comparer) A.Comp {
 	cc2 := c2.(*certFromE)
@@ -170,7 +170,7 @@ func (c1 *certFromE) Compare (c2 A.Comparer) A.Comp {
 		return A.Gt
 	}
 	return A.Eq
-}
+} //Compare
 
 func (c1 *certToE) Compare (c2 A.Comparer) A.Comp {
 	cc2 := c2.(*certToE)
@@ -181,7 +181,7 @@ func (c1 *certToE) Compare (c2 A.Comparer) A.Comp {
 		return A.Gt
 	}
 	return A.Eq
-}
+} //Compare
 
 // hash -> identity
 func idHashId (hash Hash) *identity {
@@ -190,7 +190,7 @@ func idHashId (hash Hash) *identity {
 		return e.Val().(*idHashE).identity
 	}
 	return nil
-}
+} //idHashId
 
 // hash -> identity
 func IdHash (hash Hash) (inBC bool, pubkey Pubkey, uid string, bnb int32, expires_on int64, ok bool) {
@@ -204,19 +204,19 @@ func IdHash (hash Hash) (inBC bool, pubkey Pubkey, uid string, bnb int32, expire
 		expires_on = id.expires_on
 	}
 	return
-}
+} //IdHash
 
 // Number of identities
 func IdLen () int {
 	return idHashT.NumberOfElems()
-}
+} //IdLen
 
 // Position next identity's uid for IdNextUid
 func IdPosUid (uid string) *A.Elem {
 	pos, _, _ := idUidT.SearchNext(&idUidE{&identity{uid: uid, hash: ""}})
 	pos = idUidT.Previous(pos)
 	return pos
-}
+} //IdPosUid
 
 // Browse all identity's uid(s) lexicographically step by step
 func IdNextUid (first bool, pos **A.Elem) (uid string, hash Hash, ok bool) {
@@ -231,14 +231,14 @@ func IdNextUid (first bool, pos **A.Elem) (uid string, hash Hash, ok bool) {
 		hash = id.hash
 	}
 	return
-}
+} //IdNextUid
 
 // Position next identity's pubkey for IdNextPubkey
 func IdPosPubkey (pubkey Pubkey) *A.Elem {
 	pos, _, _ := idPubT.SearchNext(&idPubE{&identity{pubkey: pubkey, hash: ""}})
 	pos = idPubT.Previous(pos)
 	return pos
-}
+} //IdPosPubkey
 
 // Browse all identity's pubkey(s)  step by step
 func IdNextPubkey (first bool, pos **A.Elem) (pubkey Pubkey, hash Hash, ok bool) {
@@ -253,14 +253,14 @@ func IdNextPubkey (first bool, pos **A.Elem) (pubkey Pubkey, hash Hash, ok bool)
 		hash = id.hash
 	}
 	return
-}
+} //IdNextPubkey
 
 // Position next identity's hash for IdNextHash
 func IdPosHash (hash Hash) *A.Elem {
 	pos, _, _ := idHashT.SearchNext(&idHashE{&identity{hash: hash}})
 	pos = idHashT.Previous(pos)
 	return pos
-}
+} //IdPosHash
 
 // Browse all identity's hash(es)  step by step
 func IdNextHash (first bool, pos **A.Elem) (hash Hash, ok bool) {
@@ -273,7 +273,7 @@ func IdNextHash (first bool, pos **A.Elem) (hash Hash, ok bool) {
 		hash = (*pos).Val().(*idHashE).hash
 	}
 	return
-}
+} //IdNextHash
 
 // (Pubkey, Hash) -> certification
 func certC (from Pubkey, toHash Hash) *certification {
@@ -286,7 +286,7 @@ func certC (from Pubkey, toHash Hash) *certification {
 		}
 	}
 	return nil
-}
+} //certC
 
 // (Pubkey, Hash) -> certification
 func Cert (from Pubkey, toHash Hash) (to Pubkey, bnb int32, expires_on int64, ok bool) {
@@ -298,7 +298,7 @@ func Cert (from Pubkey, toHash Hash) (to Pubkey, bnb int32, expires_on int64, ok
 		expires_on = c.expires_on
 	}
 	return
-}
+} //Cert
 
 // Pubkey -> head of subtree
 func CertFrom (from Pubkey, pos *CertPos) (ok bool) {
@@ -310,7 +310,7 @@ func CertFrom (from Pubkey, pos *CertPos) (ok bool) {
 		pos.posT = nil
 	}
 	return
-}
+} //CertFrom
 
 // Hash -> head of subtree
 func CertTo (toHash Hash, pos *CertPos) (ok bool) {
@@ -322,7 +322,7 @@ func CertTo (toHash Hash, pos *CertPos) (ok bool) {
 		pos.posT = nil
 	}
 	return
-}
+} //CertTo
 
 // Number of elements in subtree
 func (pos *CertPos) CertPosLen () int {
@@ -331,7 +331,7 @@ func (pos *CertPos) CertPosLen () int {
 		return 0
 	}
 	return pos.posT.NumberOfElems()
-}
+} //CertPosLen
 
 // Browse all certification(s) in a subtree step by step
 func (pos *CertPos) CertNextPos () (from Pubkey, toHash Hash, ok bool) {
@@ -348,7 +348,7 @@ func (pos *CertPos) CertNextPos () (from Pubkey, toHash Hash, ok bool) {
 			}
 		}
 		return
-	}
+	} //posCert
 	
 	ok = pos.posT != nil
 	if ok {
@@ -361,12 +361,12 @@ func (pos *CertPos) CertNextPos () (from Pubkey, toHash Hash, ok bool) {
 		}
 	}
 	return
-}
+} //CertNextPos
 
 // Number of certifiers who certified in sandbox
 func CertFromLen () int {
 	return certFromT.NumberOfElems()
-}
+} //CertFromLen
 
 // Browse all subtrees for all from Pubkey step by step
 func CertNextFrom (first bool, pos *CertPos, p **A.Elem) (ok bool) {
@@ -383,12 +383,12 @@ func CertNextFrom (first bool, pos *CertPos, p **A.Elem) (ok bool) {
 		pos.posT = nil
 	}
 	return
-}
+} //CertNextFrom
 
 // Number of certifiers who certified in sandbox
 func CertToLen () int {
 	return certToT.NumberOfElems()
-}
+} //CertToLen
 
 // Browse all subtrees for all from Pubkey step by step
 func CertNextTo (first bool, pos *CertPos, p **A.Elem) (ok bool) {
@@ -405,14 +405,14 @@ func CertNextTo (first bool, pos *CertPos, p **A.Elem) (ok bool) {
 		pos.posT = nil
 	}
 	return
-}
+} //CertNextTo
 
 // Extract hash out of buid
 func extractBlockId (buid string) Hash {
 	i := strings.Index(buid, "-")
 	b := []byte(buid)
 	return Hash(string(b[i + 1:]))
-}
+} //extractBlockId
 
 // Scan the membership and the idty tables in the Duniter database and build idHashT, idPubT and idUidT; remove all items which reference a forked block
 func membershipIds (d *Q.DB) {
@@ -497,7 +497,7 @@ func membershipIds (d *Q.DB) {
 		_, b, _ = idPubT.SearchIns(&idPubE{identity: idH.identity}); M.Assert(!b, 111)
 		e = idHashT.Next(e);
 	}
-}
+} //membershipIds
 
 // Builds certFromT and certToT from the Duniter database; remove all certifications where block_hash is in a fork
 func certifications (d *Q.DB) {
@@ -535,7 +535,7 @@ func certifications (d *Q.DB) {
 			e.Val().(*certToE).list.SearchIns(&certFromE{certification: c})
 		}
 	}
-}
+} //certifications
 
 func export () {
 	mk := J.NewMaker()
@@ -595,7 +595,7 @@ func export () {
 	mk.BuildObject()
 	f, err := os.Create(sBase); M.Assert(err == nil, err, 102)
 	mk.GetJson().Write(f)
-}
+} //export
 
 func importSb (... interface{}) {
 	sd := new(SandboxData)
@@ -628,7 +628,7 @@ func importSb (... interface{}) {
 			_, b, _ = e.Val().(*certToE).list.SearchIns(&certFromE{certification: &c}); M.Assert(!b, 108)
 		}
 	}
-}
+} //importSb
 
 // Scan the sandbox in the Duniter database
 func scan (... interface{}) {
@@ -640,9 +640,9 @@ func scan (... interface{}) {
 	certifications(d)
 	export()
 	BA.Lg.Println("Sandbox updated")
-}
+} //scan
 
 func Initialize () {
 	B.AddUpdateProcUpdt(scan)
 	B.FixSandBoxFUpdt(importSb)
-}
+} //Initialize
