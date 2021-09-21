@@ -67,7 +67,7 @@ type (
 		list *A.Tree
 	}
 	
-	certToE struct { // Sorted by to
+	certToE struct { // Sorted by toHash
 		*certification
 		list *A.Tree
 	}
@@ -414,6 +414,34 @@ func extractBlockId (buid string) Hash {
 	return Hash(string(b[i + 1:]))
 } //extractBlockId
 
+// Remove no more valid membership applications in 'idHashT', because they expired, or identities are now in blockchain as members or revoked, or their uids ot pubkeys are already in blockchain
+func pruneMembershipIds () {
+	now := B.Now()
+	e := idHashT.Next(nil)
+	for e != nil {
+		ee := idHashT.Next(e)
+		idH := e.Val().(*idHashE)
+		old := now >= idH.expires_on
+		if !old {
+			pub, inBC := B.IdHash(idH.hash)
+			if inBC {
+				_, member, _, _, _, limitDate, b := B.IdPubComplete(pub); M.Assert(b, 100)
+				old = member || limitDate == BA.Revoked
+			}
+		}
+		if !old {
+			_, old = B.IdPub(idH.pubkey)
+		}
+		if !old {
+			_, old = B.IdUid(idH.uid)
+		}
+		if old {
+			b := idHashT.Delete(idH); M.Assert(b, 101)
+		}
+		e = ee
+	}
+} //pruneMembershipIds
+
 // Scan the membership and the idty tables in the Duniter database and build idHashT, idPubT and idUidT; remove all items which reference a forked block
 func membershipIds (d *Q.DB) {
 	// Membership applications
@@ -445,7 +473,6 @@ func membershipIds (d *Q.DB) {
 			tr.Delete(idH)
 		}
 	}
-	idHashT = A.New()
 	e := tr.Next(nil)
 	for e != nil { // For every membership applications
 		idH := e.Val().(*idHashE)
@@ -453,7 +480,7 @@ func membershipIds (d *Q.DB) {
 			if uid, b, _, _, _, exp, ok := B.IdPubComplete(p); ok && !b && exp != BA.Revoked { // ... and if no more member but not revoked
 				M.Assert(uid == idH.uid, 112)
 				id := &identity{inBC: true, hash: idH.hash, pubkey: p, uid: uid, bnb: idH.bnb, expires_on: M.Min64(M.Abs64(exp), idH.expires_on)}
-				_, b, _ = idHashT.SearchIns(&idHashE{identity: id}); M.Assert(!b, 104)
+				idHashT.SearchIns(&idHashE{identity: id})
 			}
 		} else {
 			_, ok := B.IdPub(idH.pubkey)
@@ -481,7 +508,7 @@ func membershipIds (d *Q.DB) {
 					if !r {
 						M.Assert(Pubkey(pubkey) == idH.pubkey && uid == idH.uid, 113)
 						id := &identity{inBC: false, hash: idH.hash, pubkey: Pubkey(pubkey), uid: uid, bnb: idH.bnb, expires_on: M.Min64(idH.expires_on, expires_on)}
-						_, b, _ := idHashT.SearchIns(&idHashE{identity: id}); M.Assert(!b, 109)
+						idHashT.SearchIns(&idHashE{identity: id})
 					}
 				}
 			}
@@ -499,12 +526,59 @@ func membershipIds (d *Q.DB) {
 	}
 } //membershipIds
 
+// Remove no more valid certifications in 'certFromT' and 'certToT', because they expired, or they are in blockchain and were written in blockchain after they were written in sandbox, or their receivers are no more in sandbox nor in blockchain, or their senders are no more members
+func pruneCertifications () {
+	now := B.Now()
+	e := certFromT.Next(nil)
+	for e != nil {
+		ee := certFromT.Next(e)
+		cF := e.Val().(*certFromE)
+		cTT := cF.list
+		f := cTT.Next(nil)
+		for f != nil {
+			ff := cTT.Next(f)
+			cT := f.Val().(*certToE)
+			c := cT.certification
+			old := now >= c.expires_on
+			if !old {
+				bnbBC, _, inBC := B.Cert(c.from, c.to)
+				old = inBC && bnbBC >= c.bnb
+			}
+			if !old {
+				old = idHashId(c.toHash) == nil
+				if old {
+					_, inBC := B.IdPub(c.to)
+					old = !inBC
+				}
+			}
+			if !old {
+				_, member, _, _, _, _, inBC := B.IdPubComplete(c.from); M.Assert(inBC, 100)
+				old = !member
+			}
+			if old {
+				b := cTT.Delete(cT); M.Assert(b, 100)
+				if cTT.NumberOfElems() == 0 {
+					b = certFromT.Delete(cF); M.Assert(b, 101)
+				}
+				g, b, _ := certToT.Search(&certToE{certification: c}); M.Assert(b, 102)
+				cT := g.Val().(*certToE)
+				cFT := cT.list
+				b = cFT.Delete(&certFromE{certification: c}); M.Assert(b, 103)
+				if cFT.NumberOfElems() == 0 {
+					b = certToT.Delete(cT); M.Assert(b, 104)
+				}
+			}
+			f = ff
+		}
+		e = ee
+	}
+} //pruneCertifications
+
 // Builds certFromT and certToT from the Duniter database; remove all certifications where block_hash is in a fork
 func certifications (d *Q.DB) {
 	rows, err := d.Query("SELECT [from], [to], target, block_number, expires_on FROM cert INNER JOIN block ON cert.block_hash = block.hash WHERE NOT block.fork")
 	M.Assert(err == nil, err, 100)
 	now := B.Now()
-	certFromT = A.New(); certToT = A.New()
 	for rows.Next() {
 		var (
 			f,
@@ -636,7 +710,9 @@ func scan (... interface{}) {
 	d, err := Q.Open(B.Driver(), BA.DuniBase)
 	M.Assert(err == nil, err, 100)
 	defer d.Close()
+	pruneMembershipIds()
 	membershipIds(d)
+	pruneCertifications()
 	certifications(d)
 	export()
 	BA.Lg.Println("Sandbox updated")

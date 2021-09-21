@@ -88,7 +88,7 @@ LossesFlux	Flux of Losses
 LossesFluxPM	Flux of Losses per Member
 Mean	Mean
 Median	Median
-Member	Member
+MEMBER	MEMBER
 53memberIdentities	Informations: Members List
 Members	Members
 404membersCountFlux	Evolution: Flux of Members (graphics)
@@ -109,12 +109,14 @@ MembersNb	Number of members
 33memLim	Limits: Memberships Limits Date by Date
 minApplicationDate	Wait at least two months after the last application (^0)
 minute	minute(s)
+MISSING	MISSING
 Missing	Excluded Identities - Needing a new application
 52missingIdentities	Informations: List of Excluded Identities - Needing a new application
 MissingNb	Number of Excluded Identities
 Missings	Excluded
 month	month
 Never	Never
+NEWCOMER	NEWCOMER
 54newcomerIdentities	Informations: List of Newcomers
 Newcomers	Newcomers
 newcomers	Pending Dossiers
@@ -137,6 +139,7 @@ Pubkey	Public Key
 qualities	Qualities
 Quality	Quality
 requiredCertsNb	^0 certifications, ^1 needed for distance rule
+REVOKED	REVOKED
 Revoked	Revoked
 51revokedIdentities	Informations: List of Revoked Identities
 RevokedM	Revoked Identities
@@ -155,6 +158,7 @@ Server	Server Version:
 ShowFile	Dossier
 SortedByCExpDates	Sorted by Expiration Dates of Certifications
 SortedByCExpDatesL	Sorted by Expiration Dates of Certifications (→: limit date)
+Status	Status
 Threshold	Threshold
 TypeUidOrPubkey	Start of Nickname or Public Key
 Utc	Blockchain Actual Time
@@ -241,7 +245,7 @@ LossesFlux	Flux de pertes
 LossesFluxPM	Flux de pertes par membre
 Mean	Moyenne
 Median	Médiane
-Member	Membre
+MEMBER	MEMBRE
 53memberIdentities	Informations : Liste des membres
 Members	Membres
 404membersCountFlux	Evolution : Flux de membres (graphique)
@@ -262,12 +266,14 @@ MembersNb	Nombre de membres
 33memLim	Limites : Limites des adhésions par date
 minApplicationDate	Au moins deux mois d'attente après la dernière adhésion (^0)
 minute	minute(s)
+MISSING	EXCLU(E)
 Missing	Exclu(e)s en attente de réadhésion
 52missingIdentities	Informations : Liste des identités exclues en attente de réadhésion
 MissingNb	Nombre des exclu(e)s
 Missings	Exclu(e)s
 month	mois
 Never	Jamais
+NEWCOMER	ARRIVANT(E)
 54newcomerIdentities	Informations : Liste des arrivant(e)s
 Newcomers	Arrivant(e)s
 newcomers	dossiers en attente
@@ -290,6 +296,7 @@ Pubkey	Clef publique
 qualities	Qualités
 Quality	Qualité
 requiredCertsNb	^0 certifications, ^1 nécessaires pour la règle de distance
+REVOKED	RÉVOQUÉ(E)
 Revoked	Révoqué(e)
 51revokedIdentities	Informations : Liste des identités révoquées
 RevokedM	Identités révoquées
@@ -308,6 +315,7 @@ Server	Version serveur :
 ShowFile	Fichier
 SortedByCExpDates	Tri par dates d'expiration des certifications
 SortedByCExpDatesL	Tri par dates d'expiration des certifications (→ : date limite)
+Status	Statut
 Threshold	Seuil
 TypeUidOrPubkey	Début de pseudo ou de clef publique
 Utc	Temps réel de la chaîne de blocs

@@ -225,7 +225,7 @@ const (
 							{{.Hash}}
 						</p>
 						<p>
-							{{.Member}}
+							{{.Status}}
 						</p>
 						{{if .Sentry}}
 							<p>
@@ -254,9 +254,11 @@ const (
 								{{.Block}}
 							</p>
 						{{end}}
-						<p>
-							{{.LimitDate}}
-						</p>
+						{{if .LimitDate}}
+							<p>
+								{{.LimitDate}}
+							</p>
+						{{end}}
 						{{if .Availability}}
 							<p>
 								{{.Availability}}
@@ -583,7 +585,7 @@ type (
 		Uid,
 		Pubkey,
 		Hash,
-		Member,
+		Status,
 		Sentry,
 		Block, 
 		LimitDate,
@@ -728,9 +730,9 @@ func certs (res *Identity, lang *SM.Lang) *Certifics {
 		es.exps = make(ListI, len(sentCerts))
 		for i, c := range certifs {
 			if c.Pending {
-				sentCerts[i] = string(newcomerIcon) + " " + c.To.Uid
+				sentCerts[i] = string(newcomerIcon) + " " + c.To.Uid + BA.SpS
 			} else {
-				sentCerts[i] = c.To.Uid
+				sentCerts[i] = c.To.Uid + BA.SpS
 			}
 			es.exps[i] = c.Expires_on
 		}
@@ -744,7 +746,7 @@ func certs (res *Identity, lang *SM.Lang) *Certifics {
 		allCertified = lang.Map("#duniterClient:AllCertified")
 		sentAllCerts = make(ListS, len(res.All_certified))
 		for i, a := range res.All_certified {
-			sentAllCerts[i] = a.Uid
+			sentAllCerts[i] = a.Uid + BA.SpS
 		}
 		allCertifiedIO = lang.Map("#duniterClient:AllCertifiedIO")
 		sentAllCertsIO = make(ListCH, len(res.All_certifiedIO))
@@ -773,9 +775,9 @@ func certs (res *Identity, lang *SM.Lang) *Certifics {
 	es.exps = make(ListI, len(receivedCerts))
 	for i, c := range certifs {
 		if c.Pending {
-			receivedCerts[i] = string(newcomerIcon) + " " + c.From.Uid
+			receivedCerts[i] = string(newcomerIcon) + " " + c.From.Uid + BA.SpS
 		} else {
-			receivedCerts[i] = c.From.Uid
+			receivedCerts[i] = c.From.Uid + BA.SpS
 		}
 		es.exps[i] = c.Expires_on
 	}
@@ -796,7 +798,7 @@ func certs (res *Identity, lang *SM.Lang) *Certifics {
 		allCertifiers = lang.Map("#duniterClient:AllCertifiers")
 		receivedAllCerts = make(ListS, len(res.All_certifiers))
 		for i, a := range res.All_certifiers {
-			receivedAllCerts[i] = a.Uid
+			receivedAllCerts[i] = a.Uid + BA.SpS
 		}
 		allCertifiersIO = lang.Map("#duniterClient:AllCertifiersIO")
 		receivedAllCertsIO = make(ListCH, len(res.All_certifiersIO))
@@ -848,11 +850,10 @@ func get (res *Identity, lang *SM.Lang) *Idty {
 	uid := fmt.Sprint(lang.Map("#duniterClient:Nickname"), BA.SpL, res.Uid)
 	hash := fmt.Sprint(lang.Map("#duniterClient:Hash"), BA.SpL, string(res.Hash))
 	pubkey := fmt.Sprint(lang.Map("#duniterClient:Pubkey"), BA.SpL, string(res.Pubkey))
-	member := fmt.Sprint(lang.Map("#duniterClient:Member"), BA.SpL)
+	status := fmt.Sprint(lang.Map("#duniterClient:Status"), BA.SpL, lang.Map("#duniterClient:" + res.Status))
 	sentry := ""
 	availability := ""
 	if res.Status == "MEMBER" {
-		member += yes
 		sentry = fmt.Sprint(lang.Map("#duniterClient:Sentry"), BA.SpL)
 		if res.Sentry {
 			sentry += yes
@@ -870,8 +871,6 @@ func get (res *Identity, lang *SM.Lang) *Idty {
 		if availability != "" {
 			availability = fmt.Sprint(lang.Map("#duniterClient:Availability"), BA.SpL, availability)
 		}
-	} else {
-		member += no
 	}
 	var block string
 	if res.Id_written_block == nil {
@@ -882,7 +881,7 @@ func get (res *Identity, lang *SM.Lang) *Idty {
 	var limitDate string
 	switch res.Status {
 	case "REVOKED":
-		limitDate = BA.Ts2s(BA.Revoked, lang)
+		limitDate = ""
 	case "MISSING":
 		limitDate = fmt.Sprint(lang.Map("#duniterClient:AppRLimitDate"), BA.SpL, BA.Ts2s(res.LimitDate, lang))
 	case "MEMBER":
@@ -900,11 +899,11 @@ func get (res *Identity, lang *SM.Lang) *Idty {
 		pending = ""
 	}
 	history := printHistory(res.History, lang)
-	return &Idty{uid, pubkey, hash, member, sentry, block, limitDate, availability, pending, history}
+	return &Idty{uid, pubkey, hash, status, sentry, block, limitDate, availability, pending, history}
 } //get
 
 func notTooFar (res *Identity, lang *SM.Lang) string {
-	if res.Distance == nil {
+	if res.Status == "REVOKED" || res.Distance == nil {
 		return ""
 	}
 	d := res.Distance
@@ -919,14 +918,14 @@ func notTooFar (res *Identity, lang *SM.Lang) string {
 } //notTooFar
 
 func calcQuality (res *Identity, lang *SM.Lang) string {
-	if res.Quality == 0 {
+	if res.Status == "REVOKED" || res.Quality == 0 {
 		return ""
 	}
 	return fmt.Sprint(lang.Map("#duniterClient:Quality"), BA.SpL, strconv.FormatFloat(res.Quality, 'f', 2, 64), "%")
 } //calcQuality
 
 func calcCentrality (res *Identity, lang *SM.Lang) string {
-	if res.Centrality == 0 {
+	if res.Status == "REVOKED" || res.Centrality == 0 {
 		return ""
 	}
 	return fmt.Sprint(lang.Map("#duniterClient:Centrality"), BA.SpL, strconv.FormatFloat(res.Centrality, 'f', 2, 64), "%")
