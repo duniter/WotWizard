@@ -42,7 +42,7 @@ import (
 
 const (
 	
-	version = "5.4.0"
+	version = "5.4.2"
 
 )
 
