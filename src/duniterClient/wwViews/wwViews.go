@@ -110,6 +110,7 @@ const (
 								certification {
 									from {
 										uid
+										quality
 									}
 									expires_on
 								}
@@ -226,6 +227,7 @@ type (
 	CertificationT struct {
 		From struct {
 			Uid string
+			Quality float64
 		}
 		To struct {
 			Uid string
@@ -414,7 +416,7 @@ func printMeta (cds Certifs_DossiersT, lang *SM.Lang) DossCertsT {
 				
 				PrintCert := func (c *DatedCertificationT) string {
 					cc := c.Certification
-					return fmt.Sprint(cc.From.Uid, " ", BA.Ts2s(c.Date, lang), " (→ ", BA.Ts2s(cc.Expires_on, lang), ")")
+					return fmt.Sprint(cc.From.Uid, " (", S.Itoa(int(cc.From.Quality)), "%) ", BA.Ts2s(c.Date, lang), " (→ ", BA.Ts2s(cc.Expires_on, lang), ")")
 				} //PrintCert
 				
 				//PrintCerts
