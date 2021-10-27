@@ -50,7 +50,7 @@ distanceRule	Distance Rule: ^0%
 20distances	Properties: Distances (rule)
 distances	Distances (rule)
 Distribution	Distribution
-Dossiers	Dossiers
+dossiers	dossiers
 en	English
 Entry	Entry of 
 Exit	Exit of 
@@ -115,6 +115,7 @@ Missing	Excluded Identities - Needing a new application
 MissingNb	Number of Excluded Identities
 Missings	Excluded
 month	month
+neededCerts	needed certification(s):
 Never	Never
 NEWCOMER	NEWCOMER
 54newcomerIdentities	Informations: List of Newcomers
@@ -207,7 +208,7 @@ distanceRule	Règle de distance: ^0%
 20distances	Propriétés : Distances (règle de)
 distances	Distances (règle de)
 Distribution	Distribution
-Dossiers	Dossiers
+dossiers	dossiers
 en	English
 Entry	Entrée de 
 Exit	Sortie de 
@@ -272,6 +273,7 @@ Missing	Exclu(e)s en attente de réadhésion
 MissingNb	Nombre des exclu(e)s
 Missings	Exclu(e)s
 month	mois
+neededCerts	certification(s) nécessaire(s) :
 Never	Jamais
 NEWCOMER	ARRIVANT(E)
 54newcomerIdentities	Informations : Liste des arrivant(e)s

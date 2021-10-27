@@ -401,7 +401,9 @@ func printText (ww *WW, dateNameMeta string, lang *SM.Lang) *Disp {
 } //printText
 
 // Print the metadata m with the help of f
-func printMeta (cds Certifs_DossiersT, lang *SM.Lang) DossCertsT {
+func printMeta (f *WWFileT, lang *SM.Lang) DossCertsT {
+	
+	cds := f.Certifs_dossiers
 	
 	PrintCertOrDoss := func (cd *Certif_DossierT) *DossCertT {
 		
@@ -431,7 +433,7 @@ func printMeta (cds Certifs_DossiersT, lang *SM.Lang) DossCertsT {
 			fi := fmt.Sprint(d.Newcomer.Uid, " ", BA.Ts2s(d.Date, lang), " (→ ", BA.Ts2s(d.Expires_on, lang), ") ", lang.Map("#duniterClient:distanceRule", S.Itoa(int(d.Newcomer.Distance.Value))))
 			w := new(strings.Builder)
 			fmt.Fprint(w, lang.Map("#duniterClient:requiredCertsNb", S.Itoa(len(d.Certifications)), S.Itoa(d.Main_certifs)))
-			if d.Date == d.MinDate {
+			if d.Date == d.MinDate && d.Date >= f.Now.Bct {
 				fmt.Fprint(w, ". ", lang.Map("#duniterClient:minApplicationDate", BA.Ts2s(d.Newcomer.LastApplication.LastAppDate, lang)))
 			}
 			sd := w.String()
@@ -458,7 +460,7 @@ func printTextM (ww *WW, lang *SM.Lang) *Disp {
 	f := ww.Data.WWFile
 	if f != nil {
 		now := printNow(f.Now, lang)
-		dcs := printMeta(f.Certifs_dossiers, lang)
+		dcs := printMeta(f, lang)
 		bn := lang.Map("#duniterClient:wwByName")
 		bd := lang.Map("#duniterClient:wwByDate")
 		m := lang.Map("#duniterClient:wwMeta")

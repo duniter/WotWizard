@@ -104,9 +104,10 @@ const (
 			<p>
 				{{with .Stats}}
 					{{.Number}} {{.DossName}}
+					{{$n := .Needed}} {{$d := .DossName}}
 					<blockquote>
 						{{range $i, $l := .List}}
-							{{$i}} {{$l}}
+							{{$i}} {{$n}} {{$l}} {{$d}}
 							<br>
 						{{end}}
 					</blockquote>
@@ -279,7 +280,8 @@ type (
 	
 	StatsT struct {
 		Number int
-		DossName string
+		DossName,
+		Needed string
 		List ListT
 	}
 	
@@ -410,7 +412,7 @@ func printFile (f *File, lang *SM.Lang) *DispF {
 				}
 			}
 		}
-		return &StatsT{Number: m, List: nbs, DossName: lang.Map("#duniterClient:Dossiers")}
+		return &StatsT{Number: m, List: nbs, DossName: lang.Map("#duniterClient:dossiers"), Needed: lang.Map("#duniterClient:neededCerts")}
 	} //PrintDossiersNbs
 	
 	//printFile
