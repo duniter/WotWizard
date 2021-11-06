@@ -586,7 +586,7 @@ func notTooFar (c **pubList, n int) (needed int, proportionOfSentries float64, o
 			cc = cc.next
 		}
 		needed = n
-		proportionOfSentries = B.PercentOfSentries(certifiers)
+		proportionOfSentries = B.Distance(certifiers)
 		ok = proportionOfSentries >= B.Pars().Xpercent
 	} else {
 		sortPubList(c)
@@ -599,7 +599,7 @@ func notTooFar (c **pubList, n int) (needed int, proportionOfSentries float64, o
 				certifiers[j] = *cc.pub
 				cc = cc.next
 			}
-			proportionOfSentries = B.PercentOfSentries(certifiers)
+			proportionOfSentries = B.Distance(certifiers)
 			ok = proportionOfSentries >= B.Pars().Xpercent
 			if ok || needed == n {break}
 		}

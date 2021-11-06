@@ -918,14 +918,14 @@ func notTooFar (res *Identity, lang *SM.Lang) string {
 } //notTooFar
 
 func calcQuality (res *Identity, lang *SM.Lang) string {
-	if res.Status == "REVOKED" || res.Quality == 0 {
+	if res.Status == "REVOKED" || res.Quality < 0 {
 		return ""
 	}
 	return fmt.Sprint(lang.Map("#duniterClient:Quality"), BA.SpL, strconv.FormatFloat(res.Quality, 'f', 2, 64), "%")
 } //calcQuality
 
 func calcCentrality (res *Identity, lang *SM.Lang) string {
-	if res.Status == "REVOKED" || res.Centrality == 0 {
+	if res.Status == "REVOKED" || res.Centrality < 0 {
 		return ""
 	}
 	return fmt.Sprint(lang.Map("#duniterClient:Centrality"), BA.SpL, strconv.FormatFloat(res.Centrality, 'f', 2, 64), "%")
@@ -1054,6 +1054,10 @@ func end (name string, temp *template.Template, r *http.Request, w http.Response
 	j = mk.GetJson()
 	j = GS.Send(j, fixDoc)
 	fx := new(FixRes)
+	id := new(Identity)
+	fx.Data.IdFromHash = id
+	id.Quality = -1
+	id.Centrality = -1
 	J.ApplyTo(j, fx)
 	out := printFix(t, hint, selHash, reC, miC, meC, neC, dC, qC, cC, fd, fx, lang)
 	err := temp.ExecuteTemplate(w, name, out); M.Assert(err == nil, err, 103)

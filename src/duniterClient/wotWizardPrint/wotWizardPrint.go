@@ -104,10 +104,20 @@ const (
 			<p>
 				{{with .Stats}}
 					{{.Number}} {{.DossName}}
-					{{$n := .Needed}} {{$d := .DossName}}
+					{{$c := .Certification}}
+					{{$cs := .Certifications}}
+					{{$n := .Needed}}
+					{{$d := .DossName}}
+					{{$nl := .NeededLim}}
 					<blockquote>
 						{{range $i, $l := .List}}
-							{{$i}} {{$n}} {{$l}} {{$d}}
+							{{if lt $i 2}}
+								{{$i}} {{$c}} {{$l}} {{$d}}
+							{{else if lt $i $nl}}
+								{{$i}} {{$cs}} {{$l}} {{$d}}
+							{{else}}
+								{{$i}} {{$n}} {{$l}} {{$d}}
+							{{end}}
 							<br>
 						{{end}}
 					</blockquote>
@@ -279,8 +289,11 @@ type (
 	ListT []int
 	
 	StatsT struct {
-		Number int
+		Number,
+		NeededLim int
 		DossName,
+		Certification,
+		Certifications,
 		Needed string
 		List ListT
 	}
@@ -392,7 +405,7 @@ func printFile (f *File, lang *SM.Lang) *DispF {
 		return &DossCertT{First: PrintCertif(cd.DatedCertification), Second: ""}
 	} //PrintCertOrDoss
 	
-	PrintDossiersNbs := func (cds Certifs_DossiersT) *StatsT {
+	PrintDossiersNbs := func (sq int, cds Certifs_DossiersT) *StatsT {
 		n := -1
 		for _, cd := range cds {
 			if cd.Dossier != nil {
@@ -412,7 +425,7 @@ func printFile (f *File, lang *SM.Lang) *DispF {
 				}
 			}
 		}
-		return &StatsT{Number: m, List: nbs, DossName: lang.Map("#duniterClient:dossiers"), Needed: lang.Map("#duniterClient:neededCerts")}
+		return &StatsT{Number: m, NeededLim: sq, List: nbs, DossName: lang.Map("#duniterClient:dossiers"), Certification: lang.Map("#duniterClient:certification"), Certifications: lang.Map("#duniterClient:certifications"), Needed: lang.Map("#duniterClient:neededCerts") }
 	} //PrintDossiersNbs
 	
 	//printFile
@@ -423,7 +436,7 @@ func printFile (f *File, lang *SM.Lang) *DispF {
 	for i, cd := range cds {
 		dcs[i] = *PrintCertOrDoss(&cd, d.Parameter.SigQty)
 	}
-	return &DispF{Title: lang.Map("#duniterClient:ShowFile"), Now: now, Stats: PrintDossiersNbs(cds), DossCerts: dcs}
+	return &DispF{Title: lang.Map("#duniterClient:ShowFile"), Now: now, Stats: PrintDossiersNbs(d.Parameter.SigQty, cds), DossCerts: dcs}
 } //printFile
 
 // Print permutations returned by CalcPermutations

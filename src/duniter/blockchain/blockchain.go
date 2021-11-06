@@ -437,9 +437,8 @@ type (
 	
 	poSET struct {
 		pubkeys PubkeysT
-		set_1,
-		set_2 U.Set
-		poS float64
+		distOrQual bool
+		dist float64
 	}
 
 )
@@ -1007,6 +1006,12 @@ func ParsJ () J.Json {
 
 func (p1 *poSET) Compare (p2 A.Comparer) BA.Comp {
 	pp2 := p2.(*poSET)
+	if !p1.distOrQual && pp2.distOrQual {
+		return BA.Lt
+	}
+	if p1.distOrQual && !pp2.distOrQual {
+		return BA.Gt
+	}
 	if len(p1.pubkeys) < len(pp2.pubkeys) {
 		return BA.Lt
 	}
@@ -1667,8 +1672,9 @@ func SentriesLen () int {
 } //SentriesLen
 
 // Array of certifiers' pubkeys -> % of sentries reached in pars.stepMax - 1 steps
-func PercentOfSentriesS (pubkeys PubkeysT) (set_1, set_2 U.Set, poS float64) {
+func percentOfSentries (pubkeys PubkeysT, distOrQual bool) (dist float64) {
 	
+	// Sort of pubkeys by insertion
 	sort := func (pubkeys []Pubkey) {
 		for i := 1; i < len(pubkeys); i++ {
 			p := pubkeys[i]
@@ -1681,33 +1687,30 @@ func PercentOfSentriesS (pubkeys PubkeysT) (set_1, set_2 U.Set, poS float64) {
 		}
 	} //sort
 
-	find := func (poSE *poSET) (set_1, set_2 U.Set, poS float64, ok bool) {
+	find := func (poSE *poSET) (dist float64, ok bool) {
 		(&poSTMut).RLock()
 		el, ok, _ := poST.Search(poSE)
 		(&poSTMut).RUnlock()
 		if ok {
 			p := el.Val().(*poSET)
-			set_1 = p.set_1
-			set_2 = p.set_2
-			poS = p.poS
+			dist = p.dist
 		}
 		return
 	} //find
 
-	store := func (poSE *poSET, set_1, set_2 U.Set, poS float64) {
-		poSE.set_1 = set_1
-		poSE.set_2 = set_2
-		poSE.poS = poS
+	store := func (poSE *poSET, dist float64) {
+		poSE.dist = dist
 		(&poSTMut).Lock()
 		poST.SearchIns(poSE)
 		(&poSTMut).Unlock()
 	} //store
 	
-	// PercentOfSentriesS
+	// percentOfSentries
 	sort(pubkeys)
-	poSE := &poSET{pubkeys: pubkeys}
-	set_1, set_2, poS, ok := find(poSE)
+	poSE := &poSET{pubkeys: pubkeys, distOrQual: distOrQual}
+	dist, ok := find(poSE)
 	if !ok {
+		nbSentries := float64(SentriesLen())
 		set := U.NewSet()
 		frontier := U.NewSet()
 		for i := 0; i < len(pubkeys); i++ {
@@ -1716,7 +1719,11 @@ func PercentOfSentriesS (pubkeys PubkeysT) (set_1, set_2 U.Set, poS float64) {
 				frontier.Incl(e)
 			}
 		}
-		for i := 1; i < int(pars.StepMax); i++ {
+		n := int(pars.StepMax)
+		if !distOrQual {
+			n--
+		}
+		for i := 1; i < n; i++ {
 			newFrontier := U.NewSet()
 			frontierI := frontier.Attach()
 			e, ok := frontierI.FirstE()
@@ -1726,26 +1733,26 @@ func PercentOfSentriesS (pubkeys PubkeysT) (set_1, set_2 U.Set, poS float64) {
 			}
 			frontier = newFrontier
 			set.Add(frontier)
-			if i == int(pars.StepMax) - 2 {
-				set_2 = set.Inter(sentriesS)
-			}
 		}
-		set_1 = set.Inter(sentriesS)
-		poS = float64(set_1.NbElems()) / float64(SentriesLen())
-		store(poSE, set_1, set_2, poS)
+		dist = float64(set.Inter(sentriesS).NbElems()) / nbSentries
+		store(poSE, dist)
 	}
 	return
-} //PercentOfSentriesS
+} //percentOfSentries
 
 // Array of certifiers' pubkeys -> % of sentries reached in pars.stepMax - 1 steps
-func PercentOfSentries (pubkeys PubkeysT) float64 {
-	_, _, poS := PercentOfSentriesS(pubkeys)
-	return poS
-} //PercentOfSentries
+func Distance (pubkeys PubkeysT) float64 {
+	return percentOfSentries(pubkeys, true)
+} //Distance
+
+// Array of certifiers' pubkeys -> % of sentries reached in pars.stepMax - 2 steps
+func Quality (pubkeys PubkeysT) float64 {
+	return percentOfSentries(pubkeys, false)
+} //Quality
 
 // Verify the distance rule for a set of certifiers' pubkeys
 func DistanceRuleOk (pubkeys PubkeysT) bool {
-	return PercentOfSentries(pubkeys) >= pars.Xpercent
+	return Distance(pubkeys) >= pars.Xpercent
 } //DistanceRuleOk
 
 // Updt

@@ -679,8 +679,9 @@ func identityDistanceR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) 
 func identityQualityR (rootValue *G.OutputObjectValue, argumentValues *A.Tree) G.Value {
 	switch hash := GQ.Unwrap(rootValue, 0).(type) {
 	case B.Hash:
-		_, pub, _, _, _, _, _, ok := IS.Get(hash); M.Assert(ok, 100)
-		return G.MakeFloat64Value(IS.CalcQuality(pub) * 100)
+		_, pub, _, _, _, inBC, member, ok := IS.Get(hash); M.Assert(ok, 100)
+		_, _, _, _, certifiers := IS.RecCerts(hash, pub, inBC)
+		return G.MakeFloat64Value(IS.CalcQuality(pub, member, certifiers) * 100)
 	case *G.NullValue:
 		return hash
 	default:

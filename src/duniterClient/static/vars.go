@@ -33,7 +33,9 @@ Brackets	Brackets
 22centralities	Properties: Centralities
 centralities	Centralities
 Centrality	Centrality
+certification	certification:
 Certifications	Certifications
+certifications	certifications:
 55certificationsFrom	Informations: Certifications From Members
 certificationsFrom	Certifications From Members
 56certificationsTo	Informations: Certifications To Members
@@ -115,7 +117,7 @@ Missing	Excluded Identities - Needing a new application
 MissingNb	Number of Excluded Identities
 Missings	Excluded
 month	month
-neededCerts	needed certification(s):
+neededCerts	needed certifications:
 Never	Never
 NEWCOMER	NEWCOMER
 54newcomerIdentities	Informations: List of Newcomers
@@ -191,7 +193,9 @@ Brackets	Tranches
 22centralities	Propriétés : Centralités
 centralities	Centralités
 Centrality	Centralité
+certification	certification :
 Certifications	Certifications
+certifications	certifications :
 55certificationsFrom	Informations : Certifications depuis les membres
 certificationsFrom	Certifications depuis les membres
 56certificationsTo	Informations : Certifications vers les membres
@@ -273,7 +277,7 @@ Missing	Exclu(e)s en attente de réadhésion
 MissingNb	Nombre des exclu(e)s
 Missings	Exclu(e)s
 month	mois
-neededCerts	certification(s) nécessaire(s) :
+neededCerts	certifications nécessaires :
 Never	Jamais
 NEWCOMER	ARRIVANT(E)
 54newcomerIdentities	Informations : Liste des arrivant(e)s

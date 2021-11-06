@@ -322,7 +322,7 @@ func RecCerts (h S.Hash, pubkey B.Pubkey, inBC bool) (recNb, recFNb int, rCertsL
 		idE.uid, _, hash, _, _, _, b = B.IdPubComplete(from); M.Assert(b, 109)
 		idE.Hash = hash
 		idE.Status = Newcomer
-		_, _, idE.limit, b = S.Cert(from, toH, ); M.Assert(b, 110)
+		_, _, idE.limit, b = S.Cert(from, toH); M.Assert(b, 110)
 		_, b, _ = certifiers.SearchIns(idE)
 		from, toH, okS = posS.CertNextPos()
 	}
@@ -347,7 +347,7 @@ func Get (hash S.Hash) (uid string, pubkey B.Pubkey, block, application int32, l
 	return
 } //Get
 
-func NotTooFar (p B.Pubkey, member bool, certifiers B.PubkeysT) (proportionOfSentries float64, ok bool) {
+func certifiersOf (p B.Pubkey, member bool, certifiers B.PubkeysT) B.PubkeysT {
 	n := 0
 	if certifiers != nil {
 		n = len(certifiers)
@@ -356,11 +356,6 @@ func NotTooFar (p B.Pubkey, member bool, certifiers B.PubkeysT) (proportionOfSen
 	if member {
 		n++
 		i = 1
-	}
-	if n == 0 {
-		proportionOfSentries = 0.
-		ok = false
-		return
 	}
 	certs := make(B.PubkeysT, n)
 	if member {
@@ -372,7 +367,11 @@ func NotTooFar (p B.Pubkey, member bool, certifiers B.PubkeysT) (proportionOfSen
 			i++
 		}
 	}
-	proportionOfSentries = B.PercentOfSentries(certs)
+	return certs
+} //certifiersOf
+
+func NotTooFar (p B.Pubkey, member bool, certifiers B.PubkeysT) (proportionOfSentries float64, ok bool) {
+	proportionOfSentries = B.Distance(certifiersOf(p, member, certifiers))
 	ok = proportionOfSentries >= B.Pars().Xpercent
 	return
 } //NotTooFar
@@ -399,10 +398,8 @@ func FixCertNextDate (member bool, p B.Pubkey) (date int64, passed bool) {
 	return
 } //FixCertNextDate
 
-func CalcQuality (p B.Pubkey) (quality float64) {
-	pubs := make(B.PubkeysT, 1)
-	pubs[0] = p
-	quality = B.PercentOfSentries(pubs)
+func CalcQuality (p B.Pubkey, member bool, certifiers B.PubkeysT) (quality float64) {
+	quality = B.Quality(certifiersOf(p, member, certifiers))
 	return
 } //CalcQuality
 

@@ -259,9 +259,11 @@ func readOpNameVars  (req *http.Request) (varVals J.Json, t *A.Tree, opName, add
 		o, b = j.(*J.Object)
 	}
 	if !b {
-		s := "Incorrect JSON request"
+		s := "Incorrect JSON request: "
 		if sB != "" {
-			s += ": " + sB
+			s += sB
+		} else {
+			s += "Void string"
 		}
 		err = errors.New(s)
 		return
